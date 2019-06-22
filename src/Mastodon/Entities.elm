@@ -75,11 +75,12 @@ type alias Account =
     , emojis : List Emoji
     , moved : Maybe WrappedAccount
     , fields : List Field
-    , bot : Maybe Bool
+    , bot : Bool
+    , v : Value
     }
 
 
-{-| Wrapped Account, to prevent type recursion.
+{-| Wrapped `Account`, to prevent type recursion.
 -}
 type WrappedAccount
     = WrappedAccount Account
@@ -91,6 +92,7 @@ type alias Field =
     { name : String
     , value : String
     , verified_at : Maybe String
+    , v : Value
     }
 
 
@@ -102,6 +104,7 @@ type alias Source =
     , language : String
     , note : String
     , fields : List Field
+    , v : Value
     }
 
 
@@ -112,6 +115,7 @@ type alias Token =
     , token_type : String
     , scope : String
     , created_at : Int
+    , v : Value
     }
 
 
@@ -120,6 +124,7 @@ type alias Token =
 type alias Application =
     { name : String
     , website : Maybe String
+    , v : Value
     }
 
 
@@ -134,6 +139,7 @@ type alias Attachment =
     , text_url : Maybe String
     , meta : Maybe Meta
     , description : String
+    , v : Value
     }
 
 
@@ -152,6 +158,7 @@ type alias Meta =
     { small : Maybe MetaInfo
     , original : Maybe MetaInfo
     , focus : Maybe Focus
+    , v : Value
     }
 
 
@@ -196,6 +203,7 @@ type alias Card =
     , html : Maybe String
     , width : Maybe Int
     , height : Maybe Int
+    , v : Value
     }
 
 
@@ -213,6 +221,7 @@ type CardType
 type alias Context =
     { ancestors : List Status
     , descendents : List Status
+    , v : Value
     }
 
 
@@ -223,6 +232,7 @@ type alias Emoji =
     , static_url : String
     , url : String
     , visible_in_picker : Bool
+    , v : Value
     }
 
 
@@ -230,6 +240,7 @@ type alias Emoji =
 -}
 type alias Error =
     { error : String
+    , v : Value
     }
 
 
@@ -242,6 +253,7 @@ type alias Filter =
     , expires_at : String
     , irreversible : Bool
     , whole_word : Bool
+    , v : Value
     }
 
 
@@ -267,10 +279,11 @@ type alias Instance =
     , stats : Stats
     , languages : List String
     , contact_account : Maybe Account
+    , v : Value
     }
 
 
-{-| URLs entity.
+{-| Value of `Instance.urls`.
 -}
 type alias URLs =
     { streaming_api : String
@@ -283,6 +296,7 @@ type alias Stats =
     { user_count : Int
     , status_count : Int
     , domain_count : Int
+    , v : Value
     }
 
 
@@ -291,6 +305,7 @@ type alias Stats =
 type alias ListEntity =
     { id : String
     , title : String
+    , v : Value
     }
 
 
@@ -301,6 +316,7 @@ type alias Mention =
     , username : String
     , acct : String
     , id : String
+    , v : Value
     }
 
 
@@ -312,6 +328,7 @@ type alias Notification =
     , created_at : String
     , account : Account
     , status : Maybe Status
+    , v : Value
     }
 
 
@@ -334,6 +351,7 @@ type alias Poll =
     , votes_count : Int
     , options : List PollOption
     , voted : Bool
+    , v : Value
     }
 
 
@@ -352,6 +370,7 @@ type alias PushSubscription =
     , endpoint : String
     , server_key : String
     , alerts : Value --not documented
+    , v : Value
     }
 
 
@@ -368,6 +387,7 @@ type alias Relationship =
     , domain_blocking : Bool
     , showing_reblogs : Bool
     , endorsed : Bool
+    , v : Value
     }
 
 
@@ -377,6 +397,7 @@ type alias Results =
     { accounts : List Account
     , statuses : List Status
     , hashtags : List Tag
+    , v : Value
     }
 
 
@@ -410,10 +431,11 @@ type alias Status =
     , application : Application
     , language : Maybe String
     , pinned : Bool
+    , v : Value
     }
 
 
-{-| Wrap a Status to prevent type recursion.
+{-| Wrapped `Status`, to prevent type recursion.
 -}
 type WrappedStatus
     = WrappedStatus Status
@@ -435,6 +457,7 @@ type alias ScheduledStatus =
     , scheduled_at : String
     , params : List StatusParams
     , media_attachments : List Attachment
+    , v : Value
     }
 
 
@@ -458,6 +481,7 @@ type alias Tag =
     { name : String
     , url : String
     , history : List History
+    , v : Value
     }
 
 
@@ -467,6 +491,7 @@ type alias History =
     { day : String
     , uses : Int
     , accounts : Int
+    , v : Value
     }
 
 
@@ -477,4 +502,5 @@ type alias Conversation =
     , accounts : List Account
     , last_status : Maybe Status
     , unread : Bool
+    , v : Value
     }
