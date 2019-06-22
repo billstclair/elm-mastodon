@@ -19,6 +19,7 @@ module Mastodon.Entities exposing
     , AttachmentType(..), MetaInfo(..), Focus, CardType(..)
     , FilterContext(..), NotificationType(..), PollOption
     , Visibility(..), StatusParams
+    , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
     , WrappedAccount(..), WrappedStatus(..)
     )
 
@@ -27,6 +28,11 @@ module Mastodon.Entities exposing
 These are JSON-encoded over the wire. Mastodon.EncodeDecode knows how to do that.
 
 Documented at <https://docs.joinmastodon.org/api/entities/>
+
+Each of the Entities has a `v` field, which is the raw JS value from
+which it was decoded. This is useful if you want to display what you
+got over the wire. Code that creates these can set it to
+`Json.Encode.null`.
 
 
 ## Entities
@@ -45,6 +51,11 @@ Documented at <https://docs.joinmastodon.org/api/entities/>
 @docs Visibility, StatusParams
 
 
+## String aliases
+
+@docs Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
+
+
 ## Wrappers to prevent type recursion
 
 @docs WrappedAccount, WrappedStatus
@@ -52,6 +63,36 @@ Documented at <https://docs.joinmastodon.org/api/entities/>
 -}
 
 import Json.Encode as JE exposing (Value)
+
+
+{-| Alias of `String`
+-}
+type alias Datetime =
+    String
+
+
+{-| Alias of `String`
+-}
+type alias UrlString =
+    String
+
+
+{-| Alias of `String`
+-}
+type alias HtmlString =
+    String
+
+
+{-| Alias of `String`
+-}
+type alias ISO6391 =
+    String
+
+
+{-| Alias of `String`
+-}
+type alias UnixTimestamp =
+    String
 
 
 {-| Account entity
@@ -62,16 +103,16 @@ type alias Account =
     , acct : String
     , display_name : String
     , locked : Bool
-    , created_at : String
+    , created_at : Datetime
     , followers_count : Int
     , following_count : Int
     , statuses_count : Int
     , note : String
-    , url : String
-    , avatar : String
-    , avatar_static : String
-    , header : String
-    , header_static : String
+    , url : UrlString
+    , avatar : UrlString
+    , avatar_static : UrlString
+    , header : UrlString
+    , header_static : UrlString
     , emojis : List Emoji
     , moved : Maybe WrappedAccount
     , fields : List Field
@@ -90,8 +131,8 @@ type WrappedAccount
 -}
 type alias Field =
     { name : String
-    , value : String
-    , verified_at : Maybe String
+    , value : HtmlString
+    , verified_at : Maybe Datetime
     , v : Value
     }
 
@@ -101,7 +142,7 @@ type alias Field =
 type alias Source =
     { privacy : String
     , sensitive : Bool
-    , language : String
+    , language : ISO6391
     , note : String
     , fields : List Field
     , v : Value
@@ -123,7 +164,7 @@ type alias Token =
 -}
 type alias Application =
     { name : String
-    , website : Maybe String
+    , website : Maybe UrlString
     , v : Value
     }
 
@@ -133,10 +174,10 @@ type alias Application =
 type alias Attachment =
     { id : String
     , type_ : AttachmentType
-    , url : String
-    , remote_url : Maybe String
-    , preview_url : String
-    , text_url : Maybe String
+    , url : UrlString
+    , remote_url : Maybe UrlString
+    , preview_url : UrlString
+    , text_url : Maybe UrlString
     , meta : Maybe Meta
     , description : String
     , v : Value
@@ -191,16 +232,16 @@ type alias Focus =
 {-| Card entity.
 -}
 type alias Card =
-    { url : String
+    { url : UrlString
     , title : String
     , description : String
-    , image : Maybe String
+    , image : Maybe UrlString
     , type_ : CardType
     , author_name : Maybe String
-    , author_url : Maybe String
+    , author_url : Maybe UrlString
     , provider_name : Maybe String
-    , provider_url : Maybe String
-    , html : Maybe String
+    , provider_url : Maybe UrlString
+    , html : Maybe HtmlString
     , width : Maybe Int
     , height : Maybe Int
     , v : Value
@@ -229,8 +270,8 @@ type alias Context =
 -}
 type alias Emoji =
     { shortcode : String
-    , static_url : String
-    , url : String
+    , static_url : UrlString
+    , url : UrlString
     , visible_in_picker : Bool
     , v : Value
     }
@@ -250,7 +291,7 @@ type alias Filter =
     { id : String
     , phrase : String
     , context : List Context
-    , expires_at : String
+    , expires_at : Datetime
     , irreversible : Bool
     , whole_word : Bool
     , v : Value
@@ -274,10 +315,10 @@ type alias Instance =
     , description : String
     , email : String
     , version : String
-    , thumbnail : Maybe String
+    , thumbnail : Maybe UrlString
     , urls : Maybe URLs
     , stats : Stats
-    , languages : List String
+    , languages : List ISO6391
     , contact_account : Maybe Account
     , v : Value
     }
@@ -286,7 +327,7 @@ type alias Instance =
 {-| Value of `Instance.urls`.
 -}
 type alias URLs =
-    { streaming_api : String
+    { streaming_api : UrlString
     }
 
 
@@ -312,7 +353,7 @@ type alias ListEntity =
 {-| Mention entity.
 -}
 type alias Mention =
-    { url : String
+    { url : UrlString
     , username : String
     , acct : String
     , id : String
@@ -325,7 +366,7 @@ type alias Mention =
 type alias Notification =
     { id : String
     , type_ : NotificationType
-    , created_at : String
+    , created_at : Datetime
     , account : Account
     , status : Maybe Status
     , v : Value
@@ -345,7 +386,7 @@ type NotificationType
 -}
 type alias Poll =
     { id : String
-    , expires_at : Maybe String
+    , expires_at : Maybe Datetime
     , expired : Bool
     , multiple : Bool
     , votes_count : Int
@@ -367,7 +408,7 @@ type alias PollOption =
 -}
 type alias PushSubscription =
     { id : String
-    , endpoint : String
+    , endpoint : UrlString
     , server_key : String
     , alerts : Value --not documented
     , v : Value
@@ -406,13 +447,13 @@ type alias Results =
 type alias Status =
     { id : String
     , uri : String
-    , url : Maybe String
+    , url : Maybe UrlString
     , account : Account
     , in_reply_to_id : Maybe String
     , in_reply_to_account_id : Maybe String
     , reblog : Maybe WrappedStatus
-    , content : String
-    , created_at : String
+    , content : HtmlString
+    , created_at : Datetime
     , emojis : List Emoji
     , replies_count : Int
     , reblogs_count : Int
@@ -454,7 +495,7 @@ type Visibility
 -}
 type alias ScheduledStatus =
     { id : String
-    , scheduled_at : String
+    , scheduled_at : Datetime
     , params : List StatusParams
     , media_attachments : List Attachment
     , v : Value
@@ -470,7 +511,7 @@ type alias StatusParams =
     , sensitive : Bool
     , spoiler_text : Maybe String
     , visibility : Visibility
-    , scheduled_at : Maybe String
+    , scheduled_at : Maybe Datetime
     , application_id : String
     }
 
@@ -479,7 +520,7 @@ type alias StatusParams =
 -}
 type alias Tag =
     { name : String
-    , url : String
+    , url : UrlString
     , history : List History
     , v : Value
     }
@@ -488,7 +529,7 @@ type alias Tag =
 {-| History entity.
 -}
 type alias History =
-    { day : String
+    { day : UnixTimestamp
     , uses : Int
     , accounts : Int
     , v : Value
