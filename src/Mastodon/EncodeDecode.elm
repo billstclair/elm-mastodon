@@ -10,10 +10,14 @@
 ----------------------------------------------------------------------
 
 
-module Mastodon.EncodeDecode exposing (accountDecoder, encodeAccount)
+module Mastodon.EncodeDecode exposing
+    ( encodeEntity, entityDecoder
+    , accountDecoder, encodeAccount
+    )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
 
+@docs encodeEntity, entityDecoder
 @docs accountDecoder, encodeAccount
 
 -}
@@ -32,6 +36,7 @@ import Mastodon.Entities as Entities
         , Context
         , Conversation
         , Emoji
+        , Entity(..)
         , Error
         , Field
         , Filter
@@ -62,6 +67,31 @@ import Mastodon.Entities as Entities
         , WrappedAccount(..)
         , WrappedStatus(..)
         )
+
+
+encodeEntity : Entity -> Value
+encodeEntity entity =
+    case entity of
+        AccountEntity account ->
+            encodeAccount account
+
+        _ ->
+            JE.string "TODO"
+
+
+toEntityDecoder : (x -> Entity) -> Decoder x -> Decoder Entity
+toEntityDecoder tagger =
+    JD.andThen (tagger >> JD.succeed)
+
+
+entityDecoder : Entity -> Decoder Entity
+entityDecoder entity =
+    case entity of
+        AccountEntity _ ->
+            accountDecoder |> toEntityDecoder AccountEntity
+
+        _ ->
+            JD.fail "TODO"
 
 
 encodeMaybe : (x -> Value) -> Maybe x -> Value
@@ -140,8 +170,8 @@ accountDecoder =
         |> optional "moved"
             (JD.lazy
                 (\() ->
-                    accountDecoder
-                        |> JD.andThen (WrappedAccount >> justSucceed)
+                    JD.nullable
+                        (accountDecoder |> JD.map WrappedAccount)
                 )
             )
             Nothing
@@ -154,19 +184,35 @@ accountDecoder =
 
 encodeEmoji : Emoji -> Value
 encodeEmoji emoji =
-    JE.null
+    JE.object
+        [ ( "shortcode", JE.string emoji.shortcode )
+        , ( "static_url", JE.string emoji.static_url )
+        , ( "url", JE.string emoji.url )
+        , ( "visible_in_picker", JE.bool emoji.visible_in_picker )
+        ]
 
 
 emojiDecoder : Decoder Emoji
 emojiDecoder =
-    JD.fail "TODO"
+    JD.succeed Emoji
+        |> required "shortcode" JD.string
+        |> required "static_url" JD.string
+        |> required "url" JD.string
+        |> required "visible_in_picker" JD.bool
 
 
 encodeField : Field -> Value
 encodeField field =
-    JE.null
+    JE.object
+        [ ( "name", JE.string field.name )
+        , ( "value", JE.string field.value )
+        , ( "verified_at", encodeMaybe JE.string field.verified_at )
+        ]
 
 
 fieldDecoder : Decoder Field
 fieldDecoder =
-    JD.fail "TODO"
+    JD.succeed Field
+        |> required "name" JD.string
+        |> required "value" JD.string
+        |> optional "verified_at" (JD.nullable JD.string) Nothing

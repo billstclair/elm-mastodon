@@ -11,13 +11,14 @@
 
 
 module Mastodon.Entities exposing
-    ( Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
-    , Account, Field, Source, Token, Application, Attachment
-    , Meta, Card, Context, Emoji, Error, Filter, Instance
+    ( Entity(..)
+    , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
+    , Account, Source, Token, Application, Attachment
+    , Meta, Card, Context, Error, Filter, Instance
     , URLs, Stats, ListEntity, Mention, Notification, Poll
     , PushSubscription, Relationship, Results
     , Status, ScheduledStatus, Tag, History, Conversation
-    , AttachmentType(..), MetaInfo(..), Focus, CardType(..)
+    , Emoji, Field, AttachmentType(..), MetaInfo(..), Focus, CardType(..)
     , FilterContext(..), NotificationType(..), PollOption
     , Visibility(..), StatusParams
     , WrappedAccount(..), WrappedStatus(..)
@@ -35,6 +36,11 @@ got over the wire. Code that creates these can set it to
 `Json.Encode.null`.
 
 
+## Entity
+
+@docs Entity
+
+
 ## String aliases
 
 @docs Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
@@ -42,8 +48,8 @@ got over the wire. Code that creates these can set it to
 
 ## Entities
 
-@docs Account, Field, Source, Token, Application, Attachment
-@docs Meta, Card, Context, Emoji, Error, Filter, Instance
+@docs Account, Source, Token, Application, Attachment
+@docs Meta, Card, Context, Error, Filter, Instance
 @docs URLs, Stats, ListEntity, Mention, Notification, Poll
 @docs PushSubscription, Relationship, Results
 @docs Status, ScheduledStatus, Tag, History, Conversation
@@ -51,7 +57,7 @@ got over the wire. Code that creates these can set it to
 
 ## Entity field types
 
-@docs AttachmentType, MetaInfo, Focus, CardType
+@docs Emoji, Field, AttachmentType, MetaInfo, Focus, CardType
 @docs FilterContext, NotificationType, PollOption
 @docs Visibility, StatusParams
 
@@ -127,13 +133,12 @@ type WrappedAccount
     = WrappedAccount Account
 
 
-{-| Field entity.
+{-| Values for the `Account.fields` and `Source.fields` lists.
 -}
 type alias Field =
     { name : String
     , value : HtmlString
     , verified_at : Maybe Datetime
-    , v : Value
     }
 
 
@@ -266,14 +271,13 @@ type alias Context =
     }
 
 
-{-| Emoji entity.
+{-| Values for the `Account.emojis` list.
 -}
 type alias Emoji =
     { shortcode : String
     , static_url : UrlString
     , url : UrlString
     , visible_in_picker : Bool
-    , v : Value
     }
 
 
@@ -545,3 +549,36 @@ type alias Conversation =
     , unread : Bool
     , v : Value
     }
+
+
+{-| One type to rule them all.
+
+This is mostly to make tests easier to define. Most code will use
+individual entities explicitly.
+
+-}
+type Entity
+    = AccountEntity Account
+    | SourceEntity Source
+    | TokenEntity Token
+    | ApplicationEntity Application
+    | AttachmentEntity Attachment
+    | MetaEntity Meta
+    | CardEntity Card
+    | ContextEntity Context
+    | ErrorEntity Error
+    | FilterEntity Filter
+    | InstanceEntity Instance
+    | StatsEntity Stats
+    | ListEntityEntity ListEntity
+    | MentionEntity Mention
+    | NotificationEntity Notification
+    | PollEntity Poll
+    | PushSubscriptionEntity PushSubscription
+    | RelationshipEntity Relationship
+    | ResultsEntity Results
+    | StatusEntity Status
+    | ScheduledStatusEntity ScheduledStatus
+    | TagEntity Tag
+    | HistoryEntity History
+    | ConversationEntity Conversation
