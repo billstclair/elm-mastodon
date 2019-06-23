@@ -69,6 +69,8 @@ import Mastodon.Entities as Entities
         )
 
 
+{-| Encode an `Entity` into a `Value`.
+-}
 encodeEntity : Entity -> Value
 encodeEntity entity =
     case entity of
@@ -84,6 +86,14 @@ toEntityDecoder tagger =
     JD.andThen (tagger >> JD.succeed)
 
 
+{-| Return a `Decoder` for an `Entity`.
+
+Since you'll usually have only a `Value` in your hand, you should know
+what you're looking for and use that decoder explicitly.
+
+This function is for the test code.
+
+-}
 entityDecoder : Entity -> Decoder Entity
 entityDecoder entity =
     case entity of
@@ -182,6 +192,10 @@ accountDecoder =
         |> custom JD.value
 
 
+
+{- Encode an `Emoji`. -}
+
+
 encodeEmoji : Emoji -> Value
 encodeEmoji emoji =
     JE.object
@@ -190,6 +204,10 @@ encodeEmoji emoji =
         , ( "url", JE.string emoji.url )
         , ( "visible_in_picker", JE.bool emoji.visible_in_picker )
         ]
+
+
+
+{- Decode an `Emoji`. -}
 
 
 emojiDecoder : Decoder Emoji
@@ -201,6 +219,10 @@ emojiDecoder =
         |> required "visible_in_picker" JD.bool
 
 
+
+{- Encode a `Field`. -}
+
+
 encodeField : Field -> Value
 encodeField field =
     JE.object
@@ -208,6 +230,10 @@ encodeField field =
         , ( "value", JE.string field.value )
         , ( "verified_at", encodeMaybe JE.string field.verified_at )
         ]
+
+
+
+{- Decode a `Field`. -}
 
 
 fieldDecoder : Decoder Field
