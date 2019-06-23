@@ -11,7 +11,8 @@
 
 
 module Mastodon.Entities exposing
-    ( Account, Field, Source, Token, Application, Attachment
+    ( Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
+    , Account, Field, Source, Token, Application, Attachment
     , Meta, Card, Context, Emoji, Error, Filter, Instance
     , URLs, Stats, ListEntity, Mention, Notification, Poll
     , PushSubscription, Relationship, Results
@@ -19,7 +20,6 @@ module Mastodon.Entities exposing
     , AttachmentType(..), MetaInfo(..), Focus, CardType(..)
     , FilterContext(..), NotificationType(..), PollOption
     , Visibility(..), StatusParams
-    , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
     , WrappedAccount(..), WrappedStatus(..)
     )
 
@@ -33,6 +33,11 @@ Each of the Entities has a `v` field, which is the raw JS value from
 which it was decoded. This is useful if you want to display what you
 got over the wire. Code that creates these can set it to
 `Json.Encode.null`.
+
+
+## String aliases
+
+@docs Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
 
 
 ## Entities
@@ -49,11 +54,6 @@ got over the wire. Code that creates these can set it to
 @docs AttachmentType, MetaInfo, Focus, CardType
 @docs FilterContext, NotificationType, PollOption
 @docs Visibility, StatusParams
-
-
-## String aliases
-
-@docs Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
 
 
 ## Wrappers to prevent type recursion
