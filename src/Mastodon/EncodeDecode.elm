@@ -81,27 +81,17 @@ encodeEntity entity =
             JE.string "TODO"
 
 
-toEntityDecoder : (x -> Entity) -> Decoder x -> Decoder Entity
-toEntityDecoder tagger =
-    JD.andThen (tagger >> JD.succeed)
+{-| Decode an `Entity`.
 
-
-{-| Return a `Decoder` for an `Entity`.
-
-Since you'll usually have only a `Value` in your hand, you should know
-what you're looking for and use that decoder explicitly.
-
-This function is for the test code.
+You'll usually know which entity you're looking for, and will use
+its decoder explicitly. In case you don't...
 
 -}
-entityDecoder : Entity -> Decoder Entity
-entityDecoder entity =
-    case entity of
-        AccountEntity _ ->
-            accountDecoder |> toEntityDecoder AccountEntity
-
-        _ ->
-            JD.fail "TODO"
+entityDecoder : Decoder Entity
+entityDecoder =
+    JD.oneOf
+        [ accountDecoder |> JD.map AccountEntity
+        ]
 
 
 encodeMaybe : (x -> Value) -> Maybe x -> Value

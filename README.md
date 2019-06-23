@@ -1,1 +1,3 @@
 [billstclair/elm-mastodon](https://package.elm-lang.org/packages/billstclair/elm-mastodon/latest) is an Elm client for the [Mastodon](https://joinmastodon.org/) social-networking system. The Mastodon API is documented at [docs.joinmastodon.org/api](https://docs.joinmastodon.org/api/guidelines/).
+
+`elm-test` tests the encoders and decoders for the `Entities`.

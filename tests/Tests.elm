@@ -90,7 +90,7 @@ entityTest entity name =
                     encodeEntity entity
 
                 result =
-                    case JD.decodeValue (entityDecoder entity) value of
+                    case JD.decodeValue entityDecoder value of
                         Err e ->
                             Err e
 
