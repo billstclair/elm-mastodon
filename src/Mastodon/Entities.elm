@@ -145,9 +145,9 @@ type alias Field =
 {-| Source entity.
 -}
 type alias Source =
-    { privacy : String
+    { privacy : Maybe String
     , sensitive : Bool
-    , language : ISO6391
+    , language : Maybe ISO6391
     , note : String
     , fields : List Field
     , v : Value

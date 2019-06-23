@@ -13,12 +13,14 @@
 module Mastodon.EncodeDecode exposing
     ( encodeEntity, entityDecoder
     , accountDecoder, encodeAccount
+    , sourceDecoder, encodeSource
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
 
 @docs encodeEntity, entityDecoder
 @docs accountDecoder, encodeAccount
+@docs sourceDecoder, encodeSource
 
 -}
 
@@ -77,6 +79,9 @@ encodeEntity entity =
         AccountEntity account ->
             encodeAccount account
 
+        SourceEntity source ->
+            encodeSource source
+
         _ ->
             JE.string "TODO"
 
@@ -91,6 +96,7 @@ entityDecoder : Decoder Entity
 entityDecoder =
     JD.oneOf
         [ accountDecoder |> JD.map AccountEntity
+        , sourceDecoder |> JD.map SourceEntity
         ]
 
 
@@ -182,10 +188,8 @@ accountDecoder =
         |> custom JD.value
 
 
-
-{- Encode an `Emoji`. -}
-
-
+{-| Encode an `Emoji`.
+-}
 encodeEmoji : Emoji -> Value
 encodeEmoji emoji =
     JE.object
@@ -196,10 +200,8 @@ encodeEmoji emoji =
         ]
 
 
-
-{- Decode an `Emoji`. -}
-
-
+{-| Decode an `Emoji`.
+-}
 emojiDecoder : Decoder Emoji
 emojiDecoder =
     JD.succeed Emoji
@@ -209,10 +211,8 @@ emojiDecoder =
         |> required "visible_in_picker" JD.bool
 
 
-
-{- Encode a `Field`. -}
-
-
+{-| Encode a `Field`.
+-}
 encodeField : Field -> Value
 encodeField field =
     JE.object
@@ -222,13 +222,37 @@ encodeField field =
         ]
 
 
-
-{- Decode a `Field`. -}
-
-
+{-| Decode a `Field`.
+-}
 fieldDecoder : Decoder Field
 fieldDecoder =
     JD.succeed Field
         |> required "name" JD.string
         |> required "value" JD.string
         |> optional "verified_at" (JD.nullable JD.string) Nothing
+
+
+{-| Encode a `Source`.
+-}
+encodeSource : Source -> Value
+encodeSource source =
+    JE.object
+        [ ( "privacy", encodeMaybe JE.string source.privacy )
+        , ( "sensitive", JE.bool source.sensitive )
+        , ( "language", encodeMaybe JE.string source.language )
+        , ( "note", JE.string source.note )
+        , ( "fields", JE.list encodeField source.fields )
+        ]
+
+
+{-| Decode a `Source`.
+-}
+sourceDecoder : Decoder Source
+sourceDecoder =
+    JD.succeed Source
+        |> optional "privacy" (JD.nullable JD.string) Nothing
+        |> optional "sensitive" JD.bool False
+        |> optional "language" (JD.nullable JD.string) Nothing
+        |> required "note" JD.string
+        |> required "fields" (JD.list fieldDecoder)
+        |> custom JD.value
