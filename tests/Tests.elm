@@ -10,6 +10,7 @@ import Mastodon.Entities as Entities
     exposing
         ( Account
         , Entity(..)
+        , Field
         , WrappedAccount(..)
         )
 import Maybe exposing (withDefault)
@@ -77,6 +78,9 @@ stripEntity entity =
         AccountEntity account ->
             AccountEntity <| stripAccount account
 
+        SourceEntity field ->
+            SourceEntity { field | v = JE.null }
+
         _ ->
             entity
 
@@ -105,6 +109,22 @@ entityData : List Entity
 entityData =
     [ AccountEntity account1
     , AccountEntity account2
+    , SourceEntity
+        { privacy = Just "privacy"
+        , sensitive = True
+        , language = Just "language"
+        , note = "note"
+        , fields = [ field1, field2 ]
+        , v = JE.null
+        }
+    , SourceEntity
+        { privacy = Nothing
+        , sensitive = False
+        , language = Nothing
+        , note = "note2"
+        , fields = []
+        , v = JE.null
+        }
     ]
 
 
@@ -139,17 +159,27 @@ account1 =
         ]
     , moved = Nothing
     , fields =
-        [ { name = "name"
-          , value = "value"
-          , verified_at = Just "verified_at"
-          }
-        , { name = "name2"
-          , value = "value2"
-          , verified_at = Nothing
-          }
+        [ field1
+        , field2
         ]
     , bot = True
     , v = JE.null
+    }
+
+
+field1 : Field
+field1 =
+    { name = "name"
+    , value = "value"
+    , verified_at = Just "verified_at"
+    }
+
+
+field2 : Field
+field2 =
+    { name = "name2"
+    , value = "value2"
+    , verified_at = Nothing
     }
 
 
