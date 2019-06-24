@@ -141,11 +141,6 @@ encodeAccount account =
         ]
 
 
-justSucceed : a -> Decoder (Maybe a)
-justSucceed a =
-    JD.succeed <| Just a
-
-
 {-| Decode an `Account`.
 -}
 accountDecoder : Decoder Account

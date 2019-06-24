@@ -172,7 +172,7 @@ account2 =
     , header_static = "header_static2"
     , emojis = []
     , moved = Just (WrappedAccount account1)
-    , fields = [] -- List Field
+    , fields = []
     , bot = True
     , v = JE.null
     }
