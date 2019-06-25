@@ -14,12 +14,14 @@ module Mastodon.Entities exposing
     ( Entity(..)
     , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
     , Account, Source, Token, Application, Attachment
-    , Meta, Card, Context, Error, Filter, Instance
+    , Card, Context, Error, Filter, Instance
     , URLs, Stats, ListEntity, Mention, Notification, Poll
     , PushSubscription, Relationship, Results
     , Status, ScheduledStatus, Tag, History, Conversation
-    , Emoji, Field, AttachmentType(..), MetaInfo(..), Focus, CardType(..)
-    , FilterContext(..), NotificationType(..), PollOption
+    , Emoji, Field, AttachmentType(..)
+    , Meta(..), ImageMetaFields, VideoMetaFields
+    , ImageMetaInfo, VideoMetaInfo, Focus
+    , CardType(..), FilterContext(..), NotificationType(..), PollOption
     , Visibility(..), StatusParams
     , WrappedAccount(..), WrappedStatus(..)
     )
@@ -49,7 +51,7 @@ got over the wire. Code that creates these can set it to
 ## Entities
 
 @docs Account, Source, Token, Application, Attachment
-@docs Meta, Card, Context, Error, Filter, Instance
+@docs Card, Context, Error, Filter, Instance
 @docs URLs, Stats, ListEntity, Mention, Notification, Poll
 @docs PushSubscription, Relationship, Results
 @docs Status, ScheduledStatus, Tag, History, Conversation
@@ -57,8 +59,10 @@ got over the wire. Code that creates these can set it to
 
 ## Entity field types
 
-@docs Emoji, Field, AttachmentType, MetaInfo, Focus, CardType
-@docs FilterContext, NotificationType, PollOption
+@docs Emoji, Field, AttachmentType
+@docs Meta, ImageMetaFields, VideoMetaFields
+@docs ImageMetaInfo, VideoMetaInfo, Focus
+@docs CardType, FilterContext, NotificationType, PollOption
 @docs Visibility, StatusParams
 
 
@@ -175,6 +179,11 @@ type alias Application =
 
 
 {-| Attachment entity.
+
+Note that it's possible to create an `Attachment` whose `type_` disagrees
+with its `meta`. Maybe I should have represented it to prevent that, but I
+chose to mostly match the JSON.
+
 -}
 type alias Attachment =
     { id : String
@@ -189,7 +198,7 @@ type alias Attachment =
     }
 
 
-{-| The types for the `Attachment.type_` field.
+{-| Types for the `Attachment.type_` field.
 -}
 type AttachmentType
     = UnknownAttachment
@@ -198,32 +207,50 @@ type AttachmentType
     | VideoAttachment
 
 
-{-| Meta entity.
+{-| Value for `Attachment.meta`
 -}
-type alias Meta =
-    { small : Maybe MetaInfo
-    , original : Maybe MetaInfo
+type Meta
+    = ImageMeta ImageMetaFields
+    | VideoMeta VideoMetaFields
+
+
+{-| Fields for an `ImageMeta`.
+-}
+type alias ImageMetaFields =
+    { small : Maybe ImageMetaInfo
+    , original : Maybe ImageMetaInfo
     , focus : Maybe Focus
-    , v : Value
     }
 
 
-{-| Possibilities for the `Meta` fields.
+{-| Fields for a `VideoMeta`.
 -}
-type MetaInfo
-    = ImageMeta
-        { width : Maybe Int
-        , height : Maybe Int
-        , size : Maybe Int
-        , aspect : Maybe Float
-        }
-    | VideoMeta
-        { width : Maybe Int
-        , height : Maybe Int
-        , frame_rate : Maybe Int
-        , duration : Maybe Float
-        , bitrate : Maybe Int
-        }
+type alias VideoMetaFields =
+    { small : Maybe VideoMetaInfo
+    , original : Maybe VideoMetaInfo
+    , focus : Maybe Focus
+    }
+
+
+{-| Values for `ImageMetaFields.small` and `ImageMetaFields.original`
+-}
+type alias ImageMetaInfo =
+    { width : Maybe Int
+    , height : Maybe Int
+    , size : Maybe Int
+    , aspect : Maybe Float
+    }
+
+
+{-| Values for `VideoMetaFields.small` and `VideoMetaFields.original`
+-}
+type alias VideoMetaInfo =
+    { width : Maybe Int
+    , height : Maybe Int
+    , frame_rate : Maybe Int
+    , duration : Maybe Float
+    , bitrate : Maybe Int
+    }
 
 
 {-| The optional focus of an image attachment.

@@ -9,8 +9,16 @@ import Mastodon.EncodeDecode as ED exposing (encodeEntity, entityDecoder)
 import Mastodon.Entities as Entities
     exposing
         ( Account
+        , Attachment
+        , AttachmentType(..)
         , Entity(..)
         , Field
+        , Focus
+        , ImageMetaFields
+        , ImageMetaInfo
+        , Meta(..)
+        , VideoMetaFields
+        , VideoMetaInfo
         , WrappedAccount(..)
         )
 import Maybe exposing (withDefault)
@@ -81,6 +89,15 @@ stripEntity entity =
         SourceEntity field ->
             SourceEntity { field | v = JE.null }
 
+        TokenEntity field ->
+            TokenEntity { field | v = JE.null }
+
+        ApplicationEntity field ->
+            ApplicationEntity { field | v = JE.null }
+
+        AttachmentEntity field ->
+            AttachmentEntity { field | v = JE.null }
+
         _ ->
             entity
 
@@ -125,7 +142,160 @@ entityData =
         , fields = []
         , v = JE.null
         }
+    , TokenEntity
+        { access_token = "access_token"
+        , token_type = "token_type"
+        , scope = "scope"
+        , created_at = 1234
+        , v = JE.null
+        }
+    , ApplicationEntity
+        { name = "name"
+        , website = Nothing
+        , v = JE.null
+        }
+    , ApplicationEntity
+        { name = "name2"
+        , website = Just "website"
+        , v = JE.null
+        }
+    , AttachmentEntity
+        { id = "id1"
+        , type_ = UnknownAttachment
+        , url = "url"
+        , remote_url = Just "remote_url"
+        , preview_url = "preview_url"
+        , text_url = Just "text_url"
+        , meta = Nothing
+        , description = "description"
+        , v = JE.null
+        }
+    , AttachmentEntity
+        { id = "id2"
+        , type_ = ImageAttachment
+        , url = "url2"
+        , remote_url = Nothing
+        , preview_url = "preview_url2"
+        , text_url = Nothing
+        , meta = Just imageMeta1
+        , description = "description2"
+        , v = JE.null
+        }
+    , AttachmentEntity
+        { id = "id3"
+        , type_ = ImageAttachment
+        , url = "url3"
+        , remote_url = Nothing
+        , preview_url = "preview_url3"
+        , text_url = Just "text_url3"
+        , meta = Just imageMeta2
+        , description = "description3"
+        , v = JE.null
+        }
+    , AttachmentEntity
+        { id = "id4"
+        , type_ = VideoAttachment
+        , url = "url4"
+        , remote_url = Nothing
+        , preview_url = "preview_url4"
+        , text_url = Nothing
+        , meta = Just videoMeta1
+        , description = "description4"
+        , v = JE.null
+        }
+    , AttachmentEntity
+        { id = "id5"
+        , type_ = VideoAttachment
+        , url = "url5"
+        , remote_url = Nothing
+        , preview_url = "preview_url5"
+        , text_url = Nothing
+        , meta = Just videoMeta2
+        , description = "description5"
+        , v = JE.null
+        }
     ]
+
+
+imageMeta1 : Meta
+imageMeta1 =
+    ImageMeta
+        { small = Just imageMetaInfo1
+        , original = Nothing
+        , focus = Just focus
+        }
+
+
+imageMeta2 : Meta
+imageMeta2 =
+    ImageMeta
+        { small = Nothing
+        , original = Just imageMetaInfo2
+        , focus = Nothing
+        }
+
+
+imageMetaInfo1 : ImageMetaInfo
+imageMetaInfo1 =
+    { width = Just 1
+    , height = Just 2
+    , size = Nothing
+    , aspect = Nothing
+    }
+
+
+imageMetaInfo2 : ImageMetaInfo
+imageMetaInfo2 =
+    { width = Nothing
+    , height = Nothing
+    , size = Just 128
+    , aspect = Just 0.5
+    }
+
+
+videoMeta1 : Meta
+videoMeta1 =
+    VideoMeta
+        { small = Just videoMetaInfo1
+        , original = Nothing
+        , focus = Just focus
+        }
+
+
+videoMeta2 : Meta
+videoMeta2 =
+    VideoMeta
+        { small = Nothing
+        , original = Just videoMetaInfo2
+        , focus = Nothing
+        }
+
+
+videoMetaInfo1 : VideoMetaInfo
+videoMetaInfo1 =
+    { width = Just 3
+    , height = Just 4
+    , frame_rate = Nothing
+    , duration = Nothing
+    , bitrate = Nothing
+    }
+
+
+videoMetaInfo2 : VideoMetaInfo
+videoMetaInfo2 =
+    { width = Nothing
+    , height = Nothing
+    , frame_rate = Just 30
+    , duration = Just 12.3
+    , bitrate = Just 10000
+    }
+
+
+focus : Focus
+focus =
+    { x = 0.5
+    , y = 0.5
+    }
 
 
 account1 : Account

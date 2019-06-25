@@ -14,6 +14,8 @@ module Mastodon.EncodeDecode exposing
     ( encodeEntity, entityDecoder
     , accountDecoder, encodeAccount
     , sourceDecoder, encodeSource
+    , tokenDecoder, encodeToken
+    , applicationDecoder, encodeApplication
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -21,6 +23,8 @@ module Mastodon.EncodeDecode exposing
 @docs encodeEntity, entityDecoder
 @docs accountDecoder, encodeAccount
 @docs sourceDecoder, encodeSource
+@docs tokenDecoder, encodeToken
+@docs applicationDecoder, encodeApplication
 
 -}
 
@@ -45,11 +49,12 @@ import Mastodon.Entities as Entities
         , FilterContext(..)
         , Focus
         , History
+        , ImageMetaFields
+        , ImageMetaInfo
         , Instance
         , ListEntity
         , Mention
-        , Meta
-        , MetaInfo(..)
+        , Meta(..)
         , Notification
         , NotificationType(..)
         , Poll
@@ -65,6 +70,8 @@ import Mastodon.Entities as Entities
         , Tag
         , Token
         , URLs
+        , VideoMetaFields
+        , VideoMetaInfo
         , Visibility(..)
         , WrappedAccount(..)
         , WrappedStatus(..)
@@ -82,6 +89,15 @@ encodeEntity entity =
         SourceEntity source ->
             encodeSource source
 
+        TokenEntity source ->
+            encodeToken source
+
+        ApplicationEntity application ->
+            encodeApplication application
+
+        AttachmentEntity attachment ->
+            encodeAttachment attachment
+
         _ ->
             JE.string "TODO"
 
@@ -97,6 +113,9 @@ entityDecoder =
     JD.oneOf
         [ accountDecoder |> JD.map AccountEntity
         , sourceDecoder |> JD.map SourceEntity
+        , tokenDecoder |> JD.map TokenEntity
+        , applicationDecoder |> JD.map ApplicationEntity
+        , attachmentDecoder |> JD.map AttachmentEntity
         ]
 
 
@@ -251,3 +270,237 @@ sourceDecoder =
         |> required "note" JD.string
         |> required "fields" (JD.list fieldDecoder)
         |> custom JD.value
+
+
+{-| Encode a `Token`.
+-}
+encodeToken : Token -> Value
+encodeToken token =
+    JE.object
+        [ ( "access_token", JE.string token.access_token )
+        , ( "token_type", JE.string token.token_type )
+        , ( "scope", JE.string token.scope )
+        , ( "created_at", JE.int token.created_at )
+        ]
+
+
+{-| Decode a `Token`.
+-}
+tokenDecoder : Decoder Token
+tokenDecoder =
+    JD.succeed Token
+        |> required "access_token" JD.string
+        |> required "token_type" JD.string
+        |> required "scope" JD.string
+        |> required "created_at" JD.int
+        |> custom JD.value
+
+
+{-| Encode an `Application`.
+-}
+encodeApplication : Application -> Value
+encodeApplication application =
+    JE.object
+        [ ( "name", JE.string application.name )
+        , ( "website", encodeMaybe JE.string application.website )
+        ]
+
+
+{-| Decode an `Application`.
+-}
+applicationDecoder : Decoder Application
+applicationDecoder =
+    JD.succeed Application
+        |> required "name" JD.string
+        |> optional "website" (JD.nullable JD.string) Nothing
+        |> custom JD.value
+
+
+encodeAttachmentType : AttachmentType -> Value
+encodeAttachmentType attachmentType =
+    case attachmentType of
+        UnknownAttachment ->
+            JE.string "UnknownAttachment"
+
+        ImageAttachment ->
+            JE.string "ImageAttachment"
+
+        GifvAttachment ->
+            JE.string "GifvAttachment"
+
+        VideoAttachment ->
+            JE.string "VideoAttachment"
+
+
+attachmentTypeDecoder : Decoder AttachmentType
+attachmentTypeDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                case s of
+                    "UnknownAttachment" ->
+                        JD.succeed UnknownAttachment
+
+                    "ImageAttachment" ->
+                        JD.succeed ImageAttachment
+
+                    "GifvAttachment" ->
+                        JD.succeed GifvAttachment
+
+                    "VideoAttachment" ->
+                        JD.succeed VideoAttachment
+
+                    _ ->
+                        JD.fail <| "Unknown AttachmentType: " ++ s
+            )
+
+
+encodeMeta : Meta -> Value
+encodeMeta meta =
+    case meta of
+        ImageMeta fields ->
+            encodeImageMetaFields fields
+
+        VideoMeta fields ->
+            encodeVideoMetaFields fields
+
+
+metaDecoder : AttachmentType -> Decoder (Maybe Meta)
+metaDecoder attachmentType =
+    JD.oneOf
+        [ JD.null Nothing
+        , case attachmentType of
+            UnknownAttachment ->
+                JD.succeed Nothing
+
+            ImageAttachment ->
+                JD.map (Just << ImageMeta) imageMetaFieldsDecoder
+
+            _ ->
+                JD.map (Just << VideoMeta) videoMetaFieldsDecoder
+        ]
+
+
+encodeImageMetaFields : ImageMetaFields -> Value
+encodeImageMetaFields fields =
+    JE.object
+        [ ( "small", encodeMaybe encodeImageMetaInfo fields.small )
+        , ( "original", encodeMaybe encodeImageMetaInfo fields.original )
+        , ( "focus", encodeMaybe encodeFocus fields.focus )
+        ]
+
+
+imageMetaFieldsDecoder : Decoder ImageMetaFields
+imageMetaFieldsDecoder =
+    JD.succeed ImageMetaFields
+        |> optional "small" (JD.nullable imageMetaInfoDecoder) Nothing
+        |> optional "original" (JD.nullable imageMetaInfoDecoder) Nothing
+        |> optional "focus" (JD.nullable focusDecoder) Nothing
+
+
+encodeImageMetaInfo : ImageMetaInfo -> Value
+encodeImageMetaInfo { width, height, size, aspect } =
+    JE.object
+        [ ( "width", encodeMaybe JE.int width )
+        , ( "height", encodeMaybe JE.int height )
+        , ( "size", encodeMaybe JE.int size )
+        , ( "aspect", encodeMaybe JE.float aspect )
+        ]
+
+
+imageMetaInfoDecoder : Decoder ImageMetaInfo
+imageMetaInfoDecoder =
+    JD.succeed ImageMetaInfo
+        |> optional "width" (JD.nullable JD.int) Nothing
+        |> optional "height" (JD.nullable JD.int) Nothing
+        |> optional "size" (JD.nullable JD.int) Nothing
+        |> optional "aspect" (JD.nullable JD.float) Nothing
+
+
+encodeVideoMetaFields : VideoMetaFields -> Value
+encodeVideoMetaFields fields =
+    JE.object
+        [ ( "small", encodeMaybe encodeVideoMetaInfo fields.small )
+        , ( "original", encodeMaybe encodeVideoMetaInfo fields.original )
+        , ( "focus", encodeMaybe encodeFocus fields.focus )
+        ]
+
+
+videoMetaFieldsDecoder : Decoder VideoMetaFields
+videoMetaFieldsDecoder =
+    JD.succeed VideoMetaFields
+        |> optional "small" (JD.nullable videoMetaInfoDecoder) Nothing
+        |> optional "original" (JD.nullable videoMetaInfoDecoder) Nothing
+        |> optional "focus" (JD.nullable focusDecoder) Nothing
+
+
+encodeVideoMetaInfo : VideoMetaInfo -> Value
+encodeVideoMetaInfo { width, height, frame_rate, duration, bitrate } =
+    JE.object
+        [ ( "width", encodeMaybe JE.int width )
+        , ( "height", encodeMaybe JE.int height )
+        , ( "frame_rate", encodeMaybe JE.int frame_rate )
+        , ( "duration", encodeMaybe JE.float duration )
+        , ( "bitrate", encodeMaybe JE.int bitrate )
+        ]
+
+
+videoMetaInfoDecoder : Decoder VideoMetaInfo
+videoMetaInfoDecoder =
+    JD.succeed VideoMetaInfo
+        |> optional "width" (JD.nullable JD.int) Nothing
+        |> optional "height" (JD.nullable JD.int) Nothing
+        |> optional "frame_rate" (JD.nullable JD.int) Nothing
+        |> optional "duration" (JD.nullable JD.float) Nothing
+        |> optional "bitrate" (JD.nullable JD.int) Nothing
+
+
+encodeFocus : Focus -> Value
+encodeFocus { x, y } =
+    JE.object
+        [ ( "x", JE.float x )
+        , ( "y", JE.float y )
+        ]
+
+
+focusDecoder : Decoder Focus
+focusDecoder =
+    JD.succeed Focus
+        |> required "x" JD.float
+        |> required "y" JD.float
+
+
+{-| Encode an `Attachment`.
+-}
+encodeAttachment : Attachment -> Value
+encodeAttachment attachment =
+    JE.object
+        [ ( "id", JE.string attachment.id )
+        , ( "type_", encodeAttachmentType attachment.type_ )
+        , ( "url", JE.string attachment.url )
+        , ( "remote_url", encodeMaybe JE.string attachment.remote_url )
+        , ( "preview_url", JE.string attachment.preview_url )
+        , ( "text_url", encodeMaybe JE.string attachment.text_url )
+        , ( "meta", encodeMaybe encodeMeta attachment.meta )
+        , ( "description", JE.string attachment.description )
+        ]
+
+
+{-| Decode an `Attachment`.
+-}
+attachmentDecoder : Decoder Attachment
+attachmentDecoder =
+    JD.field "type_" attachmentTypeDecoder
+        |> JD.andThen
+            (\type_ ->
+                JD.succeed Attachment
+                    |> required "id" JD.string
+                    |> required "type_" (JD.succeed type_)
+                    |> required "url" JD.string
+                    |> optional "remote_url" (JD.nullable JD.string) Nothing
+                    |> required "preview_url" JD.string
+                    |> optional "text_url" (JD.nullable JD.string) Nothing
+                    |> optional "meta" (metaDecoder type_) Nothing
+                    |> required "description" JD.string
+                    |> custom JD.value
+            )
