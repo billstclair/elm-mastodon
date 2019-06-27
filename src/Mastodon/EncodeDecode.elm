@@ -16,6 +16,8 @@ module Mastodon.EncodeDecode exposing
     , sourceDecoder, encodeSource
     , tokenDecoder, encodeToken
     , applicationDecoder, encodeApplication
+    , attachmentDecoder, encodeAttachment
+    , cardDecoder, encodeCard
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -25,6 +27,8 @@ module Mastodon.EncodeDecode exposing
 @docs sourceDecoder, encodeSource
 @docs tokenDecoder, encodeToken
 @docs applicationDecoder, encodeApplication
+@docs attachmentDecoder, encodeAttachment
+@docs cardDecoder, encodeCard
 
 -}
 
@@ -98,6 +102,9 @@ encodeEntity entity =
         AttachmentEntity attachment ->
             encodeAttachment attachment
 
+        CardEntity card ->
+            encodeCard card
+
         _ ->
             JE.string "TODO"
 
@@ -116,6 +123,7 @@ entityDecoder =
         , tokenDecoder |> JD.map TokenEntity
         , applicationDecoder |> JD.map ApplicationEntity
         , attachmentDecoder |> JD.map AttachmentEntity
+        , cardDecoder |> JD.map CardEntity
         ]
 
 
@@ -504,3 +512,87 @@ attachmentDecoder =
                     |> required "description" JD.string
                     |> custom JD.value
             )
+
+
+{-| Encode a `CardType`
+-}
+encodeCardType : CardType -> Value
+encodeCardType cardType =
+    JE.string <|
+        case cardType of
+            LinkCard ->
+                "link"
+
+            PhotoCard ->
+                "photo"
+
+            VideoCard ->
+                "video"
+
+            RichCard ->
+                "rich"
+
+
+{-| Decode a `CardType`.
+-}
+cardTypeDecoder : Decoder CardType
+cardTypeDecoder =
+    JD.string
+        |> JD.andThen
+            (\t ->
+                case t of
+                    "link" ->
+                        JD.succeed LinkCard
+
+                    "photo" ->
+                        JD.succeed PhotoCard
+
+                    "video" ->
+                        JD.succeed VideoCard
+
+                    "rich" ->
+                        JD.succeed RichCard
+
+                    _ ->
+                        JD.fail <| "Unknown CardType: " ++ t
+            )
+
+
+{-| Encode a `Card`.
+-}
+encodeCard : Card -> Value
+encodeCard card =
+    JE.object
+        [ ( "url", JE.string card.url )
+        , ( "title", JE.string card.title )
+        , ( "description", JE.string card.description )
+        , ( "image", encodeMaybe JE.string card.image )
+        , ( "type_", encodeCardType card.type_ )
+        , ( "author_name", encodeMaybe JE.string card.author_name )
+        , ( "author_url", encodeMaybe JE.string card.author_url )
+        , ( "provider_name", encodeMaybe JE.string card.provider_name )
+        , ( "provider_url", encodeMaybe JE.string card.provider_url )
+        , ( "html", encodeMaybe JE.string card.html )
+        , ( "width", encodeMaybe JE.int card.width )
+        , ( "height", encodeMaybe JE.int card.height )
+        ]
+
+
+{-| Decode a `Card`.
+-}
+cardDecoder : Decoder Card
+cardDecoder =
+    JD.succeed Card
+        |> required "url" JD.string
+        |> required "title" JD.string
+        |> required "description" JD.string
+        |> optional "image" (JD.nullable JD.string) Nothing
+        |> required "type_" cardTypeDecoder
+        |> optional "author_name" (JD.nullable JD.string) Nothing
+        |> optional "author_url" (JD.nullable JD.string) Nothing
+        |> optional "provider_name" (JD.nullable JD.string) Nothing
+        |> optional "provider_url" (JD.nullable JD.string) Nothing
+        |> optional "html" (JD.nullable JD.string) Nothing
+        |> optional "width" (JD.nullable JD.int) Nothing
+        |> optional "height" (JD.nullable JD.int) Nothing
+        |> custom JD.value

@@ -32,7 +32,7 @@ These are JSON-encoded over the wire. Mastodon.EncodeDecode knows how to do that
 
 Documented at <https://docs.joinmastodon.org/api/entities/>
 
-Each of the Entities has a `v` field, which is the raw JS value from
+Most of the Entities have a `v` field, which is the raw JS value from
 which it was decoded. This is useful if you want to display what you
 got over the wire. Code that creates these can set it to
 `Json.Encode.null`.
@@ -294,7 +294,6 @@ type CardType
 type alias Context =
     { ancestors : List Status
     , descendents : List Status
-    , v : Value
     }
 
 
@@ -311,8 +310,8 @@ type alias Emoji =
 {-| Error entity.
 -}
 type alias Error =
-    { error : String
-    , v : Value
+    { httpStatus : String -- From the HTTP header, not the JSON body.
+    , error : String
     }
 
 

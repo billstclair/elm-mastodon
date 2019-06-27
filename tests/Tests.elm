@@ -11,6 +11,8 @@ import Mastodon.Entities as Entities
         ( Account
         , Attachment
         , AttachmentType(..)
+        , Card
+        , CardType(..)
         , Entity(..)
         , Field
         , Focus
@@ -86,17 +88,20 @@ stripEntity entity =
         AccountEntity account ->
             AccountEntity <| stripAccount account
 
-        SourceEntity field ->
-            SourceEntity { field | v = JE.null }
+        SourceEntity source ->
+            SourceEntity { source | v = JE.null }
 
-        TokenEntity field ->
-            TokenEntity { field | v = JE.null }
+        TokenEntity token ->
+            TokenEntity { token | v = JE.null }
 
-        ApplicationEntity field ->
-            ApplicationEntity { field | v = JE.null }
+        ApplicationEntity application ->
+            ApplicationEntity { application | v = JE.null }
 
-        AttachmentEntity field ->
-            AttachmentEntity { field | v = JE.null }
+        AttachmentEntity attachment ->
+            AttachmentEntity { attachment | v = JE.null }
+
+        CardEntity card ->
+            CardEntity { card | v = JE.null }
 
         _ ->
             entity
@@ -212,6 +217,66 @@ entityData =
         , text_url = Nothing
         , meta = Just videoMeta2
         , description = "description5"
+        , v = JE.null
+        }
+    , CardEntity
+        { url = "url"
+        , title = "title"
+        , description = "description"
+        , image = Nothing
+        , type_ = LinkCard
+        , author_name = Nothing
+        , author_url = Nothing
+        , provider_name = Nothing
+        , provider_url = Nothing
+        , html = Just "html"
+        , width = Nothing
+        , height = Nothing
+        , v = JE.null
+        }
+    , CardEntity
+        { url = "url2"
+        , title = "title2"
+        , description = "description2"
+        , image = Just "image"
+        , type_ = PhotoCard
+        , author_name = Nothing
+        , author_url = Nothing
+        , provider_name = Nothing
+        , provider_url = Nothing
+        , html = Nothing
+        , width = Just 1024
+        , height = Just 768
+        , v = JE.null
+        }
+    , CardEntity
+        { url = "url3"
+        , title = "title3"
+        , description = "description3"
+        , image = Just "image"
+        , type_ = VideoCard
+        , author_name = Nothing
+        , author_url = Nothing
+        , provider_name = Nothing
+        , provider_url = Nothing
+        , html = Nothing
+        , width = Just 1536
+        , height = Just 1024
+        , v = JE.null
+        }
+    , CardEntity
+        { url = "url"
+        , title = "title"
+        , description = "description"
+        , image = Just "image"
+        , type_ = RichCard
+        , author_name = Just "author_name"
+        , author_url = Just "author_url"
+        , provider_name = Just "provider_name"
+        , provider_url = Just "provider_url"
+        , html = Nothing
+        , width = Nothing
+        , height = Nothing
         , v = JE.null
         }
     ]
