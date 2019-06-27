@@ -374,7 +374,6 @@ type alias Stats =
 type alias ListEntity =
     { id : String
     , title : String
-    , v : Value
     }
 
 

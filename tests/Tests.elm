@@ -249,6 +249,7 @@ entityData =
     , FilterEntity filter2
     , InstanceEntity instance1
     , InstanceEntity instance2
+    , ListEntityEntity { id = "id", title = "title" }
     ]
 
 

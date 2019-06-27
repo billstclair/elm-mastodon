@@ -23,6 +23,7 @@ module Mastodon.EncodeDecode exposing
     , encodeError, errorDecoder
     , encodeFilter, filterDecoder
     , encodeInstance, instanceDecoder
+    , encodeListEntity, listEntityDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -39,6 +40,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeError, errorDecoder
 @docs encodeFilter, filterDecoder
 @docs encodeInstance, instanceDecoder
+@docs encodeListEntity, listEntityDecoder
 
 -}
 
@@ -115,14 +117,17 @@ encodeEntity entity =
         ContextEntity context ->
             encodeContext context
 
-        StatusEntity context ->
-            encodeStatus context
+        StatusEntity status ->
+            encodeStatus status
 
-        FilterEntity context ->
-            encodeFilter context
+        FilterEntity filter ->
+            encodeFilter filter
 
-        InstanceEntity context ->
-            encodeInstance context
+        InstanceEntity instance ->
+            encodeInstance instance
+
+        ListEntityEntity list ->
+            encodeListEntity list
 
         _ ->
             JE.string "TODO"
@@ -146,6 +151,7 @@ entityDecoder =
         , statusDecoder |> JD.map StatusEntity
         , filterDecoder |> JD.map FilterEntity
         , instanceDecoder |> JD.map InstanceEntity
+        , listEntityDecoder |> JD.map ListEntityEntity
         ]
 
 
@@ -1018,3 +1024,22 @@ instanceDecoder =
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value
+
+
+{-| Encode a `ListEntity`.
+-}
+encodeListEntity : ListEntity -> Value
+encodeListEntity { id, title } =
+    JE.object
+        [ ( "id", JE.string id )
+        , ( "title", JE.string title )
+        ]
+
+
+{-| Decode a `ListEntity`.
+-}
+listEntityDecoder : Decoder ListEntity
+listEntityDecoder =
+    JD.succeed ListEntity
+        |> required "id" JD.string
+        |> required "title" JD.string
