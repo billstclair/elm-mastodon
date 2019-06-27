@@ -18,6 +18,8 @@ import Mastodon.Entities as Entities
         , Emoji
         , Entity(..)
         , Field
+        , Filter
+        , FilterContext(..)
         , Focus
         , History
         , ImageMetaFields
@@ -124,6 +126,13 @@ stripStatus status =
     }
 
 
+stripContext : Context -> Context
+stripContext { ancestors, descendants } =
+    { ancestors = List.map stripStatus ancestors
+    , descendants = List.map stripStatus descendants
+    }
+
+
 stripEntity : Entity -> Entity
 stripEntity entity =
     case entity of
@@ -142,14 +151,14 @@ stripEntity entity =
         CardEntity card ->
             CardEntity { card | v = JE.null }
 
-        ContextEntity { ancestors, descendants } ->
-            ContextEntity
-                { ancestors = List.map stripStatus ancestors
-                , descendants = List.map stripStatus descendants
-                }
+        ContextEntity context ->
+            ContextEntity <| stripContext context
 
         StatusEntity status ->
             StatusEntity <| stripStatus status
+
+        FilterEntity filter ->
+            FilterEntity { filter | v = JE.null }
 
         _ ->
             entity
@@ -216,7 +225,33 @@ entityData =
         { ancestors = [ status1 ]
         , descendants = [ status2, status3, status4 ]
         }
+    , FilterEntity filter1
+    , FilterEntity filter2
     ]
+
+
+filter1 : Filter
+filter1 =
+    { id = "id"
+    , phrase = "phrase"
+    , context = [ HomeContext, NotificationsContext ]
+    , expires_at = Just "expires_at"
+    , irreversible = False
+    , whole_word = False
+    , v = JE.null
+    }
+
+
+filter2 : Filter
+filter2 =
+    { id = "id2"
+    , phrase = "phrase2"
+    , context = [ PublicContext, ThreadContext ]
+    , expires_at = Nothing
+    , irreversible = True
+    , whole_word = True
+    , v = JE.null
+    }
 
 
 card1 : Card

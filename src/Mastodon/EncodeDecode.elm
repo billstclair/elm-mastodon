@@ -18,6 +18,10 @@ module Mastodon.EncodeDecode exposing
     , applicationDecoder, encodeApplication
     , attachmentDecoder, encodeAttachment
     , cardDecoder, encodeCard
+    , contextDecoder, encodeContext
+    , encodeStatus, statusDecoder
+    , encodeError, errorDecoder
+    , encodeFilter, filterDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -29,11 +33,15 @@ module Mastodon.EncodeDecode exposing
 @docs applicationDecoder, encodeApplication
 @docs attachmentDecoder, encodeAttachment
 @docs cardDecoder, encodeCard
+@docs contextDecoder, encodeContext
+@docs encodeStatus, statusDecoder
+@docs encodeError, errorDecoder
+@docs encodeFilter, filterDecoder
 
 -}
 
 import Json.Decode as JD exposing (Decoder)
-import Json.Decode.Pipeline as DP exposing (custom, optional, required)
+import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
 import Mastodon.Entities as Entities
     exposing
@@ -108,6 +116,9 @@ encodeEntity entity =
         StatusEntity context ->
             encodeStatus context
 
+        FilterEntity context ->
+            encodeFilter context
+
         _ ->
             JE.string "TODO"
 
@@ -128,6 +139,7 @@ entityDecoder =
         , cardDecoder |> JD.map CardEntity
         , contextDecoder |> JD.map ContextEntity
         , statusDecoder |> JD.map StatusEntity
+        , filterDecoder |> JD.map FilterEntity
         ]
 
 
@@ -842,4 +854,97 @@ statusDecoder =
         |> required "application" applicationDecoder
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
+        |> custom JD.value
+
+
+{-| Encode an `Error`.
+
+Note that the `httpStatus` field does NOT get encoded.
+You'll probably never need to encode one of these, anyway.
+
+-}
+encodeError : Error -> Value
+encodeError error =
+    JE.object
+        [ ( "error", JE.string error.error ) ]
+
+
+{-| Decode an `Error`.
+
+Since the `httpStatus` comes from the HTTP headers, it needs to be
+passed in here as a parameter, as it isn't in the JSON.
+
+-}
+errorDecoder : String -> Decoder Error
+errorDecoder httpStatus =
+    JD.succeed Error
+        |> hardcoded httpStatus
+        |> required "error" JD.string
+
+
+encodeFilterContext : FilterContext -> Value
+encodeFilterContext context =
+    JE.string <|
+        case context of
+            HomeContext ->
+                "HomeContext"
+
+            NotificationsContext ->
+                "NotificationsContext"
+
+            PublicContext ->
+                "PublicContext"
+
+            ThreadContext ->
+                "ThreadContext"
+
+
+filterContextDecoder : Decoder FilterContext
+filterContextDecoder =
+    JD.string
+        |> JD.andThen
+            (\c ->
+                case c of
+                    "HomeContext" ->
+                        JD.succeed HomeContext
+
+                    "NotificationsContext" ->
+                        JD.succeed NotificationsContext
+
+                    "PublicContext" ->
+                        JD.succeed PublicContext
+
+                    "ThreadContext" ->
+                        JD.succeed ThreadContext
+
+                    _ ->
+                        JD.fail <| "Unknown Filter context: " ++ c
+            )
+
+
+{-| Encode a `Filter`.
+-}
+encodeFilter : Filter -> Value
+encodeFilter filter =
+    JE.object
+        [ ( "id", JE.string filter.id )
+        , ( "phrase", JE.string filter.phrase )
+        , ( "context", JE.list encodeFilterContext filter.context )
+        , ( "expires_at", encodeMaybe JE.string filter.expires_at )
+        , ( "irreversible", JE.bool filter.irreversible )
+        , ( "whole_word", JE.bool filter.whole_word )
+        ]
+
+
+{-| Decode a `Filter`.
+-}
+filterDecoder : Decoder Filter
+filterDecoder =
+    JD.succeed Filter
+        |> required "id" JD.string
+        |> required "phrase" JD.string
+        |> required "context" (JD.list filterContextDecoder)
+        |> optional "expires_at" (JD.nullable JD.string) Nothing
+        |> required "irreversible" JD.bool
+        |> required "whole_word" JD.bool
         |> custom JD.value

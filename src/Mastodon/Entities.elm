@@ -319,8 +319,8 @@ type alias Error =
 type alias Filter =
     { id : String
     , phrase : String
-    , context : List Context
-    , expires_at : Datetime
+    , context : List FilterContext
+    , expires_at : Maybe Datetime
     , irreversible : Bool
     , whole_word : Bool
     , v : Value
@@ -360,13 +360,12 @@ type alias URLs =
     }
 
 
-{-| Stats entity.
+{-| Value of `Instance.stats`.
 -}
 type alias Stats =
     { user_count : Int
     , status_count : Int
     , domain_count : Int
-    , v : Value
     }
 
 
@@ -583,16 +582,13 @@ type Entity
     | SourceEntity Source
     | TokenEntity Token
     | ApplicationEntity Application
-    | MetaEntity Meta
     | CardEntity Card
     | ContextEntity Context
     | ErrorEntity Error
     | FilterEntity Filter
     | InstanceEntity Instance
-    | StatsEntity Stats
     | ListEntityEntity ListEntity
     | NotificationEntity Notification
-    | PollEntity Poll
     | PushSubscriptionEntity PushSubscription
     | RelationshipEntity Relationship
     | ResultsEntity Results
