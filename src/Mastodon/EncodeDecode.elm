@@ -99,11 +99,14 @@ encodeEntity entity =
         ApplicationEntity application ->
             encodeApplication application
 
-        AttachmentEntity attachment ->
-            encodeAttachment attachment
-
         CardEntity card ->
             encodeCard card
+
+        ContextEntity context ->
+            encodeContext context
+
+        StatusEntity context ->
+            encodeStatus context
 
         _ ->
             JE.string "TODO"
@@ -122,8 +125,9 @@ entityDecoder =
         , sourceDecoder |> JD.map SourceEntity
         , tokenDecoder |> JD.map TokenEntity
         , applicationDecoder |> JD.map ApplicationEntity
-        , attachmentDecoder |> JD.map AttachmentEntity
         , cardDecoder |> JD.map CardEntity
+        , contextDecoder |> JD.map ContextEntity
+        , statusDecoder |> JD.map StatusEntity
         ]
 
 
@@ -510,7 +514,6 @@ attachmentDecoder =
                     |> optional "text_url" (JD.nullable JD.string) Nothing
                     |> optional "meta" (metaDecoder type_) Nothing
                     |> required "description" JD.string
-                    |> custom JD.value
             )
 
 
@@ -595,4 +598,248 @@ cardDecoder =
         |> optional "html" (JD.nullable JD.string) Nothing
         |> optional "width" (JD.nullable JD.int) Nothing
         |> optional "height" (JD.nullable JD.int) Nothing
+        |> custom JD.value
+
+
+{-| Encode a `Context`.
+-}
+encodeContext : Context -> Value
+encodeContext context =
+    JE.object
+        [ ( "ancestors", JE.list encodeStatus context.ancestors )
+        , ( "descendants", JE.list encodeStatus context.descendants )
+        ]
+
+
+{-| Decode a `Context`.
+-}
+contextDecoder : Decoder Context
+contextDecoder =
+    JD.succeed Context
+        |> required "ancestors" (JD.list statusDecoder)
+        |> required "descendants" (JD.list statusDecoder)
+
+
+encodeWrappedStatus : WrappedStatus -> Value
+encodeWrappedStatus (WrappedStatus status) =
+    encodeStatus status
+
+
+encodeVisibility : Visibility -> Value
+encodeVisibility visibility =
+    JE.string <|
+        case visibility of
+            PublicVisibility ->
+                "PublicVisibility"
+
+            UnlistedVisibility ->
+                "UnlistedVisibility"
+
+            PrivateVisibility ->
+                "PrivateVisibility"
+
+            DirectVisibility ->
+                "DirectVisibility"
+
+
+visibilityDecoder : Decoder Visibility
+visibilityDecoder =
+    JD.string
+        |> JD.andThen
+            (\v ->
+                case v of
+                    "PublicVisibility" ->
+                        JD.succeed PublicVisibility
+
+                    "UnlistedVisibility" ->
+                        JD.succeed UnlistedVisibility
+
+                    "PrivateVisibility" ->
+                        JD.succeed PrivateVisibility
+
+                    "DirectVisibility" ->
+                        JD.succeed DirectVisibility
+
+                    _ ->
+                        JD.fail <| "Unknown Visibility: " ++ v
+            )
+
+
+encodeMention : Mention -> Value
+encodeMention mention =
+    JE.object
+        [ ( "url", JE.string mention.url )
+        , ( "username", JE.string mention.username )
+        , ( "acct", JE.string mention.acct )
+        , ( "id", JE.string mention.id )
+        ]
+
+
+mentionDecoder : Decoder Mention
+mentionDecoder =
+    JD.succeed Mention
+        |> required "url" JD.string
+        |> required "username" JD.string
+        |> required "acct" JD.string
+        |> required "id" JD.string
+
+
+encodeTag : Tag -> Value
+encodeTag { name, url, history } =
+    JE.object
+        [ ( "name", JE.string name )
+        , ( "url", JE.string url )
+        , ( "history", JE.list encodeHistory history )
+        ]
+
+
+tagDecoder : Decoder Tag
+tagDecoder =
+    JD.succeed Tag
+        |> required "name" JD.string
+        |> required "url" JD.string
+        |> required "history" (JD.list historyDecoder)
+
+
+encodeHistory : History -> Value
+encodeHistory { day, uses, accounts } =
+    JE.object
+        [ ( "day", JE.string day )
+        , ( "uses", JE.int uses )
+        , ( "accounts", JE.int accounts )
+        ]
+
+
+historyDecoder : Decoder History
+historyDecoder =
+    JD.succeed History
+        |> required "day" JD.string
+        |> required "uses" JD.int
+        |> required "accounts" JD.int
+
+
+encodePoll : Poll -> Value
+encodePoll poll =
+    JE.object
+        [ ( "id", JE.string poll.id )
+        , ( "expires_at", encodeMaybe JE.string poll.expires_at )
+        , ( "expired", JE.bool poll.expired )
+        , ( "multiple", JE.bool poll.multiple )
+        , ( "votes_count", JE.int poll.votes_count )
+        , ( "options", JE.list encodePollOption poll.options )
+        , ( "voted", JE.bool poll.voted )
+        ]
+
+
+optionalBoolDecoder : Decoder Bool
+optionalBoolDecoder =
+    JD.nullable JD.bool
+        |> JD.andThen (Maybe.withDefault False >> JD.succeed)
+
+
+pollDecoder : Decoder Poll
+pollDecoder =
+    JD.succeed Poll
+        |> required "id" JD.string
+        |> optional "expires_at" (JD.nullable JD.string) Nothing
+        |> required "expired" JD.bool
+        |> required "multiple" JD.bool
+        |> required "votes_count" JD.int
+        |> required "options" (JD.list pollOptionDecoder)
+        |> optional "voted" optionalBoolDecoder False
+
+
+encodePollOption : PollOption -> Value
+encodePollOption { title, votes_count } =
+    JE.object
+        [ ( "title", JE.string title )
+        , ( "votes_count", JE.int votes_count )
+        ]
+
+
+pollOptionDecoder : Decoder PollOption
+pollOptionDecoder =
+    JD.succeed PollOption
+        |> required "title" JD.string
+        |> optional "votes_count"
+            (JD.nullable JD.int
+                |> JD.andThen (Maybe.withDefault 0 >> JD.succeed)
+            )
+            0
+
+
+{-| Encode a `Status`.
+-}
+encodeStatus : Status -> Value
+encodeStatus status =
+    JE.object
+        [ ( "id", JE.string status.id )
+        , ( "uri", JE.string status.uri )
+        , ( "url", encodeMaybe JE.string status.url )
+        , ( "account", encodeAccount status.account )
+        , ( "in_reply_to_id", encodeMaybe JE.string status.in_reply_to_id )
+        , ( "in_reply_to_account_id", encodeMaybe JE.string status.in_reply_to_account_id )
+        , ( "reblog", encodeMaybe encodeWrappedStatus status.reblog )
+        , ( "content", JE.string status.content )
+        , ( "created_at", JE.string status.created_at )
+        , ( "emojis", JE.list encodeEmoji status.emojis )
+        , ( "replies_count", JE.int status.replies_count )
+        , ( "reblogs_count", JE.int status.reblogs_count )
+        , ( "favourites_count", JE.int status.favourites_count )
+        , ( "reblogged", JE.bool status.reblogged )
+        , ( "favourited", JE.bool status.favourited )
+        , ( "muted", JE.bool status.muted )
+        , ( "sensitive", JE.bool status.sensitive )
+        , ( "spoiler_text", JE.string status.spoiler_text )
+        , ( "visibility", encodeVisibility status.visibility )
+        , ( "media_attachments", JE.list encodeAttachment status.media_attachments )
+        , ( "mentions", JE.list encodeMention status.mentions )
+        , ( "tags", JE.list encodeTag status.tags )
+        , ( "card", encodeMaybe encodeCard status.card )
+        , ( "poll", encodeMaybe encodePoll status.poll )
+        , ( "application", encodeApplication status.application )
+        , ( "language", encodeMaybe JE.string status.language )
+        , ( "pinned", JE.bool status.pinned )
+        ]
+
+
+{-| Decode a `Status`.
+-}
+statusDecoder : Decoder Status
+statusDecoder =
+    JD.succeed Status
+        |> required "id" JD.string
+        |> required "uri" JD.string
+        |> optional "url" (JD.nullable JD.string) Nothing
+        |> required "account" accountDecoder
+        |> optional "in_reply_to_id" (JD.nullable JD.string) Nothing
+        |> optional "in_reply_to_account_id" (JD.nullable JD.string) Nothing
+        |> optional "reblog"
+            (JD.lazy
+                (\() ->
+                    JD.nullable
+                        (statusDecoder |> JD.map WrappedStatus)
+                )
+            )
+            Nothing
+        |> required "content" JD.string
+        |> required "created_at" JD.string
+        |> required "emojis" (JD.list emojiDecoder)
+        |> required "replies_count" JD.int
+        |> required "reblogs_count" JD.int
+        |> required "favourites_count" JD.int
+        |> optional "reblogged" optionalBoolDecoder False
+        |> optional "favourited" optionalBoolDecoder False
+        |> optional "muted" optionalBoolDecoder False
+        |> required "sensitive" JD.bool
+        |> required "spoiler_text" JD.string
+        |> required "visibility" visibilityDecoder
+        |> required "media_attachments" (JD.list attachmentDecoder)
+        |> required "mentions" (JD.list mentionDecoder)
+        |> required "tags" (JD.list tagDecoder)
+        |> optional "card" (JD.nullable cardDecoder) Nothing
+        |> optional "poll" (JD.nullable pollDecoder) Nothing
+        |> required "application" applicationDecoder
+        |> optional "language" (JD.nullable JD.string) Nothing
+        |> optional "pinned" optionalBoolDecoder False
         |> custom JD.value

@@ -13,16 +13,16 @@
 module Mastodon.Entities exposing
     ( Entity(..)
     , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
-    , Account, Source, Token, Application, Attachment
+    , Account, Source, Token, Application
     , Card, Context, Error, Filter, Instance
-    , URLs, Stats, ListEntity, Mention, Notification, Poll
+    , URLs, Stats, ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, ScheduledStatus, Tag, History, Conversation
-    , Emoji, Field, AttachmentType(..)
+    , Status, ScheduledStatus, Conversation
+    , Emoji, Field, Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
-    , CardType(..), FilterContext(..), NotificationType(..), PollOption
-    , Visibility(..), StatusParams
+    , CardType(..), FilterContext(..), NotificationType(..)
+    , Visibility(..), Mention, Tag, History, Poll, PollOption, StatusParams
     , WrappedAccount(..), WrappedStatus(..)
     )
 
@@ -50,20 +50,20 @@ got over the wire. Code that creates these can set it to
 
 ## Entities
 
-@docs Account, Source, Token, Application, Attachment
+@docs Account, Source, Token, Application
 @docs Card, Context, Error, Filter, Instance
-@docs URLs, Stats, ListEntity, Mention, Notification, Poll
+@docs URLs, Stats, ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, ScheduledStatus, Tag, History, Conversation
+@docs Status, ScheduledStatus, Conversation
 
 
 ## Entity field types
 
-@docs Emoji, Field, AttachmentType
+@docs Emoji, Field, Attachment, AttachmentType
 @docs Meta, ImageMetaFields, VideoMetaFields
 @docs ImageMetaInfo, VideoMetaInfo, Focus
-@docs CardType, FilterContext, NotificationType, PollOption
-@docs Visibility, StatusParams
+@docs CardType, FilterContext, NotificationType
+@docs Visibility, Mention, Tag, History, Poll, PollOption, StatusParams
 
 
 ## Wrappers to prevent type recursion
@@ -178,7 +178,7 @@ type alias Application =
     }
 
 
-{-| Attachment entity.
+{-| Element of `Status.media_attachments` and `ScheduledStatus.media_attachments`.
 
 Note that it's possible to create an `Attachment` whose `type_` disagrees
 with its `meta`. Maybe I should have represented it to prevent that, but I
@@ -194,7 +194,6 @@ type alias Attachment =
     , text_url : Maybe UrlString
     , meta : Maybe Meta
     , description : String
-    , v : Value
     }
 
 
@@ -293,7 +292,7 @@ type CardType
 -}
 type alias Context =
     { ancestors : List Status
-    , descendents : List Status
+    , descendants : List Status
     }
 
 
@@ -380,14 +379,13 @@ type alias ListEntity =
     }
 
 
-{-| Mention entity.
+{-| Values in `Status.mentions`.
 -}
 type alias Mention =
     { url : UrlString
     , username : String
     , acct : String
     , id : String
-    , v : Value
     }
 
 
@@ -412,7 +410,7 @@ type NotificationType
     | FavouriteNotification
 
 
-{-| Poll entity.
+{-| Value for `Status.poll`.
 -}
 type alias Poll =
     { id : String
@@ -422,7 +420,6 @@ type alias Poll =
     , votes_count : Int
     , options : List PollOption
     , voted : Bool
-    , v : Value
     }
 
 
@@ -430,7 +427,7 @@ type alias Poll =
 -}
 type alias PollOption =
     { title : String
-    , votes_count : Maybe Int
+    , votes_count : Int
     }
 
 
@@ -546,23 +543,21 @@ type alias StatusParams =
     }
 
 
-{-| Tag entity.
+{-| Elements of `Results.hashtags` and `Status.tags`.
 -}
 type alias Tag =
     { name : String
     , url : UrlString
     , history : List History
-    , v : Value
     }
 
 
-{-| History entity.
+{-| Value for `Tag.history`.
 -}
 type alias History =
     { day : UnixTimestamp
     , uses : Int
     , accounts : Int
-    , v : Value
     }
 
 
@@ -588,7 +583,6 @@ type Entity
     | SourceEntity Source
     | TokenEntity Token
     | ApplicationEntity Application
-    | AttachmentEntity Attachment
     | MetaEntity Meta
     | CardEntity Card
     | ContextEntity Context
@@ -597,7 +591,6 @@ type Entity
     | InstanceEntity Instance
     | StatsEntity Stats
     | ListEntityEntity ListEntity
-    | MentionEntity Mention
     | NotificationEntity Notification
     | PollEntity Poll
     | PushSubscriptionEntity PushSubscription
@@ -605,6 +598,4 @@ type Entity
     | ResultsEntity Results
     | StatusEntity Status
     | ScheduledStatusEntity ScheduledStatus
-    | TagEntity Tag
-    | HistoryEntity History
     | ConversationEntity Conversation
