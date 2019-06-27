@@ -22,6 +22,7 @@ module Mastodon.EncodeDecode exposing
     , encodeStatus, statusDecoder
     , encodeError, errorDecoder
     , encodeFilter, filterDecoder
+    , encodeInstance, instanceDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -37,6 +38,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeStatus, statusDecoder
 @docs encodeError, errorDecoder
 @docs encodeFilter, filterDecoder
+@docs encodeInstance, instanceDecoder
 
 -}
 
@@ -119,6 +121,9 @@ encodeEntity entity =
         FilterEntity context ->
             encodeFilter context
 
+        InstanceEntity context ->
+            encodeInstance context
+
         _ ->
             JE.string "TODO"
 
@@ -140,6 +145,7 @@ entityDecoder =
         , contextDecoder |> JD.map ContextEntity
         , statusDecoder |> JD.map StatusEntity
         , filterDecoder |> JD.map FilterEntity
+        , instanceDecoder |> JD.map InstanceEntity
         ]
 
 
@@ -947,4 +953,68 @@ filterDecoder =
         |> optional "expires_at" (JD.nullable JD.string) Nothing
         |> required "irreversible" JD.bool
         |> required "whole_word" JD.bool
+        |> custom JD.value
+
+
+encodeUrls : URLs -> Value
+encodeUrls { streaming_api } =
+    JE.object [ ( "streaming_api", JE.string streaming_api ) ]
+
+
+urlsDecoder : Decoder URLs
+urlsDecoder =
+    JD.succeed URLs
+        |> required "streaming_api" JD.string
+
+
+encodeStats : Stats -> Value
+encodeStats { user_count, status_count, domain_count } =
+    JE.object
+        [ ( "user_count", JE.int user_count )
+        , ( "status_count", JE.int status_count )
+        , ( "domain_count", JE.int domain_count )
+        ]
+
+
+statsDecoder : Decoder Stats
+statsDecoder =
+    JD.succeed Stats
+        |> required "user_count" JD.int
+        |> required "status_count" JD.int
+        |> required "domain_count" JD.int
+
+
+{-| Encode an `Instance`.
+-}
+encodeInstance : Instance -> Value
+encodeInstance instance =
+    JE.object
+        [ ( "uri", JE.string instance.uri )
+        , ( "title", JE.string instance.title )
+        , ( "description", JE.string instance.description )
+        , ( "email", JE.string instance.email )
+        , ( "version", JE.string instance.version )
+        , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
+        , ( "urls", encodeUrls instance.urls )
+        , ( "stats", encodeStats instance.stats )
+        , ( "languages", JE.list JE.string instance.languages )
+        , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
+        ]
+
+
+{-| Decode an `Instance`.
+-}
+instanceDecoder : Decoder Instance
+instanceDecoder =
+    JD.succeed Instance
+        |> required "uri" JD.string
+        |> required "title" JD.string
+        |> required "description" JD.string
+        |> required "email" JD.string
+        |> required "version" JD.string
+        |> optional "thumbnail" (JD.nullable JD.string) Nothing
+        |> required "urls" urlsDecoder
+        |> required "stats" statsDecoder
+        |> required "languages" (JD.list JD.string)
+        |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value

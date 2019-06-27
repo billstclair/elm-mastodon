@@ -24,12 +24,15 @@ import Mastodon.Entities as Entities
         , History
         , ImageMetaFields
         , ImageMetaInfo
+        , Instance
         , Mention
         , Meta(..)
         , Poll
         , PollOption
+        , Stats
         , Status
         , Tag
+        , URLs
         , VideoMetaFields
         , VideoMetaInfo
         , Visibility(..)
@@ -160,6 +163,23 @@ stripEntity entity =
         FilterEntity filter ->
             FilterEntity { filter | v = JE.null }
 
+        InstanceEntity instance ->
+            let
+                contact_account =
+                    instance.contact_account
+            in
+            InstanceEntity
+                { instance
+                    | contact_account =
+                        case contact_account of
+                            Nothing ->
+                                Nothing
+
+                            Just account ->
+                                Just <| stripAccount account
+                    , v = JE.null
+                }
+
         _ ->
             entity
 
@@ -227,7 +247,47 @@ entityData =
         }
     , FilterEntity filter1
     , FilterEntity filter2
+    , InstanceEntity instance1
+    , InstanceEntity instance2
     ]
+
+
+instance1 : Instance
+instance1 =
+    { uri = "uri"
+    , title = "title"
+    , description = "description"
+    , email = "email"
+    , version = "version"
+    , thumbnail = Just "thumbnail"
+    , urls = urls
+    , stats = stats
+    , languages = [ "l1", "l2", "l3" ]
+    , contact_account = Just account1
+    , v = JE.null
+    }
+
+
+instance2 : Instance
+instance2 =
+    { instance1
+        | thumbnail = Nothing
+        , languages = []
+        , contact_account = Nothing
+    }
+
+
+urls : URLs
+urls =
+    { streaming_api = "streaming_api" }
+
+
+stats : Stats
+stats =
+    { user_count = 1
+    , status_count = 2
+    , domain_count = 3
+    }
 
 
 filter1 : Filter

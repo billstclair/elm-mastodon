@@ -15,13 +15,13 @@ module Mastodon.Entities exposing
     , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
     , Account, Source, Token, Application
     , Card, Context, Error, Filter, Instance
-    , URLs, Stats, ListEntity, Notification
+    , ListEntity, Notification
     , PushSubscription, Relationship, Results
     , Status, ScheduledStatus, Conversation
     , Emoji, Field, Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
-    , CardType(..), FilterContext(..), NotificationType(..)
+    , CardType(..), FilterContext(..), URLs, Stats, NotificationType(..)
     , Visibility(..), Mention, Tag, History, Poll, PollOption, StatusParams
     , WrappedAccount(..), WrappedStatus(..)
     )
@@ -52,7 +52,7 @@ got over the wire. Code that creates these can set it to
 
 @docs Account, Source, Token, Application
 @docs Card, Context, Error, Filter, Instance
-@docs URLs, Stats, ListEntity, Notification
+@docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
 @docs Status, ScheduledStatus, Conversation
 
@@ -62,7 +62,7 @@ got over the wire. Code that creates these can set it to
 @docs Emoji, Field, Attachment, AttachmentType
 @docs Meta, ImageMetaFields, VideoMetaFields
 @docs ImageMetaInfo, VideoMetaInfo, Focus
-@docs CardType, FilterContext, NotificationType
+@docs CardType, FilterContext, URLs, Stats, NotificationType
 @docs Visibility, Mention, Tag, History, Poll, PollOption, StatusParams
 
 
@@ -345,7 +345,7 @@ type alias Instance =
     , email : String
     , version : String
     , thumbnail : Maybe UrlString
-    , urls : Maybe URLs
+    , urls : URLs
     , stats : Stats
     , languages : List ISO6391
     , contact_account : Maybe Account
