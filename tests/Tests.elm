@@ -15,6 +15,7 @@ import Mastodon.Entities as Entities
         , Card
         , CardType(..)
         , Context
+        , Conversation
         , Emoji
         , Entity(..)
         , Field
@@ -225,6 +226,24 @@ stripEntity entity =
         ScheduledStatusEntity scheduledStatus ->
             ScheduledStatusEntity { scheduledStatus | v = JE.null }
 
+        ConversationEntity conversation ->
+            let
+                status =
+                    conversation.last_status
+            in
+            ConversationEntity
+                { conversation
+                    | accounts = List.map stripAccount conversation.accounts
+                    , last_status =
+                        case status of
+                            Nothing ->
+                                Nothing
+
+                            Just s ->
+                                Just <| stripStatus s
+                    , v = JE.null
+                }
+
         _ ->
             entity
 
@@ -308,6 +327,26 @@ entityData =
     , ScheduledStatusEntity scheduledStatus3
     , ScheduledStatusEntity scheduledStatus4
     ]
+
+
+conversation1 : Conversation
+conversation1 =
+    { id = "id"
+    , accounts = [ account1, account2 ]
+    , last_status = Just status1
+    , unread = True
+    , v = JE.null
+    }
+
+
+conversation2 : Conversation
+conversation2 =
+    { id = "id2"
+    , accounts = []
+    , last_status = Nothing
+    , unread = False
+    , v = JE.null
+    }
 
 
 statusParams1 : StatusParams

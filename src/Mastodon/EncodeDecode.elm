@@ -29,6 +29,7 @@ module Mastodon.EncodeDecode exposing
     , encodeRelationship, relationshipDecoder
     , encodeResults, resultsDecoder
     , encodeScheduledStatus, scheduledStatusDecoder
+    , encodeConversation, conversationDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -51,6 +52,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeRelationship, relationshipDecoder
 @docs encodeResults, resultsDecoder
 @docs encodeScheduledStatus, scheduledStatusDecoder
+@docs encodeConversation, conversationDecoder
 
 -}
 
@@ -154,6 +156,9 @@ encodeEntity entity =
         ScheduledStatusEntity scheduledStatus ->
             encodeScheduledStatus scheduledStatus
 
+        ConversationEntity conversation ->
+            encodeConversation conversation
+
         _ ->
             JE.string "TODO"
 
@@ -182,6 +187,7 @@ entityDecoder =
         , relationshipDecoder |> JD.map RelationshipEntity
         , resultsDecoder |> JD.map ResultsEntity
         , scheduledStatusDecoder |> JD.map ScheduledStatusEntity
+        , conversationDecoder |> JD.map ConversationEntity
         ]
 
 
@@ -1275,4 +1281,28 @@ scheduledStatusDecoder =
         |> required "scheduled_at" JD.string
         |> required "params" statusParamsDecoder
         |> required "media_attachments" (JD.list attachmentDecoder)
+        |> custom JD.value
+
+
+{-| Encoder for `Conversation`.
+-}
+encodeConversation : Conversation -> Value
+encodeConversation conversation =
+    JE.object
+        [ ( "id", JE.string conversation.id )
+        , ( "accounts", JE.list encodeAccount conversation.accounts )
+        , ( "last_status", encodeMaybe encodeStatus conversation.last_status )
+        , ( "unread", JE.bool conversation.unread )
+        ]
+
+
+{-| Decoder for `Conversation`.
+-}
+conversationDecoder : Decoder Conversation
+conversationDecoder =
+    JD.succeed Conversation
+        |> required "id" JD.string
+        |> required "accounts" (JD.list accountDecoder)
+        |> optional "last_status" (JD.nullable statusDecoder) Nothing
+        |> required "unread" JD.bool
         |> custom JD.value
