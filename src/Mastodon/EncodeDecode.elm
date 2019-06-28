@@ -26,6 +26,7 @@ module Mastodon.EncodeDecode exposing
     , encodeListEntity, listEntityDecoder
     , encodeNotification, notificationDecoder
     , encodePushSubscription, pushSubscriptionDecoder
+    , encodeRelationship, relationshipDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -45,6 +46,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeListEntity, listEntityDecoder
 @docs encodeNotification, notificationDecoder
 @docs encodePushSubscription, pushSubscriptionDecoder
+@docs encodeRelationship, relationshipDecoder
 
 -}
 
@@ -139,6 +141,9 @@ encodeEntity entity =
         PushSubscriptionEntity pushSubscription ->
             encodePushSubscription pushSubscription
 
+        RelationshipEntity relationship ->
+            encodeRelationship relationship
+
         _ ->
             JE.string "TODO"
 
@@ -164,6 +169,7 @@ entityDecoder =
         , listEntityDecoder |> JD.map ListEntityEntity
         , notificationDecoder |> JD.map NotificationEntity
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
+        , relationshipDecoder |> JD.map RelationshipEntity
         ]
 
 
@@ -1144,4 +1150,40 @@ pushSubscriptionDecoder =
         |> required "endpoint" JD.string
         |> required "server_key" JD.string
         |> required "alerts" JD.value
+        |> custom JD.value
+
+
+{-| Encoder for `Relationship`.
+-}
+encodeRelationship : Relationship -> Value
+encodeRelationship relationship =
+    JE.object
+        [ ( "id", JE.string relationship.id )
+        , ( "following", JE.bool relationship.following )
+        , ( "followed_by", JE.bool relationship.followed_by )
+        , ( "blocking", JE.bool relationship.blocking )
+        , ( "muting", JE.bool relationship.muting )
+        , ( "muting_notifications", JE.bool relationship.muting_notifications )
+        , ( "requested", JE.bool relationship.requested )
+        , ( "domain_blocking", JE.bool relationship.domain_blocking )
+        , ( "showing_reblogs", JE.bool relationship.showing_reblogs )
+        , ( "endorsed", JE.bool relationship.endorsed )
+        ]
+
+
+{-| Decode a `Relationship`.
+-}
+relationshipDecoder : Decoder Relationship
+relationshipDecoder =
+    JD.succeed Relationship
+        |> required "id" JD.string
+        |> required "following" JD.bool
+        |> required "followed_by" JD.bool
+        |> required "blocking" JD.bool
+        |> required "muting" JD.bool
+        |> required "muting_notifications" JD.bool
+        |> required "requested" JD.bool
+        |> required "domain_blocking" JD.bool
+        |> required "showing_reblogs" JD.bool
+        |> required "endorsed" JD.bool
         |> custom JD.value

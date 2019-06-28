@@ -32,6 +32,7 @@ import Mastodon.Entities as Entities
         , Poll
         , PollOption
         , PushSubscription
+        , Relationship
         , Stats
         , Status
         , Tag
@@ -207,6 +208,9 @@ stripEntity entity =
         PushSubscriptionEntity pushSubscription ->
             PushSubscriptionEntity { pushSubscription | v = JE.null }
 
+        RelationshipEntity relationship ->
+            RelationshipEntity { relationship | v = JE.null }
+
         _ ->
             entity
 
@@ -282,7 +286,41 @@ entityData =
     , NotificationEntity notification3
     , NotificationEntity notification4
     , PushSubscriptionEntity pushSubscription1
+    , RelationshipEntity relationship1
+    , RelationshipEntity relationship2
     ]
+
+
+relationship1 : Relationship
+relationship1 =
+    { id = "id"
+    , following = False
+    , followed_by = False
+    , blocking = False
+    , muting = False
+    , muting_notifications = False
+    , requested = False
+    , domain_blocking = False
+    , showing_reblogs = False
+    , endorsed = False
+    , v = JE.null
+    }
+
+
+relationship2 : Relationship
+relationship2 =
+    { id = "id"
+    , following = True
+    , followed_by = True
+    , blocking = True
+    , muting = True
+    , muting_notifications = True
+    , requested = True
+    , domain_blocking = True
+    , showing_reblogs = True
+    , endorsed = True
+    , v = JE.null
+    }
 
 
 pushSubscription1 : PushSubscription
