@@ -326,6 +326,8 @@ entityData =
     , ScheduledStatusEntity scheduledStatus2
     , ScheduledStatusEntity scheduledStatus3
     , ScheduledStatusEntity scheduledStatus4
+    , ConversationEntity conversation1
+    , ConversationEntity conversation2
     ]
 
 
