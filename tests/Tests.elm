@@ -33,6 +33,7 @@ import Mastodon.Entities as Entities
         , PollOption
         , PushSubscription
         , Relationship
+        , Results
         , Stats
         , Status
         , Tag
@@ -211,6 +212,14 @@ stripEntity entity =
         RelationshipEntity relationship ->
             RelationshipEntity { relationship | v = JE.null }
 
+        ResultsEntity results ->
+            ResultsEntity
+                { results
+                    | accounts = List.map stripAccount results.accounts
+                    , statuses = List.map stripStatus results.statuses
+                    , v = JE.null
+                }
+
         _ ->
             entity
 
@@ -288,7 +297,17 @@ entityData =
     , PushSubscriptionEntity pushSubscription1
     , RelationshipEntity relationship1
     , RelationshipEntity relationship2
+    , ResultsEntity results1
     ]
+
+
+results1 : Results
+results1 =
+    { accounts = [ account1, account2 ]
+    , statuses = [ status1, status2 ]
+    , hashtags = [ tag1, tag2 ]
+    , v = JE.null
+    }
 
 
 relationship1 : Relationship

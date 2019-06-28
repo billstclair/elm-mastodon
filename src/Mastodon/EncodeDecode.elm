@@ -27,6 +27,7 @@ module Mastodon.EncodeDecode exposing
     , encodeNotification, notificationDecoder
     , encodePushSubscription, pushSubscriptionDecoder
     , encodeRelationship, relationshipDecoder
+    , encodeResults, resultsDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -47,6 +48,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeNotification, notificationDecoder
 @docs encodePushSubscription, pushSubscriptionDecoder
 @docs encodeRelationship, relationshipDecoder
+@docs encodeResults, resultsDecoder
 
 -}
 
@@ -144,6 +146,9 @@ encodeEntity entity =
         RelationshipEntity relationship ->
             encodeRelationship relationship
 
+        ResultsEntity results ->
+            encodeResults results
+
         _ ->
             JE.string "TODO"
 
@@ -170,6 +175,7 @@ entityDecoder =
         , notificationDecoder |> JD.map NotificationEntity
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
         , relationshipDecoder |> JD.map RelationshipEntity
+        , resultsDecoder |> JD.map ResultsEntity
         ]
 
 
@@ -1186,4 +1192,26 @@ relationshipDecoder =
         |> required "domain_blocking" JD.bool
         |> required "showing_reblogs" JD.bool
         |> required "endorsed" JD.bool
+        |> custom JD.value
+
+
+{-| Encoder for `Results`.
+-}
+encodeResults : Results -> Value
+encodeResults results =
+    JE.object
+        [ ( "accounts", JE.list encodeAccount results.accounts )
+        , ( "statuses", JE.list encodeStatus results.statuses )
+        , ( "hashtags", JE.list encodeTag results.hashtags )
+        ]
+
+
+{-| Decoder for `Results`.
+-}
+resultsDecoder : Decoder Results
+resultsDecoder =
+    JD.succeed Results
+        |> required "accounts" (JD.list accountDecoder)
+        |> required "statuses" (JD.list statusDecoder)
+        |> required "hashtags" (JD.list tagDecoder)
         |> custom JD.value
