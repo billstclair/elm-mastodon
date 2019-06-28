@@ -521,7 +521,7 @@ type Visibility
 type alias ScheduledStatus =
     { id : String
     , scheduled_at : Datetime
-    , params : List StatusParams
+    , params : StatusParams
     , media_attachments : List Attachment
     , v : Value
     }

@@ -28,6 +28,7 @@ module Mastodon.EncodeDecode exposing
     , encodePushSubscription, pushSubscriptionDecoder
     , encodeRelationship, relationshipDecoder
     , encodeResults, resultsDecoder
+    , encodeScheduledStatus, scheduledStatusDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -49,6 +50,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodePushSubscription, pushSubscriptionDecoder
 @docs encodeRelationship, relationshipDecoder
 @docs encodeResults, resultsDecoder
+@docs encodeScheduledStatus, scheduledStatusDecoder
 
 -}
 
@@ -149,6 +151,9 @@ encodeEntity entity =
         ResultsEntity results ->
             encodeResults results
 
+        ScheduledStatusEntity scheduledStatus ->
+            encodeScheduledStatus scheduledStatus
+
         _ ->
             JE.string "TODO"
 
@@ -176,6 +181,7 @@ entityDecoder =
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
         , relationshipDecoder |> JD.map RelationshipEntity
         , resultsDecoder |> JD.map ResultsEntity
+        , scheduledStatusDecoder |> JD.map ScheduledStatusEntity
         ]
 
 
@@ -1214,4 +1220,59 @@ resultsDecoder =
         |> required "accounts" (JD.list accountDecoder)
         |> required "statuses" (JD.list statusDecoder)
         |> required "hashtags" (JD.list tagDecoder)
+        |> custom JD.value
+
+
+encodeStatusParams : StatusParams -> Value
+encodeStatusParams statusParams =
+    JE.object
+        [ ( "text", JE.string statusParams.text )
+        , ( "in_reply_to_id", encodeMaybe JE.string statusParams.in_reply_to_id )
+        , ( "media_ids", JE.list JE.string statusParams.media_ids )
+        , ( "sensitive", JE.bool statusParams.sensitive )
+        , ( "spoiler_text", encodeMaybe JE.string statusParams.spoiler_text )
+        , ( "visibility", encodeVisibility statusParams.visibility )
+        , ( "scheduled_at", encodeMaybe JE.string statusParams.scheduled_at )
+        , ( "application_id", JE.string statusParams.application_id )
+        ]
+
+
+statusParamsDecoder : Decoder StatusParams
+statusParamsDecoder =
+    JD.succeed StatusParams
+        |> required "text" JD.string
+        |> optional "in_reply_to_id" (JD.nullable JD.string) Nothing
+        |> optional "media_ids"
+            (JD.nullable (JD.list JD.string)
+                |> JD.andThen (Maybe.withDefault [] >> JD.succeed)
+            )
+            []
+        |> optional "sensitive" optionalBoolDecoder False
+        |> optional "spoiler_text" (JD.nullable JD.string) Nothing
+        |> required "visibility" visibilityDecoder
+        |> optional "scheduled_at" (JD.nullable JD.string) Nothing
+        |> required "application_id" JD.string
+
+
+{-| Encoder for `ScheduledStatus`.
+-}
+encodeScheduledStatus : ScheduledStatus -> Value
+encodeScheduledStatus scheduledStatus =
+    JE.object
+        [ ( "id", JE.string scheduledStatus.id )
+        , ( "scheduled_at", JE.string scheduledStatus.scheduled_at )
+        , ( "params", encodeStatusParams scheduledStatus.params )
+        , ( "media_attachments", JE.list encodeAttachment scheduledStatus.media_attachments )
+        ]
+
+
+{-| Decoder for `ScheduledStatus`.
+-}
+scheduledStatusDecoder : Decoder ScheduledStatus
+scheduledStatusDecoder =
+    JD.succeed ScheduledStatus
+        |> required "id" JD.string
+        |> required "scheduled_at" JD.string
+        |> required "params" statusParamsDecoder
+        |> required "media_attachments" (JD.list attachmentDecoder)
         |> custom JD.value

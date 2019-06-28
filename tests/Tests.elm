@@ -34,8 +34,10 @@ import Mastodon.Entities as Entities
         , PushSubscription
         , Relationship
         , Results
+        , ScheduledStatus
         , Stats
         , Status
+        , StatusParams
         , Tag
         , URLs
         , VideoMetaFields
@@ -220,6 +222,9 @@ stripEntity entity =
                     , v = JE.null
                 }
 
+        ScheduledStatusEntity scheduledStatus ->
+            ScheduledStatusEntity { scheduledStatus | v = JE.null }
+
         _ ->
             entity
 
@@ -298,7 +303,74 @@ entityData =
     , RelationshipEntity relationship1
     , RelationshipEntity relationship2
     , ResultsEntity results1
+    , ScheduledStatusEntity scheduledStatus1
+    , ScheduledStatusEntity scheduledStatus2
+    , ScheduledStatusEntity scheduledStatus3
+    , ScheduledStatusEntity scheduledStatus4
     ]
+
+
+statusParams1 : StatusParams
+statusParams1 =
+    { text = "text"
+    , in_reply_to_id = Just "in_reply_to_id"
+    , media_ids = [ "id1", "id2", "id3" ]
+    , sensitive = True
+    , spoiler_text = Just "spoiler_text"
+    , visibility = PublicVisibility
+    , scheduled_at = Just "scheduled_at"
+    , application_id = "application_id"
+    }
+
+
+statusParams2 : StatusParams
+statusParams2 =
+    { statusParams1
+        | in_reply_to_id = Nothing
+        , media_ids = []
+        , sensitive = False
+        , spoiler_text = Nothing
+        , visibility = UnlistedVisibility
+        , scheduled_at = Nothing
+    }
+
+
+statusParams3 : StatusParams
+statusParams3 =
+    { statusParams2 | visibility = PrivateVisibility }
+
+
+statusParams4 : StatusParams
+statusParams4 =
+    { statusParams2 | visibility = DirectVisibility }
+
+
+scheduledStatus1 : ScheduledStatus
+scheduledStatus1 =
+    { id = "id"
+    , scheduled_at = "scheduled_at"
+    , params = statusParams1
+    , media_attachments = [ attachment1, attachment2 ]
+    , v = JE.null
+    }
+
+
+scheduledStatus2 : ScheduledStatus
+scheduledStatus2 =
+    { scheduledStatus1
+        | params = statusParams2
+        , media_attachments = []
+    }
+
+
+scheduledStatus3 : ScheduledStatus
+scheduledStatus3 =
+    { scheduledStatus2 | params = statusParams3 }
+
+
+scheduledStatus4 : ScheduledStatus
+scheduledStatus4 =
+    { scheduledStatus2 | params = statusParams4 }
 
 
 results1 : Results
