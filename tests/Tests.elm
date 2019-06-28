@@ -31,6 +31,7 @@ import Mastodon.Entities as Entities
         , NotificationType(..)
         , Poll
         , PollOption
+        , PushSubscription
         , Stats
         , Status
         , Tag
@@ -203,6 +204,9 @@ stripEntity entity =
                     , v = JE.null
                 }
 
+        PushSubscriptionEntity pushSubscription ->
+            PushSubscriptionEntity { pushSubscription | v = JE.null }
+
         _ ->
             entity
 
@@ -277,7 +281,18 @@ entityData =
     , NotificationEntity notification2
     , NotificationEntity notification3
     , NotificationEntity notification4
+    , PushSubscriptionEntity pushSubscription1
     ]
+
+
+pushSubscription1 : PushSubscription
+pushSubscription1 =
+    { id = "id"
+    , endpoint = "endpoint"
+    , server_key = "server_key"
+    , alerts = JE.string "alerts"
+    , v = JE.null
+    }
 
 
 notification1 : Notification

@@ -25,6 +25,7 @@ module Mastodon.EncodeDecode exposing
     , encodeInstance, instanceDecoder
     , encodeListEntity, listEntityDecoder
     , encodeNotification, notificationDecoder
+    , encodePushSubscription, pushSubscriptionDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -43,6 +44,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeInstance, instanceDecoder
 @docs encodeListEntity, listEntityDecoder
 @docs encodeNotification, notificationDecoder
+@docs encodePushSubscription, pushSubscriptionDecoder
 
 -}
 
@@ -134,6 +136,9 @@ encodeEntity entity =
         NotificationEntity notification ->
             encodeNotification notification
 
+        PushSubscriptionEntity pushSubscription ->
+            encodePushSubscription pushSubscription
+
         _ ->
             JE.string "TODO"
 
@@ -158,6 +163,7 @@ entityDecoder =
         , instanceDecoder |> JD.map InstanceEntity
         , listEntityDecoder |> JD.map ListEntityEntity
         , notificationDecoder |> JD.map NotificationEntity
+        , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
         ]
 
 
@@ -1114,4 +1120,28 @@ notificationDecoder =
         |> required "created_at" JD.string
         |> required "account" accountDecoder
         |> optional "status" (JD.nullable statusDecoder) Nothing
+        |> custom JD.value
+
+
+{-| Encoder for `PushSubscription`.
+-}
+encodePushSubscription : PushSubscription -> Value
+encodePushSubscription pushSubscription =
+    JE.object
+        [ ( "id", JE.string pushSubscription.id )
+        , ( "endpoint", JE.string pushSubscription.endpoint )
+        , ( "server_key", JE.string pushSubscription.server_key )
+        , ( "alerts", pushSubscription.alerts )
+        ]
+
+
+{-| Decoder for `PushSubscription`.
+-}
+pushSubscriptionDecoder : Decoder PushSubscription
+pushSubscriptionDecoder =
+    JD.succeed PushSubscription
+        |> required "id" JD.string
+        |> required "endpoint" JD.string
+        |> required "server_key" JD.string
+        |> required "alerts" JD.value
         |> custom JD.value
