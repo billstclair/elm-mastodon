@@ -24,6 +24,7 @@ module Mastodon.EncodeDecode exposing
     , encodeFilter, filterDecoder
     , encodeInstance, instanceDecoder
     , encodeListEntity, listEntityDecoder
+    , encodeNotification, notificationDecoder
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -41,6 +42,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeFilter, filterDecoder
 @docs encodeInstance, instanceDecoder
 @docs encodeListEntity, listEntityDecoder
+@docs encodeNotification, notificationDecoder
 
 -}
 
@@ -129,6 +131,9 @@ encodeEntity entity =
         ListEntityEntity list ->
             encodeListEntity list
 
+        NotificationEntity notification ->
+            encodeNotification notification
+
         _ ->
             JE.string "TODO"
 
@@ -152,6 +157,7 @@ entityDecoder =
         , filterDecoder |> JD.map FilterEntity
         , instanceDecoder |> JD.map InstanceEntity
         , listEntityDecoder |> JD.map ListEntityEntity
+        , notificationDecoder |> JD.map NotificationEntity
         ]
 
 
@@ -1043,3 +1049,69 @@ listEntityDecoder =
     JD.succeed ListEntity
         |> required "id" JD.string
         |> required "title" JD.string
+
+
+encodeNotificationType : NotificationType -> Value
+encodeNotificationType notificationType =
+    JE.string <|
+        case notificationType of
+            FollowNotification ->
+                "FollowNotification"
+
+            MentionNotification ->
+                "MentionNotification"
+
+            ReblogNotification ->
+                "ReblogNotification"
+
+            FavouriteNotification ->
+                "FavouriteNotification"
+
+
+notificationTypeDecoder : Decoder NotificationType
+notificationTypeDecoder =
+    JD.string
+        |> JD.andThen
+            (\t ->
+                case t of
+                    "FollowNotification" ->
+                        JD.succeed FollowNotification
+
+                    "MentionNotification" ->
+                        JD.succeed MentionNotification
+
+                    "ReblogNotification" ->
+                        JD.succeed ReblogNotification
+
+                    "FavouriteNotification" ->
+                        JD.succeed FavouriteNotification
+
+                    _ ->
+                        JD.fail <| "Unknown NotificationType: " ++ t
+            )
+
+
+{-| Encode a `Notification`.
+-}
+encodeNotification : Notification -> Value
+encodeNotification notification =
+    JE.object
+        [ ( "id", JE.string notification.id )
+        , ( "type_", encodeNotificationType notification.type_ )
+        , ( "created_at", JE.string notification.created_at )
+        , ( "account", encodeAccount notification.account )
+        , ( "status", encodeMaybe encodeStatus notification.status )
+        ]
+
+
+{-| Decode a `Notification`.
+-}
+notificationDecoder : Decoder Notification
+notificationDecoder =
+    JD.succeed Notification
+        |> required "id" JD.string
+        |> required "type_" notificationTypeDecoder
+        |> required "created_at" JD.string
+        |> required "account" accountDecoder
+        |> optional "status" (JD.nullable statusDecoder) Nothing
+        |> custom JD.value

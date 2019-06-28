@@ -27,6 +27,8 @@ import Mastodon.Entities as Entities
         , Instance
         , Mention
         , Meta(..)
+        , Notification
+        , NotificationType(..)
         , Poll
         , PollOption
         , Stats
@@ -180,6 +182,27 @@ stripEntity entity =
                     , v = JE.null
                 }
 
+        NotificationEntity notification ->
+            let
+                account =
+                    notification.account
+
+                status =
+                    notification.status
+            in
+            NotificationEntity
+                { notification
+                    | account = stripAccount account
+                    , status =
+                        case status of
+                            Nothing ->
+                                Nothing
+
+                            Just s ->
+                                Just <| stripStatus s
+                    , v = JE.null
+                }
+
         _ ->
             entity
 
@@ -250,7 +273,44 @@ entityData =
     , InstanceEntity instance1
     , InstanceEntity instance2
     , ListEntityEntity { id = "id", title = "title" }
+    , NotificationEntity notification1
+    , NotificationEntity notification2
+    , NotificationEntity notification3
+    , NotificationEntity notification4
     ]
+
+
+notification1 : Notification
+notification1 =
+    { id = "id"
+    , type_ = FollowNotification
+    , created_at = "created_at"
+    , account = account1
+    , status = Just status1
+    , v = JE.null
+    }
+
+
+notification2 : Notification
+notification2 =
+    { notification1
+        | type_ = MentionNotification
+        , status = Nothing
+    }
+
+
+notification3 : Notification
+notification3 =
+    { notification2
+        | type_ = ReblogNotification
+    }
+
+
+notification4 : Notification
+notification4 =
+    { notification2
+        | type_ = FavouriteNotification
+    }
 
 
 instance1 : Instance
