@@ -353,12 +353,12 @@ providerSelect model =
 
 view : Model -> Document Msg
 view model =
-    { title = "OAuthMiddleware Example"
+    { title = "Mastodon Authorization Example"
     , body =
         [ div
             [ style "margin-left" "3em"
             ]
-            [ h2 [] [ text "OAuthMiddleware Example" ]
+            [ h2 [] [ text "Mastodon Authorization Example" ]
             , p []
                 [ text "Provider: "
                 , providerSelect model
