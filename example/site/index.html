@@ -1,0 +1,26 @@
+<!--
+
+index.html
+Top-level HTML for billstclair/elm-mastodon example.
+Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
+Some rights reserved.
+Distributed under the MIT License
+See LICENSE.txt
+
+-->
+
+<html>
+  <head>
+    <title>Mastodon/Pleroma API Example</title>
+    <script type='text/javascript' src='js/PortFunnel.js'></script>
+    <script type='text/javascript' src='js/PortFunnel/LocalStorage.js'></script>
+    <script type='text/javascript' src='elm.js'></script>
+  </head>
+  <body>
+    <script type='text/javascript'>
+      // It's an application, so it doesn't need a div.
+      var app = Elm['Main'].init();
+      PortFunnel.subscribe(app);
+    </script>
+  </body>
+</html>
