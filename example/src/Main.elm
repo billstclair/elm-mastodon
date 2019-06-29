@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Main exposing (Api, Model, Msg(..), apis, getUser, init, lookupProvider, main, providerOption, providerSelect, update, userAgentHeader, view)
+module Main exposing (Model, Msg(..), getUser, init, lookupProvider, main, providerOption, providerSelect, update, userAgentHeader, view)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Navigation as Navigation exposing (Key)
@@ -70,7 +70,7 @@ type alias Model =
     , provider : String
     , authorizations : Dict String Authorization
     , tokenAuthorization : Maybe TokenAuthorization
-    , api : Maybe Api
+    , getUserApi : Maybe String
     }
 
 
@@ -91,31 +91,9 @@ userAgentHeader =
     Http.header "User-Agent" "Xossbow"
 
 
-type alias Api =
-    { getUser : String
-    }
-
-
-apis : Dict String Api
-apis =
-    Dict.fromList
-        [ ( "GitHub"
-          , { getUser = "user"
-            }
-          )
-        , ( "Gmail"
-          , { getUser = "me/profile"
-            }
-          )
-        , ( "Facebook"
-          , { getUser = "me"
-            }
-          )
-        , ( "Gab"
-          , { getUser = "users/Xossbow" -- "me/"
-            }
-          )
-        ]
+getUserApi : String
+getUserApi =
+    "accounts/verify_credentials"
 
 
 main =
@@ -169,7 +147,7 @@ init _ url key =
                 Nothing ->
                     "Gab"
       , tokenAuthorization = Nothing
-      , api = Nothing
+      , getUserApi = Nothing
       }
     , Cmd.batch
         [ Http.request <|
@@ -190,11 +168,11 @@ getUser model =
             )
 
         Just token ->
-            case ( model.api, model.authorization ) of
+            case ( model.getUserApi, model.authorization ) of
                 ( Just api, Just auth ) ->
                     let
                         url =
-                            auth.apiUri ++ api.getUser
+                            auth.apiUri ++ api
 
                         req =
                             Http.request
@@ -244,9 +222,6 @@ lookupProvider model =
                     let
                         provider =
                             auth.name
-
-                        api =
-                            Dict.get provider apis
                     in
                     { model
                         | provider = provider
@@ -257,7 +232,7 @@ lookupProvider model =
                                 , state = Just model.provider
                                 , redirectBackUri = model.redirectBackUri
                                 }
-                        , api = api
+                        , getUserApi = Just getUserApi
                         , authorization = authorization
                     }
 

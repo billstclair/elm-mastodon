@@ -6,7 +6,7 @@ First, clone the code on your computer:
     git clone git@github.com:billstclair/elm-oauth-middleware.git
     cd elm-oauth-middleware/example
 
-Learn how to configure and run the server in the [elm-oauth-middleware/server](https://github.com/billstclair/elm-oauth-middleware/server/) directory's README. Part of doing that will be to create an Authorization Code Grant Flow account with one or more OAuth providers. I have tested this code with mastodon.social, [some Pleroma instance], and develop.gab.com, but it should work with any Mastodon or Pleroma instance that supports Authorization Code Grant Flow.
+Learn how to configure and run the server in the [elm-oauth-middleware/server](https://github.com/billstclair/elm-oauth-middleware/tree/master/server) directory's README. Part of doing that will be to create an Authorization Code Grant Flow account with one or more OAuth providers. I have tested this code with mastodon.social, [some Pleroma instance], and develop.gab.com, but it should work with any Mastodon or Pleroma instance that supports Authorization Code Grant Flow.
 
 If you will run the example only on a web server at a domain configured for your server, you're golden. To run from your development machine, you have to invent an unused domain name, enter it in the `redirectBackHosts` in the server's `config.json` file, add it to `/etc/hosts` on your development machine, [as instructed](https://github.com/billstclair/elm-oauth-middleware#development) in the top-level README, and use it in the `elm-reactor` startup below, where I'm calling it `oauth-client-dev.com`.
 
