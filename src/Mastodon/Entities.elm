@@ -12,7 +12,7 @@
 
 module Mastodon.Entities exposing
     ( Entity(..)
-    , Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
+    , Datetime, UrlString, HtmlString, ISO6391, ISO6392, UnixTimestamp
     , Account, Source, Token, Application
     , Card, Context, Error, Filter, Instance
     , ListEntity, Notification
@@ -45,7 +45,7 @@ got over the wire. Code that creates these can set it to
 
 ## String aliases
 
-@docs Datetime, UrlString, HtmlString, ISO6391, UnixTimestamp
+@docs Datetime, UrlString, HtmlString, ISO6391, ISO6392, UnixTimestamp
 
 
 ## Entities
@@ -96,6 +96,12 @@ type alias HtmlString =
 {-| Alias of `String`
 -}
 type alias ISO6391 =
+    String
+
+
+{-| Alias of `String`
+-}
+type alias ISO6392 =
     String
 
 
