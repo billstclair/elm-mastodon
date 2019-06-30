@@ -60,6 +60,7 @@ import Url exposing (Url)
 
 type alias Model =
     { key : Key
+    , hideClientId : Bool
     , authorization : Maybe Authorization
     , token : Maybe ResponseToken
     , state : Maybe String
@@ -107,9 +108,17 @@ main =
         }
 
 
-init : () -> Url -> Key -> ( Model, Cmd Msg )
-init _ url key =
+init : Value -> Url -> Key -> ( Model, Cmd Msg )
+init value url key =
     let
+        hideClientId =
+            case JD.decodeValue JD.bool value of
+                Err _ ->
+                    False
+
+                Ok hide ->
+                    hide
+
         ( token, state, msg ) =
             case receiveTokenAndState url of
                 TokenAndState tok stat ->
@@ -125,6 +134,7 @@ init _ url key =
                     ( Nothing, Nothing, Nothing )
     in
     ( { key = key
+      , hideClientId = hideClientId
       , authorization = Nothing
       , token = token
       , state = state
@@ -263,9 +273,18 @@ update msg model =
                             case ( model.token, model.msg ) of
                                 ( Nothing, Nothing ) ->
                                     ( "Authorizations"
-                                    , Just <|
-                                        authorizationsEncoder
-                                            authorizations
+                                    , Just
+                                        (authorizations
+                                            |> List.map
+                                                (\a ->
+                                                    if model.hideClientId then
+                                                        { a | clientId = "<hidden>" }
+
+                                                    else
+                                                        a
+                                                )
+                                            |> authorizationsEncoder
+                                        )
                                     )
 
                                 _ ->
