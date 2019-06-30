@@ -127,6 +127,13 @@ type alias Account =
     , moved : Maybe WrappedAccount
     , fields : List Field
     , bot : Bool
+
+    -- Not documented
+    , source : Maybe Source
+
+    -- Gab extensions
+    , is_pro : Bool
+    , is_verified : Bool
     , v : Value
     }
 

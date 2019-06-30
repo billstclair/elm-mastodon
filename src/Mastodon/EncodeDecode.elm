@@ -215,27 +215,42 @@ unwrapStatus (WrappedStatus status) =
 -}
 encodeAccount : Account -> Value
 encodeAccount account =
-    JE.object
-        [ ( "id", JE.string account.id )
-        , ( "username", JE.string account.username )
-        , ( "acct", JE.string account.acct )
-        , ( "display_name", JE.string account.display_name )
-        , ( "locked", JE.bool account.locked )
-        , ( "created_at", JE.string account.created_at )
-        , ( "followers_count", JE.int account.followers_count )
-        , ( "following_count", JE.int account.following_count )
-        , ( "statuses_count", JE.int account.statuses_count )
-        , ( "note", JE.string account.note )
-        , ( "url", JE.string account.url )
-        , ( "avatar", JE.string account.avatar )
-        , ( "avatar_static", JE.string account.avatar_static )
-        , ( "header", JE.string account.header )
-        , ( "header_static", JE.string account.header_static )
-        , ( "emojis", JE.list encodeEmoji account.emojis )
-        , ( "moved", encodeMaybe (unwrapAccount >> encodeAccount) account.moved )
-        , ( "fields", JE.list encodeField account.fields )
-        , ( "bot", JE.bool account.bot )
-        ]
+    JE.object <|
+        List.concat
+            [ [ ( "id", JE.string account.id )
+              , ( "username", JE.string account.username )
+              , ( "acct", JE.string account.acct )
+              , ( "display_name", JE.string account.display_name )
+              , ( "locked", JE.bool account.locked )
+              , ( "created_at", JE.string account.created_at )
+              , ( "followers_count", JE.int account.followers_count )
+              , ( "following_count", JE.int account.following_count )
+              , ( "statuses_count", JE.int account.statuses_count )
+              , ( "note", JE.string account.note )
+              , ( "url", JE.string account.url )
+              , ( "avatar", JE.string account.avatar )
+              , ( "avatar_static", JE.string account.avatar_static )
+              , ( "header", JE.string account.header )
+              , ( "header_static", JE.string account.header_static )
+              , ( "emojis", JE.list encodeEmoji account.emojis )
+              , ( "moved", encodeMaybe (unwrapAccount >> encodeAccount) account.moved )
+              , ( "fields", JE.list encodeField account.fields )
+              , ( "bot", JE.bool account.bot )
+              ]
+            , case account.source of
+                Nothing ->
+                    []
+
+                Just source ->
+                    [ ( "source", encodeSource source ) ]
+            , if account.is_pro || account.is_verified then
+                [ ( "is_pro", JE.bool account.is_pro )
+                , ( "is_verified", JE.bool account.is_verified )
+                ]
+
+              else
+                []
+            ]
 
 
 {-| Decode an `Account`.
@@ -271,6 +286,9 @@ accountDecoder =
             (JD.list fieldDecoder)
             []
         |> optional "bot" JD.bool False
+        |> optional "source" (JD.nullable sourceDecoder) Nothing
+        |> optional "is_pro" optionalBoolDecoder False
+        |> optional "is_verified" optionalBoolDecoder False
         |> custom JD.value
 
 

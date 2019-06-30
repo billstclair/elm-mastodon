@@ -36,6 +36,7 @@ import Mastodon.Entities as Entities
         , Relationship
         , Results
         , ScheduledStatus
+        , Source
         , Stats
         , Status
         , StatusParams
@@ -99,9 +100,18 @@ stripAccount account =
 
                 Just (WrappedAccount wa) ->
                     Just <| WrappedAccount (stripAccount wa)
+
+        source =
+            case account.source of
+                Nothing ->
+                    Nothing
+
+                Just s ->
+                    Just { s | v = JE.null }
     in
     { account
         | moved = moved
+        , source = source
         , v = JE.null
     }
 
@@ -272,22 +282,8 @@ entityData : List Entity
 entityData =
     [ AccountEntity account1
     , AccountEntity account2
-    , SourceEntity
-        { privacy = Just "privacy"
-        , sensitive = True
-        , language = Just "language"
-        , note = "note"
-        , fields = [ field1, field2 ]
-        , v = JE.null
-        }
-    , SourceEntity
-        { privacy = Nothing
-        , sensitive = False
-        , language = Nothing
-        , note = "note2"
-        , fields = []
-        , v = JE.null
-        }
+    , SourceEntity source1
+    , SourceEntity source2
     , TokenEntity
         { access_token = "access_token"
         , token_type = "token_type"
@@ -329,6 +325,28 @@ entityData =
     , ConversationEntity conversation1
     , ConversationEntity conversation2
     ]
+
+
+source1 : Source
+source1 =
+    { privacy = Just "privacy"
+    , sensitive = True
+    , language = Just "language"
+    , note = "note"
+    , fields = [ field1, field2 ]
+    , v = JE.null
+    }
+
+
+source2 : Source
+source2 =
+    { privacy = Nothing
+    , sensitive = False
+    , language = Nothing
+    , note = "note2"
+    , fields = []
+    , v = JE.null
+    }
 
 
 conversation1 : Conversation
@@ -988,6 +1006,9 @@ account1 =
         , field2
         ]
     , bot = True
+    , source = Just source1
+    , is_pro = True
+    , is_verified = True
     , v = JE.null
     }
 
@@ -1047,5 +1068,8 @@ account2 =
     , moved = Just (WrappedAccount account1)
     , fields = []
     , bot = True
+    , source = Nothing
+    , is_pro = False
+    , is_verified = False
     , v = JE.null
     }

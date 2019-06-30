@@ -19,6 +19,7 @@ import Html
     exposing
         ( Attribute
         , Html
+        , a
         , button
         , div
         , h2
@@ -30,8 +31,10 @@ import Html
         )
 import Html.Attributes
     exposing
-        ( selected
+        ( href
+        , selected
         , style
+        , target
         , value
         )
 import Html.Events exposing (onClick, onInput)
@@ -399,6 +402,14 @@ view model =
 
                     _ ->
                         text "Nothing to report"
+                ]
+            , p []
+                [ text "Source code: "
+                , a
+                    [ href "https://github.com/billstclair/elm-mastodon"
+                    , target "_blank"
+                    ]
+                    [ text "GitHub" ]
                 ]
             ]
         ]
