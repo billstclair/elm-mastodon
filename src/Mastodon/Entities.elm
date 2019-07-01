@@ -591,6 +591,7 @@ individual entities explicitly.
 -}
 type Entity
     = AccountEntity Account
+    | AccountListEntity (List Account)
     | SourceEntity Source
     | TokenEntity Token
     | ApplicationEntity Application
@@ -605,5 +606,6 @@ type Entity
     | RelationshipEntity Relationship
     | ResultsEntity Results
     | StatusEntity Status
+    | StatusListEntity (List Status)
     | ScheduledStatusEntity ScheduledStatus
     | ConversationEntity Conversation

@@ -17,6 +17,7 @@ module Mastodon.Requests exposing
     , FollowReq(..), MediaAttachmentsReq(..), MutesReq(..), NotificationsReq(..)
     , PollsReq(..), ReportsReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
     , Paging, SourceUpdate, PollDefinition
+    , emptyRawRequest, emptyServerInfo, requestToRawRequest
     )
 
 {-| Types to represent the Mastodon REST API.
@@ -45,6 +46,11 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 @docs Paging, SourceUpdate, PollDefinition
 
+
+# Testing
+
+@docs emptyRawRequest, emptyServerInfo, requestToRawRequest
+
 -}
 
 import File exposing (File)
@@ -54,6 +60,7 @@ import Mastodon.EncodeDecode as ED
 import Mastodon.Entities as Entities exposing (Entity(..))
 import OAuthMiddleware exposing (ResponseToken)
 import Task
+import Url.Builder as Builder exposing (QueryParameter, relative)
 
 
 {-| An API request.
@@ -493,16 +500,40 @@ userAgentHeader =
     Http.header "User-Agent" "Mammudeck"
 
 
+{-| An empty raw request.
+
+Exposed only for testing in `elm repl`.
+
+-}
+emptyRawRequest : RawRequest
+emptyRawRequest =
+    { method = ""
+    , token = Nothing
+    , url = ""
+    , body = Http.emptyBody
+    , request = InstanceRequest
+    , decoder = JD.fail "Unspecified decoder"
+    }
+
+
+{-| For testing in `elm repl`.
+-}
+emptyServerInfo : ServerInfo
+emptyServerInfo =
+    { server = "mastodon.social"
+    , token = Nothing
+    }
+
+
+{-| Exposed for testing in `elm repl`.
+-}
 requestToRawRequest : ServerInfo -> Request -> RawRequest
 requestToRawRequest serverInfo request =
     let
         raw =
-            { method = ""
-            , token = serverInfo.token
-            , url = ""
-            , body = Http.emptyBody
-            , request = request
-            , decoder = JD.fail "Unspecified decoder"
+            { emptyRawRequest
+                | token = serverInfo.token
+                , request = request
             }
 
         res =
@@ -521,6 +552,86 @@ requestToRawRequest serverInfo request =
 
 
 ---
+--- Some utility functions
+---
+
+
+qps : List (Maybe QueryParameter) -> List QueryParameter
+qps params =
+    List.filterMap identity params
+
+
+sp : String -> Maybe String -> Maybe QueryParameter
+sp name value =
+    case value of
+        Nothing ->
+            Nothing
+
+        Just v ->
+            Just <| Builder.string name v
+
+
+ip : String -> Maybe Int -> Maybe QueryParameter
+ip name value =
+    case value of
+        Nothing ->
+            Nothing
+
+        Just v ->
+            Just <| Builder.int name v
+
+
+bp : String -> Bool -> Maybe QueryParameter
+bp name value =
+    if value then
+        Just <| Builder.string name "true"
+
+    else
+        Nothing
+
+
+bpt : String -> Bool -> Maybe QueryParameter
+bpt name value =
+    if value then
+        Nothing
+
+    else
+        Just <| Builder.string name "false"
+
+
+m =
+    { get = "GET"
+    , post = "POST"
+    , put = "PUT"
+    , patch = "PATCH"
+    }
+
+
+pagingParameters : Maybe Paging -> List QueryParameter
+pagingParameters paging =
+    case paging of
+        Nothing ->
+            []
+
+        Just { max_id, since_id, min_id, limit } ->
+            qps
+                [ sp "max_id" max_id
+                , sp "since_id" since_id
+                , sp "min_id" min_id
+                , ip "limit" limit
+                ]
+
+
+decoders =
+    { account = ED.accountDecoder |> JD.map AccountEntity
+    , accountList = JD.list ED.accountDecoder |> JD.map AccountListEntity
+    , status = JD.list ED.statusDecoder |> JD.map StatusListEntity
+    , statusList = JD.list ED.statusDecoder |> JD.map StatusListEntity
+    }
+
+
+
+---
 --- Modify the incoming RawRequest to perform the requested operation.
 --- This means at least setting the `method`, `url`, and `decoder`.
 --- For POST, PUT, and PATCH requests, this also sets the `body`,
@@ -531,5 +642,61 @@ requestToRawRequest serverInfo request =
 
 accountsReq : AccountsReq -> RawRequest -> RawRequest
 accountsReq req rawreq =
-    --TODO
-    rawreq
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.accounts
+    in
+    case req of
+        GetAccount { id } ->
+            { res
+                | url = relative [ r, id ] []
+                , decoder = decoders.account
+            }
+
+        GetVerifyCredentials ->
+            { res
+                | url = relative [ r, "verify_credentials" ] []
+                , decoder = decoders.account
+            }
+
+        PatchUpdateCredentials _ ->
+            -- TODO
+            rawreq
+
+        GetFollowers { id, limit } ->
+            { res
+                | url =
+                    relative [ r, id, "followers" ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.accountList
+            }
+
+        GetFollowing { id, limit } ->
+            { res
+                | url =
+                    relative [ r, id, "following" ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.accountList
+            }
+
+        GetStatuses { id, only_media, pinned, exclude_replies, paging, exclude_reblogs } ->
+            { res
+                | url =
+                    relative [ r, id, "statuses" ] <|
+                        List.concat
+                            [ qps
+                                [ bp "only_media" only_media
+                                , bp "pinned" pinned
+                                , bp "exclude_replies" exclude_replies
+                                , bp "exclude_reblogs" exclude_reblogs
+                                ]
+                            , pagingParameters paging
+                            ]
+                , decoder = decoders.statusList
+            }
+
+        _ ->
+            rawreq

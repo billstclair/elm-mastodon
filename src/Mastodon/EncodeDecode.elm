@@ -114,6 +114,9 @@ encodeEntity entity =
         AccountEntity account ->
             encodeAccount account
 
+        AccountListEntity accounts ->
+            JE.list encodeAccount accounts
+
         SourceEntity source ->
             encodeSource source
 
@@ -131,6 +134,9 @@ encodeEntity entity =
 
         StatusEntity status ->
             encodeStatus status
+
+        StatusListEntity statuses ->
+            JE.list encodeStatus statuses
 
         FilterEntity filter ->
             encodeFilter filter
@@ -173,12 +179,14 @@ entityDecoder : Decoder Entity
 entityDecoder =
     JD.oneOf
         [ accountDecoder |> JD.map AccountEntity
+        , JD.list accountDecoder |> JD.map AccountListEntity
         , sourceDecoder |> JD.map SourceEntity
         , tokenDecoder |> JD.map TokenEntity
         , applicationDecoder |> JD.map ApplicationEntity
         , cardDecoder |> JD.map CardEntity
         , contextDecoder |> JD.map ContextEntity
         , statusDecoder |> JD.map StatusEntity
+        , JD.list statusDecoder |> JD.map StatusListEntity
         , filterDecoder |> JD.map FilterEntity
         , instanceDecoder |> JD.map InstanceEntity
         , listEntityDecoder |> JD.map ListEntityEntity
