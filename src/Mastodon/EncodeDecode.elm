@@ -156,6 +156,9 @@ encodeEntity entity =
         RelationshipEntity relationship ->
             encodeRelationship relationship
 
+        RelationshipListEntity relationships ->
+            JE.list encodeRelationship relationships
+
         ResultsEntity results ->
             encodeResults results
 
@@ -193,6 +196,7 @@ entityDecoder =
         , notificationDecoder |> JD.map NotificationEntity
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
         , relationshipDecoder |> JD.map RelationshipEntity
+        , JD.list relationshipDecoder |> JD.map RelationshipListEntity
         , resultsDecoder |> JD.map ResultsEntity
         , scheduledStatusDecoder |> JD.map ScheduledStatusEntity
         , conversationDecoder |> JD.map ConversationEntity

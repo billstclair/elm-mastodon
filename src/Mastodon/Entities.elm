@@ -604,6 +604,7 @@ type Entity
     | NotificationEntity Notification
     | PushSubscriptionEntity PushSubscription
     | RelationshipEntity Relationship
+    | RelationshipListEntity (List Relationship)
     | ResultsEntity Results
     | StatusEntity Status
     | StatusListEntity (List Status)

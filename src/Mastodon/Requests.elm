@@ -56,6 +56,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 import File exposing (File)
 import Http
 import Json.Decode as JD exposing (Decoder)
+import Json.Encode as JE exposing (Value)
 import Mastodon.EncodeDecode as ED
 import Mastodon.Entities as Entities exposing (Entity(..))
 import OAuthMiddleware exposing (ResponseToken)
@@ -622,11 +623,25 @@ pagingParameters paging =
                 ]
 
 
+idListValue : List String -> String
+idListValue ids =
+    let
+        idlist =
+            List.map (\s -> "'" ++ s ++ "'") ids
+                |> String.join ","
+    in
+    "[" ++ idlist ++ "]"
+
+
 decoders =
     { account = ED.accountDecoder |> JD.map AccountEntity
     , accountList = JD.list ED.accountDecoder |> JD.map AccountListEntity
-    , status = JD.list ED.statusDecoder |> JD.map StatusListEntity
+    , status = ED.statusDecoder |> JD.map StatusEntity
     , statusList = JD.list ED.statusDecoder |> JD.map StatusListEntity
+    , relationship = ED.relationshipDecoder |> JD.map RelationshipEntity
+    , relationshipList =
+        JD.list ED.relationshipDecoder
+            |> JD.map RelationshipListEntity
     }
 
 
@@ -698,5 +713,53 @@ accountsReq req rawreq =
                 , decoder = decoders.statusList
             }
 
-        _ ->
-            rawreq
+        PostFollow { id, reblogs } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "follow" ] []
+                , body =
+                    if not reblogs then
+                        -- Defaults to false
+                        res.body
+
+                    else
+                        Http.jsonBody <|
+                            JE.object
+                                [ ( "reblogs", JE.bool reblogs ) ]
+                , decoder = decoders.relationship
+            }
+
+        PostUnfollow { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "unfollow" ] []
+                , decoder = decoders.relationship
+            }
+
+        -- This is sending ?id=['1'] (with the value url-encoded)
+        -- That's how I read the documentation.
+        -- The web clients I have send ?id[]=1
+        -- I don't know how to get them to request multiple ids.
+        -- So this may not work.
+        GetRelationships { ids } ->
+            { res
+                | url =
+                    relative [ r, "relationships" ]
+                        [ Builder.string "id" <| idListValue ids ]
+                , decoder = decoders.relationshipList
+            }
+
+        GetSearchAccounts { q, limit, resolve, following } ->
+            { res
+                | url =
+                    relative [ r, "search" ] <|
+                        qps
+                            [ sp "q" <| Just q
+                            , ip "limit" limit
+                            , bp "resolve" resolve
+                            , bp "following" following
+                            ]
+                , decoder = decoders.accountList
+            }
