@@ -11,7 +11,8 @@
 
 
 module Mastodon.Requests exposing
-    ( Request(..), Response
+    ( ServerInfo, Request(..), Response, Error(..)
+    , serverRequest
     , AccountsReq(..), AppsReq(..), BlocksReq(..), FavouritesReq(..)
     , FollowReq(..), MediaAttachmentsReq(..), MutesReq(..), NotificationsReq(..)
     , PollsReq(..), ReportsReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
@@ -23,12 +24,17 @@ module Mastodon.Requests exposing
 Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 
-# Request and Response
+# Basic Types
 
-@docs Request, Response
+@docs ServerInfo, Request, Response, Error
 
 
-# The server requests.
+# Creating an HTTP request
+
+@docs serverRequest
+
+
+# Request details
 
 @docs AccountsReq, AppsReq, BlocksReq, FavouritesReq
 @docs FollowReq, MediaAttachmentsReq, MutesReq, NotificationsReq
@@ -43,8 +49,11 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 import File exposing (File)
 import Http
+import Json.Decode as JD exposing (Decoder)
 import Mastodon.EncodeDecode as ED
 import Mastodon.Entities as Entities exposing (Entity(..))
+import OAuthMiddleware exposing (ResponseToken)
+import Task
 
 
 {-| An API request.
@@ -266,7 +275,7 @@ type alias PollDefinition =
 
 {-| GET/POST /api/v1/statuses
 
-None of the `GetXxx` requests require an authentication token.
+The `GetXxx` requests require no authentication token, unless the status has `Private` visibility.
 
 -}
 type StatusesReq
@@ -349,26 +358,18 @@ type alias Response =
 
 Example `server`: "mastodon.social". It's the host name for the URL.
 
-A few requests do not require a token. Most do.
+A few requests do not require a token. Most do, and will error if you don't include one.
 
 -}
 type alias ServerInfo =
     { server : String
-    , token : String
+    , token : Maybe ResponseToken
     }
 
 
-type alias RawRequest =
-    { url : String
-    , body : Http.Body
-    , request : Request
-    , processor : ( Request, Http.Response String ) -> Result ( Request, Http.Response String ) Response
-    }
-
-
-apiUrlPrefix : List String
+apiUrlPrefix : String
 apiUrlPrefix =
-    [ "api", "v1" ]
+    "/api/v1/"
 
 
 {-| Prevent misspellings of the URL components.
@@ -398,10 +399,137 @@ apiReq =
     }
 
 
+{-| Encodes an error from the server request.
+
+Same as `Http.Error`, but includes `Http.Metadata` when it's available.
+
+-}
+type Error
+    = BadUrl String
+    | Timeout
+    | NetworkError
+    | BadStatus Http.Metadata String
+    | BadBody Http.Metadata String
+
+
+type alias RawRequest =
+    { method : String
+    , token : Maybe ResponseToken
+    , url : String
+    , body : Http.Body
+    , request : Request
+    , decoder : Decoder Entity
+    }
+
+
+{-| Create an HTTP request for the server.
+
+The `id` is whatever you need, besides the `Request`, to identify the returned
+`Error` or `Response`
+
+-}
+serverRequest : (id -> Result Error Response -> msg) -> ServerInfo -> id -> Request -> Cmd msg
+serverRequest tagger serverInfo id request =
+    requestToRawRequest serverInfo request
+        |> rawRequestToCmd (tagger id)
+
+
+rawRequestToCmd : (Result Error Response -> msg) -> RawRequest -> Cmd msg
+rawRequestToCmd tagger rawRequest =
+    if rawRequest.method == "" then
+        Cmd.none
+
+    else
+        Http.request
+            { method = rawRequest.method
+            , headers =
+                case rawRequest.token of
+                    Nothing ->
+                        []
+
+                    Just token ->
+                        OAuthMiddleware.use token [ userAgentHeader ]
+            , url = rawRequest.url
+            , body = rawRequest.body
+            , expect =
+                Http.expectStringResponse tagger <| processResponse rawRequest
+            , timeout = Nothing
+            , tracker = Nothing
+            }
+
+
+processResponse : RawRequest -> Http.Response String -> Result Error Response
+processResponse rawRequest response =
+    case response of
+        Http.BadUrl_ s ->
+            Err <| BadUrl s
+
+        Http.Timeout_ ->
+            Err <| Timeout
+
+        Http.NetworkError_ ->
+            Err <| NetworkError
+
+        Http.BadStatus_ metadata body ->
+            Err <| BadStatus metadata body
+
+        Http.GoodStatus_ metadata body ->
+            case JD.decodeString rawRequest.decoder body of
+                Err _ ->
+                    Err <| BadBody metadata ("JSON decoding error on: " ++ body)
+
+                Ok entity ->
+                    Ok
+                        { request = rawRequest.request
+                        , metadata = metadata
+                        , entity = entity
+                        }
+
+
+{-| Only required by GitHub that I know of, but can't hurt.
+-}
+userAgentHeader : Http.Header
+userAgentHeader =
+    Http.header "User-Agent" "Mammudeck"
+
+
 requestToRawRequest : ServerInfo -> Request -> RawRequest
 requestToRawRequest serverInfo request =
-    { url = ""
-    , body = Http.emptyBody
-    , request = request
-    , processor = \_ -> Err ( request, Http.BadUrl_ "" )
+    let
+        raw =
+            { method = ""
+            , token = serverInfo.token
+            , url = ""
+            , body = Http.emptyBody
+            , request = request
+            , decoder = JD.fail "Unspecified decoder"
+            }
+
+        res =
+            case request of
+                AccountsRequest req ->
+                    accountsReq req raw
+
+                _ ->
+                    -- TODO, all the other `Request` types
+                    raw
+    in
+    { res
+        | url = "https://" ++ serverInfo.server ++ apiUrlPrefix ++ res.url
     }
+
+
+
+---
+--- Modify the incoming RawRequest to perform the requested operation.
+--- This means at least setting the `method`, `url`, and `decoder`.
+--- For POST, PUT, and PATCH requests, this also sets the `body`,
+--- usually to a JSON string.
+--- The `url` value is just the part after "https://<server>/api/v1/"
+---
+
+
+accountsReq : AccountsReq -> RawRequest -> RawRequest
+accountsReq req rawreq =
+    --TODO
+    rawreq
