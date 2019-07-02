@@ -545,6 +545,9 @@ requestToRawRequest serverInfo request =
                 AppsRequest req ->
                     appsReq req raw
 
+                BlocksRequest req ->
+                    blocksReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -810,4 +813,37 @@ appsReq req rawreq =
                 | url =
                     relative [ r, "verify_credentials" ] []
                 , decoder = decoders.app
+            }
+
+
+blocksReq : BlocksReq -> RawRequest -> RawRequest
+blocksReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.blocks
+    in
+    case req of
+        GetBlocks { limit } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.accountList
+            }
+
+        PostBlock { id } ->
+            { res
+                | method = m.post
+                , url = relative [ r, id, "block" ] []
+                , decoder = decoders.relationship
+            }
+
+        PostUnblock { id } ->
+            { res
+                | method = m.post
+                , url = relative [ r, id, "unblock" ] []
+                , decoder = decoders.relationship
             }
