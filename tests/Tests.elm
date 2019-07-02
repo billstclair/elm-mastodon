@@ -9,6 +9,7 @@ import Mastodon.EncodeDecode as ED exposing (encodeEntity, entityDecoder)
 import Mastodon.Entities as Entities
     exposing
         ( Account
+        , App
         , Application
         , Attachment
         , AttachmentType(..)
@@ -160,6 +161,9 @@ stripEntity entity =
         AccountEntity account ->
             AccountEntity <| stripAccount account
 
+        AppEntity app ->
+            AppEntity { app | v = JE.null }
+
         SourceEntity source ->
             SourceEntity { source | v = JE.null }
 
@@ -282,6 +286,8 @@ entityData : List Entity
 entityData =
     [ AccountEntity account1
     , AccountEntity account2
+    , AppEntity app1
+    , AppEntity app2
     , SourceEntity source1
     , SourceEntity source2
     , TokenEntity
@@ -1010,6 +1016,27 @@ account1 =
     , is_pro = True
     , is_verified = True
     , v = JE.null
+    }
+
+
+app1 : App
+app1 =
+    { id = "id"
+    , name = "name"
+    , website = Just "website"
+    , redirect_uri = "redirect_uri"
+    , client_id = "client_id"
+    , client_secret = "client_secret"
+    , vapid_key = Just "vapid_key"
+    , v = JE.null
+    }
+
+
+app2 : App
+app2 =
+    { app1
+        | website = Nothing
+        , vapid_key = Nothing
     }
 
 

@@ -13,7 +13,7 @@
 module Mastodon.Entities exposing
     ( Entity(..)
     , Datetime, UrlString, HtmlString, ISO6391, ISO6392, UnixTimestamp
-    , Account, Source, Token, Application
+    , Account, Source, Token, Application, App
     , Card, Context, Error, Filter, Instance
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
@@ -50,7 +50,7 @@ got over the wire. Code that creates these can set it to
 
 ## Entities
 
-@docs Account, Source, Token, Application
+@docs Account, Source, Token, Application, App
 @docs Card, Context, Error, Filter, Instance
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
@@ -187,6 +187,23 @@ type alias Token =
 type alias Application =
     { name : String
     , website : Maybe UrlString
+    , v : Value
+    }
+
+
+{-| App entity.
+
+This is not documented, so I requested one and reverse engineered it.
+
+-}
+type alias App =
+    { id : String
+    , name : String
+    , website : Maybe String
+    , redirect_uri : String
+    , client_id : String
+    , client_secret : String
+    , vapid_key : Maybe String -- I think this is always there, but just in case.
     , v : Value
     }
 
@@ -595,6 +612,7 @@ type Entity
     | SourceEntity Source
     | TokenEntity Token
     | ApplicationEntity Application
+    | AppEntity App
     | CardEntity Card
     | ContextEntity Context
     | ErrorEntity Error

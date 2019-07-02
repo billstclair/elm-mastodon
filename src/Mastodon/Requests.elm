@@ -542,6 +542,9 @@ requestToRawRequest serverInfo request =
                 AccountsRequest req ->
                     accountsReq req raw
 
+                AppsRequest req ->
+                    appsReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -642,6 +645,7 @@ decoders =
     , relationshipList =
         JD.list ED.relationshipDecoder
             |> JD.map RelationshipListEntity
+    , app = ED.appDecoder |> JD.map AppEntity
     }
 
 
@@ -762,4 +766,48 @@ accountsReq req rawreq =
                             , bp "following" following
                             ]
                 , decoder = decoders.accountList
+            }
+
+
+appsReq : AppsReq -> RawRequest -> RawRequest
+appsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.apps
+    in
+    case req of
+        PostApp { client_name, redirect_uris, scopes, website } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            (List.concat
+                                [ [ ( "client_name", JE.string client_name )
+                                  , ( "redirect_uris", JE.string redirect_uris )
+                                  , ( "scopes"
+                                    , JE.string <| String.join " " scopes
+                                    )
+                                  ]
+                                , case website of
+                                    Nothing ->
+                                        []
+
+                                    Just w ->
+                                        [ ( "website", JE.string w ) ]
+                                ]
+                            )
+                , decoder = decoders.app
+            }
+
+        GetVerifyAppCredentials ->
+            { res
+                | url =
+                    relative [ r, "verify_credentials" ] []
+                , decoder = decoders.app
             }

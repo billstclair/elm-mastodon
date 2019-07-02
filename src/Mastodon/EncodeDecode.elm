@@ -13,6 +13,7 @@
 module Mastodon.EncodeDecode exposing
     ( encodeEntity, entityDecoder
     , accountDecoder, encodeAccount
+    , appDecoder, encodeApp
     , sourceDecoder, encodeSource
     , tokenDecoder, encodeToken
     , applicationDecoder, encodeApplication
@@ -36,6 +37,7 @@ module Mastodon.EncodeDecode exposing
 
 @docs encodeEntity, entityDecoder
 @docs accountDecoder, encodeAccount
+@docs appDecoder, encodeApp
 @docs sourceDecoder, encodeSource
 @docs tokenDecoder, encodeToken
 @docs applicationDecoder, encodeApplication
@@ -62,6 +64,7 @@ import Json.Encode as JE exposing (Value)
 import Mastodon.Entities as Entities
     exposing
         ( Account
+        , App
         , Application
         , Attachment
         , AttachmentType(..)
@@ -113,6 +116,9 @@ encodeEntity entity =
     case entity of
         AccountEntity account ->
             encodeAccount account
+
+        AppEntity app ->
+            encodeApp app
 
         AccountListEntity accounts ->
             JE.list encodeAccount accounts
@@ -182,6 +188,7 @@ entityDecoder : Decoder Entity
 entityDecoder =
     JD.oneOf
         [ accountDecoder |> JD.map AccountEntity
+        , appDecoder |> JD.map AppEntity
         , JD.list accountDecoder |> JD.map AccountListEntity
         , sourceDecoder |> JD.map SourceEntity
         , tokenDecoder |> JD.map TokenEntity
@@ -301,6 +308,36 @@ accountDecoder =
         |> optional "source" (JD.nullable sourceDecoder) Nothing
         |> optional "is_pro" optionalBoolDecoder False
         |> optional "is_verified" optionalBoolDecoder False
+        |> custom JD.value
+
+
+{-| Encode an `App`.
+-}
+encodeApp : App -> Value
+encodeApp app =
+    JE.object
+        [ ( "id", JE.string app.id )
+        , ( "name", JE.string app.name )
+        , ( "website", encodeMaybe JE.string app.website )
+        , ( "redirect_uri", JE.string app.redirect_uri )
+        , ( "client_id", JE.string app.client_id )
+        , ( "client_secret", JE.string app.client_secret )
+        , ( "vapid_key", encodeMaybe JE.string app.vapid_key )
+        ]
+
+
+{-| Decode an `App`.
+-}
+appDecoder : Decoder App
+appDecoder =
+    JD.succeed App
+        |> required "id" JD.string
+        |> required "name" JD.string
+        |> optional "website" (JD.nullable JD.string) Nothing
+        |> required "redirect_uri" JD.string
+        |> required "client_id" JD.string
+        |> required "client_secret" JD.string
+        |> optional "vapid_key" (JD.nullable JD.string) Nothing
         |> custom JD.value
 
 
