@@ -58,7 +58,12 @@ import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 import Mastodon.EncodeDecode as ED
-import Mastodon.Entities as Entities exposing (Entity(..))
+import Mastodon.Entities as Entities
+    exposing
+        ( Entity(..)
+        , FilterContext(..)
+        , UnixTimestamp
+        )
 import OAuthMiddleware exposing (ResponseToken)
 import Task
 import Url.Builder as Builder exposing (QueryParameter, relative)
@@ -76,20 +81,20 @@ type Request
     | AppsRequest AppsReq
     | BlocksRequest BlocksReq
     | CustomEmojisRequest
-      -- | DomainBlocksRequest DomainBlocksReq
-      -- | EndorsementsRequest EndorsementReq
+    | DomainBlocksRequest DomainBlocksReq
+    | EndorsementsRequest EndorsementReq
     | FavouritesRequest FavouritesReq
-      -- | FiltersRequest FiltersReq
+    | FiltersRequest FiltersReq
     | FollowRequest FollowReq
-      -- | FollowSuggestionsRequest FollowSuggestionsReq
+    | FollowSuggestionsRequest FollowSuggestionsReq
     | InstanceRequest
-      -- | ListsRequest ListsReq
+    | ListsRequest ListsReq
     | MediaAttachmentsRequest MediaAttachmentsReq
     | MutesRequest MutesReq
     | NotificationsRequest NotificationsReq
     | PollsRequest PollsReq
     | ReportsRequest ReportsReq
-      -- | ScheduledStatusesRequest ScheduledStatusesReq
+    | ScheduledStatusesRequest ScheduledStatusesReq
     | SearchRequest SearchReq
     | StatusesRequest StatusesReq
     | TimelinesRequest TimelinesReq
@@ -172,6 +177,22 @@ type BlocksReq
     | PostUnblock { id : String }
 
 
+{-| GET/POST /api/v8/domain\_blocks
+-}
+type DomainBlocksReq
+    = GetDomainBlocks { limit : Maybe Int }
+    | PostDomainBlock { domain : String }
+    | DeleteDomainBlock { domain : String }
+
+
+{-| GET/POST /api/v1/endorsements
+-}
+type EndorsementReq
+    = GetEndorsements
+    | PostPinAccount { id : String }
+    | PostUnpinAccount { id : String }
+
+
 {-| GET/POST /api/v1/favourites
 -}
 type FavouritesReq
@@ -180,12 +201,68 @@ type FavouritesReq
     | PostUnfavourite { id : String }
 
 
+{-| GET/POST/PUT /api/v1/filters
+-}
+type FiltersReq
+    = GetFilters
+    | PostFilter
+        { phrase : String
+        , context : FilterContext
+        , irreversible : Bool
+        , whole_word : Bool
+        , expires_in : Maybe Int
+        }
+    | GetFilter { id : String }
+    | PutFilter
+        { id : String
+        , phrase : String
+        , context : FilterContext
+        , irreversible : Bool
+        , whole_word : Bool
+        , expires_in : Maybe Int
+        }
+    | DeleteFilter { id : String }
+
+
 {-| GET/POST /api/v1/follow\_requests
 -}
 type FollowReq
     = GetFollowRequest { limit : Maybe Int }
     | PostAuthorizeFollow { id : String }
     | PostRejectFollow { id : String }
+
+
+{-| GET/DELETE /api/v1/suggestions
+-}
+type FollowSuggestionsReq
+    = GetFollowSuggestions
+    | DeleteFollowSuggestions { account_id : String }
+
+
+{-| GET/POST/PUT/DELETE /api/v1/lists
+-}
+type ListsReq
+    = GetLists
+    | GetAccountLists { id : String }
+    | GetListAccounts
+        { id : String
+        , limit : Maybe Int
+        }
+    | GetList { id : String }
+    | PostList { title : String }
+    | PutList
+        { id : String
+        , title : String
+        }
+    | DeleteList { id : String }
+    | PostListAccounts
+        { id : String
+        , account_ids : List String
+        }
+    | DeleteListAccounts
+        { id : String
+        , account_ids : List String
+        }
 
 
 {-| GET/POST /api/v1/media
@@ -257,6 +334,18 @@ type ReportsReq
         , comment : String
         , forward : Bool
         }
+
+
+{-| GET/PUT /api/v1/scheduled\_statuses
+-}
+type ScheduledStatusesReq
+    = GetScheduledStatuses
+    | GetScheduledStatus { id : String }
+    | PutScheduledStatus
+        { id : String
+        , scheduled_at : Maybe UnixTimestamp
+        }
+    | DeleteScheduledStatus { id : String }
 
 
 {-| GET/POST /api/v1/search
