@@ -1,4 +1,4 @@
-----------------------------------------------------------------------
+---------------------------------------------------------------------
 --
 -- Request.elm
 -- Mastodon API requests.
@@ -21,6 +21,8 @@ module Mastodon.Requests exposing
     )
 
 {-| Types to represent the Mastodon REST API.
+
+Funcion to generate a request and parse the return.
 
 Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
@@ -57,7 +59,7 @@ import File exposing (File)
 import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
-import Mastodon.EncodeDecode as ED
+import Mastodon.EncodeDecode as ED exposing (encodeMaybe)
 import Mastodon.Entities as Entities
     exposing
         ( Entity(..)
@@ -207,7 +209,7 @@ type FiltersReq
     = GetFilters
     | PostFilter
         { phrase : String
-        , context : FilterContext
+        , context : List FilterContext
         , irreversible : Bool
         , whole_word : Bool
         , expires_in : Maybe Int
@@ -216,7 +218,7 @@ type FiltersReq
     | PutFilter
         { id : String
         , phrase : String
-        , context : FilterContext
+        , context : List FilterContext
         , irreversible : Bool
         , whole_word : Bool
         , expires_in : Maybe Int
@@ -649,6 +651,9 @@ requestToRawRequest serverInfo request =
                 FavouritesRequest req ->
                     favouritesReq req raw
 
+                FiltersRequest req ->
+                    filtersReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -755,6 +760,8 @@ decoders =
     , emojiList = JD.list ED.emojiDecoder |> JD.map EmojiListEntity
     , stringList = JD.list JD.string |> JD.map StringListEntity
     , ignore = JD.succeed NoEntity
+    , filter = ED.filterDecoder |> JD.map FilterEntity
+    , filterList = JD.list ED.filterDecoder |> JD.map FilterListEntity
     }
 
 
@@ -1073,4 +1080,71 @@ favouritesReq req rawreq =
                 , url =
                     relative [ apiReq.statuses, id, "unfavourite" ] []
                 , decoder = decoders.status
+            }
+
+
+filtersReq : FiltersReq -> RawRequest -> RawRequest
+filtersReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.filters
+    in
+    case req of
+        GetFilters ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.filterList
+            }
+
+        PostFilter { phrase, context, irreversible, whole_word, expires_in } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "phrase", JE.string phrase )
+                            , ( "context", JE.list ED.encodeFilterContext context )
+                            , ( "irreversible", JE.bool irreversible )
+                            , ( "whole_word", JE.bool whole_word )
+                            , ( "expires_in", encodeMaybe JE.int expires_in )
+                            ]
+                , decoder = decoders.filter
+            }
+
+        GetFilter { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.filter
+            }
+
+        PutFilter { id, phrase, context, irreversible, whole_word, expires_in } ->
+            { res
+                | method = m.put
+                , url =
+                    relative [ r, id ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "phrase", JE.string phrase )
+                            , ( "context", JE.list ED.encodeFilterContext context )
+                            , ( "irreversible", JE.bool irreversible )
+                            , ( "whole_word", JE.bool whole_word )
+                            , ( "expires_in", encodeMaybe JE.int expires_in )
+                            ]
+                , decoder = decoders.filter
+            }
+
+        DeleteFilter { id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id ] []
+                , decoder = decoders.ignore
             }

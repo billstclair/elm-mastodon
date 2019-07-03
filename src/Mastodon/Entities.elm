@@ -620,6 +620,7 @@ type Entity
     | EmojiListEntity (List Emoji)
     | ErrorEntity Error
     | FilterEntity Filter
+    | FilterListEntity (List Filter)
     | InstanceEntity Instance
     | ListEntityEntity ListEntity
     | NotificationEntity Notification

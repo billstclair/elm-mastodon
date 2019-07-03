@@ -24,6 +24,7 @@ module Mastodon.EncodeDecode exposing
     , encodeStatus, statusDecoder
     , encodeError, errorDecoder
     , encodeFilter, filterDecoder
+    , encodeFilterContext, filterContextDecoder
     , encodeInstance, instanceDecoder
     , encodeListEntity, listEntityDecoder
     , encodeNotification, notificationDecoder
@@ -32,6 +33,7 @@ module Mastodon.EncodeDecode exposing
     , encodeResults, resultsDecoder
     , encodeScheduledStatus, scheduledStatusDecoder
     , encodeConversation, conversationDecoder
+    , encodeMaybe
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -49,6 +51,7 @@ module Mastodon.EncodeDecode exposing
 @docs encodeStatus, statusDecoder
 @docs encodeError, errorDecoder
 @docs encodeFilter, filterDecoder
+@docs encodeFilterContext, filterContextDecoder
 @docs encodeInstance, instanceDecoder
 @docs encodeListEntity, listEntityDecoder
 @docs encodeNotification, notificationDecoder
@@ -57,6 +60,11 @@ module Mastodon.EncodeDecode exposing
 @docs encodeResults, resultsDecoder
 @docs encodeScheduledStatus, scheduledStatusDecoder
 @docs encodeConversation, conversationDecoder
+
+
+# Utilities
+
+@docs encodeMaybe
 
 -}
 
@@ -155,6 +163,9 @@ encodeEntity entity =
         FilterEntity filter ->
             encodeFilter filter
 
+        FilterListEntity filters ->
+            JE.list encodeFilter filters
+
         InstanceEntity instance ->
             encodeInstance instance
 
@@ -211,6 +222,7 @@ entityDecoder =
         , statusDecoder |> JD.map StatusEntity
         , JD.list statusDecoder |> JD.map StatusListEntity
         , filterDecoder |> JD.map FilterEntity
+        , JD.list filterDecoder |> JD.map FilterListEntity
         , instanceDecoder |> JD.map InstanceEntity
         , listEntityDecoder |> JD.map ListEntityEntity
         , notificationDecoder |> JD.map NotificationEntity
@@ -224,6 +236,11 @@ entityDecoder =
         ]
 
 
+{-| Encode `Maybe x` to `Json.Encode.null` if it's Nothing,
+
+or with the encoder otherwise.
+
+-}
 encodeMaybe : (x -> Value) -> Maybe x -> Value
 encodeMaybe encoder mx =
     case mx of
@@ -1011,6 +1028,8 @@ errorDecoder httpStatus =
         |> required "error" JD.string
 
 
+{-| Encode a `FilterContext`.
+-}
 encodeFilterContext : FilterContext -> Value
 encodeFilterContext context =
     JE.string <|
@@ -1028,6 +1047,8 @@ encodeFilterContext context =
                 "ThreadContext"
 
 
+{-| Decode a `FilterContext`.
+-}
 filterContextDecoder : Decoder FilterContext
 filterContextDecoder =
     JD.string
