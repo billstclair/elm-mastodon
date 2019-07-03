@@ -20,6 +20,7 @@ module Mastodon.EncodeDecode exposing
     , attachmentDecoder, encodeAttachment
     , cardDecoder, encodeCard
     , contextDecoder, encodeContext
+    , emojiDecoder, encodeEmoji
     , encodeStatus, statusDecoder
     , encodeError, errorDecoder
     , encodeFilter, filterDecoder
@@ -44,6 +45,7 @@ module Mastodon.EncodeDecode exposing
 @docs attachmentDecoder, encodeAttachment
 @docs cardDecoder, encodeCard
 @docs contextDecoder, encodeContext
+@docs emojiDecoder, encodeEmoji
 @docs encodeStatus, statusDecoder
 @docs encodeError, errorDecoder
 @docs encodeFilter, filterDecoder
@@ -138,6 +140,12 @@ encodeEntity entity =
         ContextEntity context ->
             encodeContext context
 
+        EmojiEntity emoji ->
+            encodeEmoji emoji
+
+        EmojiListEntity emojis ->
+            JE.list encodeEmoji emojis
+
         StatusEntity status ->
             encodeStatus status
 
@@ -174,6 +182,9 @@ encodeEntity entity =
         ConversationEntity conversation ->
             encodeConversation conversation
 
+        StringListEntity stringList ->
+            JE.list JE.string stringList
+
         _ ->
             JE.string "TODO"
 
@@ -195,6 +206,8 @@ entityDecoder =
         , applicationDecoder |> JD.map ApplicationEntity
         , cardDecoder |> JD.map CardEntity
         , contextDecoder |> JD.map ContextEntity
+        , emojiDecoder |> JD.map EmojiEntity
+        , JD.list emojiDecoder |> JD.map EmojiListEntity
         , statusDecoder |> JD.map StatusEntity
         , JD.list statusDecoder |> JD.map StatusListEntity
         , filterDecoder |> JD.map FilterEntity
@@ -207,6 +220,7 @@ entityDecoder =
         , resultsDecoder |> JD.map ResultsEntity
         , scheduledStatusDecoder |> JD.map ScheduledStatusEntity
         , conversationDecoder |> JD.map ConversationEntity
+        , JD.list JD.string |> JD.map StringListEntity
         ]
 
 

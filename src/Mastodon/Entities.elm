@@ -326,7 +326,7 @@ type alias Context =
     }
 
 
-{-| Values for the `Account.emojis` list.
+{-| Values for the `Account.emojis` list. Also returned by /api/v1/custom\_emojis.
 -}
 type alias Emoji =
     { shortcode : String
@@ -607,7 +607,8 @@ individual entities explicitly.
 
 -}
 type Entity
-    = AccountEntity Account
+    = NoEntity
+    | AccountEntity Account
     | AccountListEntity (List Account)
     | SourceEntity Source
     | TokenEntity Token
@@ -615,6 +616,8 @@ type Entity
     | AppEntity App
     | CardEntity Card
     | ContextEntity Context
+    | EmojiEntity Emoji
+    | EmojiListEntity (List Emoji)
     | ErrorEntity Error
     | FilterEntity Filter
     | InstanceEntity Instance
@@ -628,3 +631,4 @@ type Entity
     | StatusListEntity (List Status)
     | ScheduledStatusEntity ScheduledStatus
     | ConversationEntity Conversation
+    | StringListEntity (List String)

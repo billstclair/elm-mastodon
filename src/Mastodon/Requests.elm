@@ -82,7 +82,7 @@ type Request
     | BlocksRequest BlocksReq
     | CustomEmojisRequest
     | DomainBlocksRequest DomainBlocksReq
-    | EndorsementsRequest EndorsementReq
+    | EndorsementsRequest EndorsementsReq
     | FavouritesRequest FavouritesReq
     | FiltersRequest FiltersReq
     | FollowRequest FollowReq
@@ -187,7 +187,7 @@ type DomainBlocksReq
 
 {-| GET/POST /api/v1/endorsements
 -}
-type EndorsementReq
+type EndorsementsReq
     = GetEndorsements
     | PostPinAccount { id : String }
     | PostUnpinAccount { id : String }
@@ -637,6 +637,18 @@ requestToRawRequest serverInfo request =
                 BlocksRequest req ->
                     blocksReq req raw
 
+                CustomEmojisRequest ->
+                    customEmojisRequest raw
+
+                DomainBlocksRequest req ->
+                    domainBlocksReq req raw
+
+                EndorsementsRequest req ->
+                    endorsementsReq req raw
+
+                FavouritesRequest req ->
+                    favouritesReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -698,6 +710,7 @@ bpt name value =
 m =
     { get = "GET"
     , post = "POST"
+    , delete = "DELETE"
     , put = "PUT"
     , patch = "PATCH"
     }
@@ -738,6 +751,10 @@ decoders =
         JD.list ED.relationshipDecoder
             |> JD.map RelationshipListEntity
     , app = ED.appDecoder |> JD.map AppEntity
+    , emoji = ED.emojiDecoder |> JD.map EmojiEntity
+    , emojiList = JD.list ED.emojiDecoder |> JD.map EmojiListEntity
+    , stringList = JD.list JD.string |> JD.map StringListEntity
+    , ignore = JD.succeed NoEntity
     }
 
 
@@ -935,4 +952,125 @@ blocksReq req rawreq =
                 | method = m.post
                 , url = relative [ r, id, "unblock" ] []
                 , decoder = decoders.relationship
+            }
+
+
+customEmojisRequest : RawRequest -> RawRequest
+customEmojisRequest rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.custom_emojis
+    in
+    { res
+        | url = relative [ r ] []
+        , decoder = decoders.emojiList
+    }
+
+
+domainBlocksReq : DomainBlocksReq -> RawRequest -> RawRequest
+domainBlocksReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.domain_blocks
+    in
+    case req of
+        GetDomainBlocks { limit } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.stringList
+            }
+
+        PostDomainBlock { domain } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r ]
+                        [ Builder.string "domain" domain ]
+                , decoder = decoders.ignore
+            }
+
+        DeleteDomainBlock { domain } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r ]
+                        [ Builder.string "domain" domain ]
+                , decoder = decoders.ignore
+            }
+
+
+endorsementsReq : EndorsementsReq -> RawRequest -> RawRequest
+endorsementsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.endorsements
+    in
+    case req of
+        GetEndorsements ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.accountList
+            }
+
+        PostPinAccount { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.accounts, id, "pin" ] []
+                , decoder = decoders.relationship
+            }
+
+        PostUnpinAccount { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.accounts, id, "unpin" ] []
+                , decoder = decoders.relationship
+            }
+
+
+favouritesReq : FavouritesReq -> RawRequest -> RawRequest
+favouritesReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.favourites
+    in
+    case req of
+        GetFavourites { limit } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.statusList
+            }
+
+        PostFavourite { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.statuses, id, "favourite" ] []
+                , decoder = decoders.status
+            }
+
+        PostUnfavourite { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.statuses, id, "unfavourite" ] []
+                , decoder = decoders.status
             }
