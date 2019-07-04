@@ -158,7 +158,7 @@ init value url key =
                     p
 
                 Nothing ->
-                    "Gab"
+                    "gab.com"
       , tokenAuthorization = Nothing
       , getUserApi = Nothing
       }

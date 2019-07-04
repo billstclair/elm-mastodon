@@ -654,6 +654,18 @@ requestToRawRequest serverInfo request =
                 FiltersRequest req ->
                     filtersReq req raw
 
+                FollowRequest req ->
+                    followReq req raw
+
+                FollowSuggestionsRequest req ->
+                    followSuggestionsReq req raw
+
+                InstanceRequest ->
+                    instanceReq raw
+
+                ListsRequest req ->
+                    listsReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -762,6 +774,9 @@ decoders =
     , ignore = JD.succeed NoEntity
     , filter = ED.filterDecoder |> JD.map FilterEntity
     , filterList = JD.list ED.filterDecoder |> JD.map FilterListEntity
+    , instance = ED.instanceDecoder |> JD.map InstanceEntity
+    , listEntity = ED.listEntityDecoder |> JD.map ListEntityEntity
+    , listEntityList = JD.list ED.listEntityDecoder |> JD.map ListEntityListEntity
     }
 
 
@@ -1146,5 +1161,184 @@ filtersReq req rawreq =
                 | method = m.delete
                 , url =
                     relative [ r, id ] []
+                , decoder = decoders.ignore
+            }
+
+
+followReq : FollowReq -> RawRequest -> RawRequest
+followReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.follow_requests
+    in
+    case req of
+        GetFollowRequest { limit } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.accountList
+            }
+
+        PostAuthorizeFollow { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "authorize" ] []
+                , decoder = decoders.ignore
+            }
+
+        PostRejectFollow { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "reject" ] []
+                , decoder = decoders.ignore
+            }
+
+
+followSuggestionsReq : FollowSuggestionsReq -> RawRequest -> RawRequest
+followSuggestionsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.suggestions
+    in
+    case req of
+        GetFollowSuggestions ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.accountList
+            }
+
+        DeleteFollowSuggestions { account_id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, account_id ] []
+                , decoder = decoders.ignore
+            }
+
+
+instanceReq : RawRequest -> RawRequest
+instanceReq rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.instance
+    in
+    { res
+        | url =
+            relative [ r ] []
+        , decoder = decoders.instance
+    }
+
+
+listsReq : ListsReq -> RawRequest -> RawRequest
+listsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.lists
+    in
+    case req of
+        GetLists ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.listEntityList
+            }
+
+        GetAccountLists { id } ->
+            { res
+                | url =
+                    relative [ apiReq.accounts, id, "lists" ] []
+                , decoder = decoders.listEntityList
+            }
+
+        GetListAccounts { id, limit } ->
+            { res
+                | url =
+                    relative [ r, id, "accounts" ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.accountList
+            }
+
+        GetList { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.listEntity
+            }
+
+        PostList { title } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "title", JE.string title ) ]
+                , decoder = decoders.listEntity
+            }
+
+        PutList { id, title } ->
+            { res
+                | method = m.put
+                , url =
+                    relative [ r, id ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "title", JE.string title ) ]
+                , decoder = decoders.listEntity
+            }
+
+        DeleteList { id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id ] []
+                , decoder = decoders.ignore
+            }
+
+        PostListAccounts { id, account_ids } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "accounts" ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "account_ids"
+                              , JE.list JE.string account_ids
+                              )
+                            ]
+                , decoder = decoders.ignore
+            }
+
+        DeleteListAccounts { id, account_ids } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id, "accounts" ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "account_ids"
+                              , JE.list JE.string account_ids
+                              )
+                            ]
                 , decoder = decoders.ignore
             }

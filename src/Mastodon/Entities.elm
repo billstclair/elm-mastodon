@@ -623,6 +623,7 @@ type Entity
     | FilterListEntity (List Filter)
     | InstanceEntity Instance
     | ListEntityEntity ListEntity
+    | ListEntityListEntity (List ListEntity)
     | NotificationEntity Notification
     | PushSubscriptionEntity PushSubscription
     | RelationshipEntity Relationship
