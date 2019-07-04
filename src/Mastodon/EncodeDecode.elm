@@ -917,6 +917,7 @@ pollDecoder =
         |> required "votes_count" JD.int
         |> required "options" (JD.list pollOptionDecoder)
         |> optional "voted" optionalBoolDecoder False
+        |> custom JD.value
 
 
 encodePollOption : PollOption -> Value

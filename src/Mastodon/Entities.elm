@@ -448,6 +448,7 @@ type alias Poll =
     , votes_count : Int
     , options : List PollOption
     , voted : Bool
+    , v : Value
     }
 
 

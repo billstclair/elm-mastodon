@@ -142,6 +142,13 @@ stripStatus status =
 
                 Just card ->
                     Just { card | v = JE.null }
+        , poll =
+            case status.poll of
+                Nothing ->
+                    Nothing
+
+                Just poll ->
+                    Just { poll | v = JE.null }
         , application =
             { application | v = JE.null }
         , v = JE.null
@@ -763,6 +770,7 @@ poll1 =
     , votes_count = 10
     , options = [ pollOption1, pollOption2 ]
     , voted = False
+    , v = JE.null
     }
 
 
@@ -775,6 +783,7 @@ poll2 =
     , votes_count = 100
     , options = [ pollOption1, pollOption2 ]
     , voted = True
+    , v = JE.null
     }
 
 
