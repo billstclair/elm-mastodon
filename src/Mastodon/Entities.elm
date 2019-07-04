@@ -624,6 +624,7 @@ type Entity
     | InstanceEntity Instance
     | ListEntityEntity ListEntity
     | ListEntityListEntity (List ListEntity)
+    | AttachmentEntity Attachment
     | NotificationEntity Notification
     | PushSubscriptionEntity PushSubscription
     | RelationshipEntity Relationship

@@ -272,13 +272,13 @@ type ListsReq
 type MediaAttachmentsReq
     = PostMedia
         { file : File
-        , description : String
-        , focus : Entities.Focus
+        , description : Maybe String
+        , focus : Maybe Entities.Focus
         }
     | PutMedia
         { id : String
-        , description : String
-        , focus : Entities.Focus
+        , description : Maybe String
+        , focus : Maybe Entities.Focus
         }
 
 
@@ -666,6 +666,9 @@ requestToRawRequest serverInfo request =
                 ListsRequest req ->
                     listsReq req raw
 
+                MediaAttachmentsRequest req ->
+                    mediaAttachmentsReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -777,6 +780,7 @@ decoders =
     , instance = ED.instanceDecoder |> JD.map InstanceEntity
     , listEntity = ED.listEntityDecoder |> JD.map ListEntityEntity
     , listEntityList = JD.list ED.listEntityDecoder |> JD.map ListEntityListEntity
+    , attachment = ED.attachmentDecoder |> JD.map AttachmentEntity
     }
 
 
@@ -1341,4 +1345,74 @@ listsReq req rawreq =
                               )
                             ]
                 , decoder = decoders.ignore
+            }
+
+
+mediaAttachmentsReq : MediaAttachmentsReq -> RawRequest -> RawRequest
+mediaAttachmentsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.media
+    in
+    case req of
+        PostMedia { file, description, focus } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r ] []
+                , body =
+                    Http.multipartBody <|
+                        List.concat
+                            [ [ Http.filePart "file" file ]
+                            , case description of
+                                Nothing ->
+                                    []
+
+                                Just desc ->
+                                    [ Http.stringPart "description" desc ]
+                            , case focus of
+                                Nothing ->
+                                    []
+
+                                Just { x, y } ->
+                                    [ Http.stringPart "focus" <|
+                                        String.fromFloat x
+                                            ++ ","
+                                            ++ String.fromFloat y
+                                    ]
+                            ]
+                , decoder =
+                    decoders.attachment
+            }
+
+        PutMedia { id, description, focus } ->
+            { res
+                | method = m.put
+                , url =
+                    relative [ r, id ] []
+                , body =
+                    Http.multipartBody <|
+                        List.concat
+                            [ case description of
+                                Nothing ->
+                                    []
+
+                                Just desc ->
+                                    [ Http.stringPart "description" desc ]
+                            , case focus of
+                                Nothing ->
+                                    []
+
+                                Just { x, y } ->
+                                    [ Http.stringPart "focus" <|
+                                        String.fromFloat x
+                                            ++ ","
+                                            ++ String.fromFloat y
+                                    ]
+                            ]
+                , decoder =
+                    decoders.attachment
             }
