@@ -295,13 +295,12 @@ type MutesReq
     | PostStatusUnmute { id : String }
 
 
-
--- TODO:
--- | PostPushSubscription, GetPushSubscription
--- | PutPushSubscription, DeletePushSubscription
-
-
 {-| GET/POST /api/v1/notifications
+
+This doesn't yet define "POST /api/v1/push/subscription",
+"GET /api/v1/push/subscription", "PUT /api/v1/push/subscription", or
+"DELETE /api/v1/push/subscription".
+
 -}
 type NotificationsReq
     = GetNotifications
@@ -312,6 +311,12 @@ type NotificationsReq
     | GetNotification { id : String }
     | PostClearNotifications
     | PostDismissNotification { id : String }
+
+
+
+--- TODO:
+--- | PostPushSubscription, GetPushSubscription
+--- | PutPushSubscription, DeletePushSubscription
 
 
 {-| GET/POST /api/v1/polls
@@ -669,6 +674,15 @@ requestToRawRequest serverInfo request =
                 MediaAttachmentsRequest req ->
                     mediaAttachmentsReq req raw
 
+                MutesRequest req ->
+                    mutesReq req raw
+
+                NotificationsRequest req ->
+                    notificationsReq req raw
+
+                PollsRequest req ->
+                    pollsReq req raw
+
                 _ ->
                     -- TODO, all the other `Request` types
                     raw
@@ -781,6 +795,11 @@ decoders =
     , listEntity = ED.listEntityDecoder |> JD.map ListEntityEntity
     , listEntityList = JD.list ED.listEntityDecoder |> JD.map ListEntityListEntity
     , attachment = ED.attachmentDecoder |> JD.map AttachmentEntity
+    , notification = ED.notificationDecoder |> JD.map NotificationEntity
+    , notificationList =
+        JD.list ED.notificationDecoder
+            |> JD.map NotificationListEntity
+    , poll = ED.pollDecoder |> JD.map PollEntity
     }
 
 
@@ -1415,4 +1434,153 @@ mediaAttachmentsReq req rawreq =
                             ]
                 , decoder =
                     decoders.attachment
+            }
+
+
+mutesReq : MutesReq -> RawRequest -> RawRequest
+mutesReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.mutes
+    in
+    case req of
+        GetAccountMutes { limit } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.accountList
+            }
+
+        PostAccountMute { id, notifications } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.accounts, id, "mute" ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "notifications", JE.bool notifications ) ]
+                , decoder = decoders.accountList
+            }
+
+        PostAccountUnmute { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.accounts, id, "unmute" ] []
+                , decoder = decoders.relationship
+            }
+
+        PostStatusMute { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.statuses, id, "mute" ] []
+                , decoder = decoders.status
+            }
+
+        PostStatusUnmute { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ apiReq.statuses, id, "unmute" ] []
+                , decoder = decoders.status
+            }
+
+
+notificationsReq : NotificationsReq -> RawRequest -> RawRequest
+notificationsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.notifications
+    in
+    case req of
+        GetNotifications { paging, exclude_types, account_id } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        List.concat
+                            [ pagingParameters paging
+                            , qps
+                                [ case exclude_types of
+                                    [] ->
+                                        Nothing
+
+                                    _ ->
+                                        exclude_types
+                                            |> List.map
+                                                (ED.encodeNotificationType
+                                                    >> JE.encode 0
+                                                )
+                                            |> idListValue
+                                            |> Builder.string "exclude_types"
+                                            |> Just
+                                , sp "account_id" account_id
+                                ]
+                            ]
+                , decoder = decoders.notificationList
+            }
+
+        GetNotification { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.notification
+            }
+
+        PostClearNotifications ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, "clear" ] []
+                , decoder = decoders.ignore
+            }
+
+        PostDismissNotification { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, "dismiss" ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "id", JE.string id ) ]
+                , decoder = decoders.ignore
+            }
+
+
+pollsReq : PollsReq -> RawRequest -> RawRequest
+pollsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.polls
+    in
+    case req of
+        GetPoll { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.poll
+            }
+
+        PostVotes { id, choices } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "votes" ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            [ ( "choices", JE.list JE.int choices ) ]
+                , decoder = decoders.poll
             }

@@ -23,11 +23,13 @@ module Mastodon.EncodeDecode exposing
     , emojiDecoder, encodeEmoji
     , encodeStatus, statusDecoder
     , encodeError, errorDecoder
+    , encodePoll, pollDecoder
     , encodeFilter, filterDecoder
     , encodeFilterContext, filterContextDecoder
     , encodeInstance, instanceDecoder
     , encodeListEntity, listEntityDecoder
     , encodeNotification, notificationDecoder
+    , encodeNotificationType, notificationTypeDecoder
     , encodePushSubscription, pushSubscriptionDecoder
     , encodeRelationship, relationshipDecoder
     , encodeResults, resultsDecoder
@@ -50,11 +52,13 @@ module Mastodon.EncodeDecode exposing
 @docs emojiDecoder, encodeEmoji
 @docs encodeStatus, statusDecoder
 @docs encodeError, errorDecoder
+@docs encodePoll, pollDecoder
 @docs encodeFilter, filterDecoder
 @docs encodeFilterContext, filterContextDecoder
 @docs encodeInstance, instanceDecoder
 @docs encodeListEntity, listEntityDecoder
 @docs encodeNotification, notificationDecoder
+@docs encodeNotificationType, notificationTypeDecoder
 @docs encodePushSubscription, pushSubscriptionDecoder
 @docs encodeRelationship, relationshipDecoder
 @docs encodeResults, resultsDecoder
@@ -157,6 +161,9 @@ encodeEntity entity =
         StatusEntity status ->
             encodeStatus status
 
+        PollEntity poll ->
+            encodePoll poll
+
         StatusListEntity statuses ->
             JE.list encodeStatus statuses
 
@@ -220,6 +227,7 @@ entityDecoder =
         , emojiDecoder |> JD.map EmojiEntity
         , JD.list emojiDecoder |> JD.map EmojiListEntity
         , statusDecoder |> JD.map StatusEntity
+        , pollDecoder |> JD.map PollEntity
         , JD.list statusDecoder |> JD.map StatusListEntity
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
@@ -876,6 +884,8 @@ historyDecoder =
         |> required "accounts" JD.int
 
 
+{-| Encode a `Poll`.
+-}
 encodePoll : Poll -> Value
 encodePoll poll =
     JE.object
@@ -895,6 +905,8 @@ optionalBoolDecoder =
         |> JD.andThen (Maybe.withDefault False >> JD.succeed)
 
 
+{-| Decode a `Poll`.
+-}
 pollDecoder : Decoder Poll
 pollDecoder =
     JD.succeed Poll
@@ -1183,6 +1195,8 @@ listEntityDecoder =
         |> required "title" JD.string
 
 
+{-| Encode a \`NotificationType.
+-}
 encodeNotificationType : NotificationType -> Value
 encodeNotificationType notificationType =
     JE.string <|
@@ -1200,6 +1214,8 @@ encodeNotificationType notificationType =
                 "FavouriteNotification"
 
 
+{-| Decode a \`NotificationType.
+-}
 notificationTypeDecoder : Decoder NotificationType
 notificationTypeDecoder =
     JD.string

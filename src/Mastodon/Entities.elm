@@ -438,7 +438,7 @@ type NotificationType
     | FavouriteNotification
 
 
-{-| Value for `Status.poll`.
+{-| Value for `Status.poll`, and an `Entity` in its own right.
 -}
 type alias Poll =
     { id : String
@@ -626,11 +626,13 @@ type Entity
     | ListEntityListEntity (List ListEntity)
     | AttachmentEntity Attachment
     | NotificationEntity Notification
+    | NotificationListEntity (List Notification)
     | PushSubscriptionEntity PushSubscription
     | RelationshipEntity Relationship
     | RelationshipListEntity (List Relationship)
     | ResultsEntity Results
     | StatusEntity Status
+    | PollEntity Poll
     | StatusListEntity (List Status)
     | ScheduledStatusEntity ScheduledStatus
     | ConversationEntity Conversation
