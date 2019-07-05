@@ -636,5 +636,7 @@ type Entity
     | PollEntity Poll
     | StatusListEntity (List Status)
     | ScheduledStatusEntity ScheduledStatus
+    | ScheduledStatusListEntity (List ScheduledStatus)
     | ConversationEntity Conversation
+    | ConversationListEntity (List Conversation)
     | StringListEntity (List String)

@@ -116,7 +116,7 @@ type alias Paging =
 -}
 type alias SourceUpdate =
     { privacy : Maybe String
-    , sensitive : Maybe Bool
+    , sensitive : Bool
     , language : Maybe Entities.ISO6391
     }
 
@@ -134,7 +134,7 @@ type AccountsReq
         , note : Maybe String
         , avatar : Maybe File
         , header : Maybe File
-        , locked : Maybe Bool
+        , locked : Bool
         , source : Maybe SourceUpdate
         , fields_attributes : Maybe (List Entities.Field)
         }
@@ -338,7 +338,7 @@ type ReportsReq
     = PostReports
         { account_id : String
         , status_ids : List String
-        , comment : String
+        , comment : Maybe String
         , forward : Bool
         }
 
@@ -380,6 +380,11 @@ type alias PollDefinition =
 {-| GET/POST /api/v1/statuses
 
 The `GetXxx` requests require no authentication token, unless the status has `Private` visibility.
+
+TODO:
+`PostStatus` should be accompanied by an `Idempotency-Key` header.
+See <https://stripe.com/blog/idempotency>.
+This code does NOT enable that, yet.
 
 -}
 type StatusesReq
@@ -432,7 +437,8 @@ type TimelinesReq
         , paging : Maybe Paging
         }
     | GetTagTimeline
-        { local : Bool
+        { hashtag : String
+        , local : Bool
         , only_media : Bool
         , paging : Maybe Paging
         }
@@ -500,6 +506,7 @@ apiReq =
     , search = "search"
     , statuses = "statuses"
     , timelines = "timelines"
+    , conversations = "conversations"
     }
 
 
@@ -683,9 +690,20 @@ requestToRawRequest serverInfo request =
                 PollsRequest req ->
                     pollsReq req raw
 
-                _ ->
-                    -- TODO, all the other `Request` types
-                    raw
+                ReportsRequest req ->
+                    reportsReq req raw
+
+                ScheduledStatusesRequest req ->
+                    scheduledStatusesReq req raw
+
+                SearchRequest req ->
+                    searchReq req raw
+
+                StatusesRequest req ->
+                    statusesReq req raw
+
+                TimelinesRequest req ->
+                    timelinesReq req raw
     in
     { res
         | url = "https://" ++ serverInfo.server ++ apiUrlPrefix ++ res.url
@@ -800,6 +818,16 @@ decoders =
         JD.list ED.notificationDecoder
             |> JD.map NotificationListEntity
     , poll = ED.pollDecoder |> JD.map PollEntity
+    , scheduledStatus = ED.scheduledStatusDecoder |> JD.map ScheduledStatusEntity
+    , scheduledStatusList =
+        JD.list ED.scheduledStatusDecoder
+            |> JD.map ScheduledStatusListEntity
+    , results = ED.resultsDecoder |> JD.map ResultsEntity
+    , context = ED.contextDecoder |> JD.map ContextEntity
+    , card = ED.cardDecoder |> JD.map CardEntity
+    , conversationList =
+        JD.list ED.conversationDecoder
+            |> JD.map ConversationListEntity
     }
 
 
@@ -835,9 +863,87 @@ accountsReq req rawreq =
                 , decoder = decoders.account
             }
 
-        PatchUpdateCredentials _ ->
-            -- TODO
-            rawreq
+        PatchUpdateCredentials { display_name, note, avatar, header, locked, source, fields_attributes } ->
+            { res
+                | method = m.patch
+                , url = relative [ r, "update_credentials" ] []
+                , body =
+                    Http.multipartBody <|
+                        List.concat
+                            [ case display_name of
+                                Nothing ->
+                                    []
+
+                                Just name ->
+                                    [ Http.stringPart "display_name" name ]
+                            , case note of
+                                Nothing ->
+                                    []
+
+                                Just n ->
+                                    [ Http.stringPart "note" n ]
+                            , case avatar of
+                                Nothing ->
+                                    []
+
+                                Just av ->
+                                    [ Http.filePart "avatar" av ]
+                            , case header of
+                                Nothing ->
+                                    []
+
+                                Just head ->
+                                    [ Http.filePart "header" head ]
+                            , [ Http.stringPart "locked" <|
+                                    if locked then
+                                        "true"
+
+                                    else
+                                        "false"
+                              ]
+                            , case source of
+                                Nothing ->
+                                    []
+
+                                Just src ->
+                                    List.concat
+                                        [ case src.privacy of
+                                            Nothing ->
+                                                []
+
+                                            Just privacy ->
+                                                [ Http.stringPart "source[privacy]"
+                                                    privacy
+                                                ]
+                                        , [ Http.stringPart "source[sensitive]" <|
+                                                if src.sensitive then
+                                                    "true"
+
+                                                else
+                                                    "false"
+                                          ]
+                                        , case src.language of
+                                            Nothing ->
+                                                []
+
+                                            Just language ->
+                                                [ Http.stringPart "source[language]"
+                                                    language
+                                                ]
+                                        ]
+                            , case fields_attributes of
+                                Nothing ->
+                                    []
+
+                                Just attributes ->
+                                    [ Http.stringPart "fields_attributes" <|
+                                        (JE.list ED.encodeField attributes
+                                            |> JE.encode 0
+                                        )
+                                    ]
+                            ]
+                , decoder = decoders.account
+            }
 
         GetFollowers { id, limit } ->
             { res
@@ -1583,4 +1689,337 @@ pollsReq req rawreq =
                         JE.object
                             [ ( "choices", JE.list JE.int choices ) ]
                 , decoder = decoders.poll
+            }
+
+
+reportsReq : ReportsReq -> RawRequest -> RawRequest
+reportsReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.post }
+
+        r =
+            apiReq.reports
+    in
+    case req of
+        PostReports { account_id, status_ids, comment, forward } ->
+            { res
+                | url =
+                    relative [ r ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            (List.concat
+                                [ [ ( "account_id", JE.string account_id ) ]
+                                , if status_ids == [] then
+                                    []
+
+                                  else
+                                    [ ( "status_ids", JE.list JE.string status_ids ) ]
+                                , case comment of
+                                    Nothing ->
+                                        []
+
+                                    Just c ->
+                                        [ ( "comment", JE.string c ) ]
+                                , if forward then
+                                    [ ( "forward", JE.bool True ) ]
+
+                                  else
+                                    []
+                                ]
+                            )
+                , decoder = decoders.ignore
+            }
+
+
+scheduledStatusesReq : ScheduledStatusesReq -> RawRequest -> RawRequest
+scheduledStatusesReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.scheduled_statuses
+    in
+    case req of
+        GetScheduledStatuses ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.scheduledStatusList
+            }
+
+        GetScheduledStatus { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.scheduledStatus
+            }
+
+        PutScheduledStatus { id, scheduled_at } ->
+            { res
+                | method = m.put
+                , url =
+                    relative [ r, id ] []
+                , body =
+                    case scheduled_at of
+                        Nothing ->
+                            Http.emptyBody
+
+                        Just sa ->
+                            Http.jsonBody <|
+                                JE.object
+                                    [ ( "scheduled_at", JE.string sa ) ]
+                , decoder = decoders.scheduledStatus
+            }
+
+        DeleteScheduledStatus { id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id ] []
+                , decoder = decoders.ignore
+            }
+
+
+searchReq : SearchReq -> RawRequest -> RawRequest
+searchReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.search
+    in
+    case req of
+        GetSearch { q, resolve, limit, offset, following } ->
+            { res
+                | url =
+                    relative [ r ] <|
+                        qps
+                            [ bp "resolve" resolve
+                            , ip "limit" limit
+                            , ip "offset" offset
+                            , bp "following" following
+                            ]
+                , decoder = decoders.results
+            }
+
+
+statusesReq : StatusesReq -> RawRequest -> RawRequest
+statusesReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.statuses
+    in
+    case req of
+        GetStatus { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.status
+            }
+
+        GetStatusContext { id } ->
+            { res
+                | url =
+                    relative [ r, id, "context" ] []
+                , decoder = decoders.context
+            }
+
+        GetStatusCard { id } ->
+            { res
+                | url =
+                    relative [ r, id, "card" ] []
+                , decoder = decoders.card
+            }
+
+        GetStatusRebloggedBy { id, limit } ->
+            { res
+                | url =
+                    relative [ r, id, "reblogged_by" ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.account
+            }
+
+        GetStatusFavouritedBy { id, limit } ->
+            { res
+                | url =
+                    relative [ r, id, "favourited_by" ] <|
+                        qps [ ip "limit" limit ]
+                , decoder = decoders.account
+            }
+
+        -- Caller needs to handle unique Idempotency-Key header
+        PostStatus { status, in_reply_to_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language } ->
+            -- If spoiler_text is included, then sensitive will be passed as true
+            { res
+                | method = m.post
+                , url = relative [ r ] []
+                , body =
+                    Http.jsonBody <|
+                        JE.object
+                            (List.concat
+                                [ case status of
+                                    Nothing ->
+                                        []
+
+                                    Just s ->
+                                        [ ( "status", JE.string s ) ]
+                                , case in_reply_to_id of
+                                    Nothing ->
+                                        []
+
+                                    Just id ->
+                                        [ ( "in_reply_to_id", JE.string id ) ]
+                                , if media_ids == [] then
+                                    []
+
+                                  else
+                                    [ ( "media_ids", JE.list JE.string media_ids ) ]
+                                , case poll of
+                                    Nothing ->
+                                        []
+
+                                    Just p ->
+                                        [ ( "poll"
+                                          , JE.object
+                                                [ ( "options", JE.list JE.string p.options )
+                                                , ( "expires_in", JE.int p.expires_in )
+                                                , ( "multiple", JE.bool p.multiple )
+                                                , ( "hide_totals", JE.bool p.hide_totals )
+                                                ]
+                                          )
+                                        ]
+                                , case spoiler_text of
+                                    Nothing ->
+                                        []
+
+                                    Just text ->
+                                        [ ( "sensitive", JE.bool True )
+                                        , ( "spoiler_text", JE.string text )
+                                        ]
+                                , [ ( "visibility", ED.encodeVisibility visibility ) ]
+                                , case scheduled_at of
+                                    Nothing ->
+                                        []
+
+                                    Just timestamp ->
+                                        [ ( "scheduled_at", JE.string timestamp ) ]
+                                , case language of
+                                    Nothing ->
+                                        []
+
+                                    Just lang ->
+                                        [ ( "language", JE.string lang ) ]
+                                ]
+                            )
+                , decoder = decoders.status
+            }
+
+        DeleteStatus { id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id ] []
+                , decoder = decoders.ignore
+            }
+
+        PostReblogStatus { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "reblog" ] []
+                , decoder = decoders.status
+            }
+
+        PostUnreblogStatus { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "unreblog" ] []
+                , decoder = decoders.status
+            }
+
+        PostPinStatus { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "pin" ] []
+                , decoder = decoders.status
+            }
+
+        PostUnpinStatus { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "unpin" ] []
+                , decoder = decoders.status
+            }
+
+
+timelinesReq : TimelinesReq -> RawRequest -> RawRequest
+timelinesReq req rawreq =
+    let
+        res =
+            { rawreq | method = m.get }
+
+        r =
+            apiReq.timelines
+    in
+    case req of
+        GetHomeTimeline { paging } ->
+            { res
+                | url =
+                    relative [ r, "home" ] <|
+                        pagingParameters paging
+                , decoder = decoders.statusList
+            }
+
+        GetConversations { paging } ->
+            { res
+                | url =
+                    relative [ apiReq.conversations ] <|
+                        pagingParameters paging
+                , decoder = decoders.conversationList
+            }
+
+        GetPublicTimeline { local, only_media, paging } ->
+            { res
+                | url =
+                    relative [ r, "public" ] <|
+                        List.concat
+                            [ qps
+                                [ bp "local" local
+                                , bp "only_media" only_media
+                                ]
+                            , pagingParameters paging
+                            ]
+                , decoder = decoders.statusList
+            }
+
+        GetTagTimeline { hashtag, local, only_media, paging } ->
+            { res
+                | url =
+                    relative [ r, "tag", hashtag ] <|
+                        List.concat
+                            [ qps
+                                [ bp "local" local
+                                , bp "only_media" only_media
+                                ]
+                            , pagingParameters paging
+                            ]
+                , decoder = decoders.statusList
+            }
+
+        GetListTimeline { list_id, paging } ->
+            { res
+                | url =
+                    relative [ r, "list", list_id ] <|
+                        pagingParameters paging
+                , decoder = decoders.statusList
             }

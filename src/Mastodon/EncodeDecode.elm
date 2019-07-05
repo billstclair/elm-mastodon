@@ -13,6 +13,7 @@
 module Mastodon.EncodeDecode exposing
     ( encodeEntity, entityDecoder
     , accountDecoder, encodeAccount
+    , fieldDecoder, encodeField
     , appDecoder, encodeApp
     , sourceDecoder, encodeSource
     , tokenDecoder, encodeToken
@@ -20,6 +21,7 @@ module Mastodon.EncodeDecode exposing
     , attachmentDecoder, encodeAttachment
     , cardDecoder, encodeCard
     , contextDecoder, encodeContext
+    , visibilityDecoder, encodeVisibility
     , emojiDecoder, encodeEmoji
     , encodeStatus, statusDecoder
     , encodeError, errorDecoder
@@ -42,6 +44,7 @@ module Mastodon.EncodeDecode exposing
 
 @docs encodeEntity, entityDecoder
 @docs accountDecoder, encodeAccount
+@docs fieldDecoder, encodeField
 @docs appDecoder, encodeApp
 @docs sourceDecoder, encodeSource
 @docs tokenDecoder, encodeToken
@@ -49,6 +52,7 @@ module Mastodon.EncodeDecode exposing
 @docs attachmentDecoder, encodeAttachment
 @docs cardDecoder, encodeCard
 @docs contextDecoder, encodeContext
+@docs visibilityDecoder, encodeVisibility
 @docs emojiDecoder, encodeEmoji
 @docs encodeStatus, statusDecoder
 @docs encodeError, errorDecoder
@@ -791,6 +795,8 @@ encodeWrappedStatus (WrappedStatus status) =
     encodeStatus status
 
 
+{-| Encode a `Visibility`.
+-}
 encodeVisibility : Visibility -> Value
 encodeVisibility visibility =
     JE.string <|
@@ -808,6 +814,8 @@ encodeVisibility visibility =
                 "DirectVisibility"
 
 
+{-| Decode a `Visibility`.
+-}
 visibilityDecoder : Decoder Visibility
 visibilityDecoder =
     JD.string
