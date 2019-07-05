@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Mastodon.Requests exposing
+module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
     , RawRequest
     , serverRequest, requestToRawRequest, rawRequestToCmd
@@ -72,7 +72,7 @@ import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 import Mastodon.EncodeDecode as ED exposing (encodeMaybe)
-import Mastodon.Entities as Entities
+import Mastodon.Entity as Entity
     exposing
         ( Entity(..)
         , FilterContext(..)
@@ -136,7 +136,7 @@ type alias Paging =
 type alias SourceUpdate =
     { privacy : Maybe String
     , sensitive : Bool
-    , language : Maybe Entities.ISO6391
+    , language : Maybe Entity.ISO6391
     }
 
 
@@ -165,7 +165,7 @@ type AccountsReq
         , header : Maybe File
         , locked : Bool
         , source : Maybe SourceUpdate
-        , fields_attributes : Maybe (List Entities.Field)
+        , fields_attributes : Maybe (List Entity.Field)
         }
     | GetFollowers { id : String, limit : Maybe Int }
     | GetFollowing { id : String, limit : Maybe Int }
@@ -354,12 +354,12 @@ type MediaAttachmentsReq
     = PostMedia
         { file : File
         , description : Maybe String
-        , focus : Maybe Entities.Focus
+        , focus : Maybe Entity.Focus
         }
     | PutMedia
         { id : String
         , description : Maybe String
-        , focus : Maybe Entities.Focus
+        , focus : Maybe Entity.Focus
         }
 
 
@@ -399,7 +399,7 @@ This doesn't yet define requests for "POST /api/v1/push/subscription",
 type NotificationsReq
     = GetNotifications
         { paging : Maybe Paging
-        , exclude_types : List Entities.NotificationType
+        , exclude_types : List Entity.NotificationType
         , account_id : Maybe String
         }
     | GetNotification { id : String }
@@ -526,9 +526,9 @@ type StatusesReq
 
         -- If included, then sensitive will be passed as true
         , spoiler_text : Maybe String
-        , visibility : Entities.Visibility
-        , scheduled_at : Maybe Entities.Datetime
-        , language : Maybe Entities.ISO6391
+        , visibility : Entity.Visibility
+        , scheduled_at : Maybe Entity.Datetime
+        , language : Maybe Entity.ISO6391
         }
     | DeleteStatus { id : String }
     | PostReblogStatus { id : String }

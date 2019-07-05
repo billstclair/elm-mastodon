@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------
 --
--- Entities.elm
+-- Entity.elm
 -- Mastodon API entities.
 -- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Mastodon.Entities exposing
+module Mastodon.Entity exposing
     ( Entity(..)
     , Datetime, UrlString, HtmlString, ISO6391, ISO6392, UnixTimestamp
     , Account, Source, Token, Application, App
@@ -32,7 +32,7 @@ These are JSON-encoded over the wire. Mastodon.EncodeDecode knows how to do that
 
 Documented at <https://docs.joinmastodon.org/api/entities/>
 
-Most of the Entities have a `v` field, which is the raw JS value from
+Most of the Entity have a `v` field, which is the raw JS value from
 which it was decoded. This is useful if you want to display what you
 got over the wire. Code that creates these can set it to
 `Json.Encode.null`.

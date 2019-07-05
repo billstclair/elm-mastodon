@@ -90,7 +90,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
-import Mastodon.Entities as Entities
+import Mastodon.Entity as Entity
     exposing
         ( Account
         , App

@@ -6,7 +6,7 @@ import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 import List
 import Mastodon.EncodeDecode as ED exposing (encodeEntity, entityDecoder)
-import Mastodon.Entities as Entities
+import Mastodon.Entity as Entity
     exposing
         ( Account
         , App
