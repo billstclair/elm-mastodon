@@ -87,6 +87,13 @@ import Url.Builder as Builder exposing (QueryParameter, relative)
 
 Broken down as in the documentation.
 
+The result types are mostly documented in the individual `Request` element types,
+with two exceptions:
+
+`InstanceRequest` results in an `InstanceEntity`.
+
+`CustomEmojisRequest` results in an `EmojiListEntity`.
+
 `InstanceRequest` and `CustomEmojisRequest` do not require an authentication token.
 
 -}
@@ -642,9 +649,9 @@ type Error
 
 Usually, you will let `serverRequest` create one of these internally.
 
-Sometimes, however, you need to create one yourself, and then call
-`rawRequestToCmd` or call `requestToRawRequest` to create one, make
-some changes to it, and then call `rawRequestToCmd`.
+Sometimes, however, you need to create one yourself, or call
+`requestToRawRequest` to make one, make changes to it, and then call
+`rawRequestToCmd`.
 
 -}
 type alias RawRequest =
@@ -667,9 +674,6 @@ You will often pass `[]` for headers, but including a "User-Agent" header
 is usually a good idea. For example, <https://mammudeck.com> uses:
 
     [ Mastodon.Request.userAgentHeader "Mammudeck" ]
-
-The result types are mostly documented in the individual `Request` element types,
-with one exception: `InstanceRequest` results in an `InstanceEntity`.
 
 -}
 serverRequest : (id -> Result Error Response -> msg) -> List Http.Header -> ServerInfo -> id -> Request -> Cmd msg
@@ -787,9 +791,6 @@ You will usually not call this yourself, but let `serverRequest` do it internall
 
 Sometimes, however, you need to call this to create a `RawRequest`, modify it,
 and then call `rawRequestToCmd` to turn it into a `Cmd`.
-
-The result types are mostly documented in the individual `Request` element types,
-with one exception: `InstanceRequest` results in an `InstanceEntity`.
 
 -}
 requestToRawRequest : List Http.Header -> ServerInfo -> Request -> RawRequest

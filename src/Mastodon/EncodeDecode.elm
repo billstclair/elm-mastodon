@@ -42,7 +42,18 @@ module Mastodon.EncodeDecode exposing
 
 {-| Encoders and Decoders for JSON that goes over the wire.
 
+You will rarely use any of these. Encoding and decoding will usually
+be done for you by by `Mastodon.Requests.requestToRawRequest`, which
+your code will call indirectly via `Mastodon.Requests.serverRequest`.
+
+
+# For the one type to rule them all
+
 @docs encodeEntity, entityDecoder
+
+
+# For the individual entity types
+
 @docs accountDecoder, encodeAccount
 @docs fieldDecoder, encodeField
 @docs appDecoder, encodeApp
