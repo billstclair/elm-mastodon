@@ -379,7 +379,7 @@ type alias PollDefinition =
 
 {-| GET/POST /api/v1/statuses
 
-The `GetXxx` requests require no authentication token, unless the status has `Private` visibility.
+The `GetXxx` requests require no authentication token.
 
 TODO:
 `PostStatus` should be accompanied by an `Idempotency-Key` header.
@@ -547,7 +547,7 @@ serverRequest tagger serverInfo id request =
 
 rawRequestToCmd : (Result Error Response -> msg) -> RawRequest -> Cmd msg
 rawRequestToCmd tagger rawRequest =
-    if rawRequest.method == "" then
+    if rawRequest.url == "" then
         Cmd.none
 
     else
@@ -611,7 +611,7 @@ Exposed only for testing in `elm repl`.
 -}
 emptyRawRequest : RawRequest
 emptyRawRequest =
-    { method = ""
+    { method = m.get
     , token = Nothing
     , url = ""
     , body = Http.emptyBody
@@ -842,11 +842,8 @@ decoders =
 
 
 accountsReq : AccountsReq -> RawRequest -> RawRequest
-accountsReq req rawreq =
+accountsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.accounts
     in
@@ -1030,11 +1027,8 @@ accountsReq req rawreq =
 
 
 appsReq : AppsReq -> RawRequest -> RawRequest
-appsReq req rawreq =
+appsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.apps
     in
@@ -1074,11 +1068,8 @@ appsReq req rawreq =
 
 
 blocksReq : BlocksReq -> RawRequest -> RawRequest
-blocksReq req rawreq =
+blocksReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.blocks
     in
@@ -1107,11 +1098,8 @@ blocksReq req rawreq =
 
 
 customEmojisRequest : RawRequest -> RawRequest
-customEmojisRequest rawreq =
+customEmojisRequest res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.custom_emojis
     in
@@ -1122,11 +1110,8 @@ customEmojisRequest rawreq =
 
 
 domainBlocksReq : DomainBlocksReq -> RawRequest -> RawRequest
-domainBlocksReq req rawreq =
+domainBlocksReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.domain_blocks
     in
@@ -1159,11 +1144,8 @@ domainBlocksReq req rawreq =
 
 
 endorsementsReq : EndorsementsReq -> RawRequest -> RawRequest
-endorsementsReq req rawreq =
+endorsementsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.endorsements
     in
@@ -1193,11 +1175,8 @@ endorsementsReq req rawreq =
 
 
 favouritesReq : FavouritesReq -> RawRequest -> RawRequest
-favouritesReq req rawreq =
+favouritesReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.favourites
     in
@@ -1228,11 +1207,8 @@ favouritesReq req rawreq =
 
 
 filtersReq : FiltersReq -> RawRequest -> RawRequest
-filtersReq req rawreq =
+filtersReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.filters
     in
@@ -1295,11 +1271,8 @@ filtersReq req rawreq =
 
 
 followReq : FollowReq -> RawRequest -> RawRequest
-followReq req rawreq =
+followReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.follow_requests
     in
@@ -1330,11 +1303,8 @@ followReq req rawreq =
 
 
 followSuggestionsReq : FollowSuggestionsReq -> RawRequest -> RawRequest
-followSuggestionsReq req rawreq =
+followSuggestionsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.suggestions
     in
@@ -1356,11 +1326,8 @@ followSuggestionsReq req rawreq =
 
 
 instanceReq : RawRequest -> RawRequest
-instanceReq rawreq =
+instanceReq res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.instance
     in
@@ -1372,11 +1339,8 @@ instanceReq rawreq =
 
 
 listsReq : ListsReq -> RawRequest -> RawRequest
-listsReq req rawreq =
+listsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.lists
     in
@@ -1474,11 +1438,8 @@ listsReq req rawreq =
 
 
 mediaAttachmentsReq : MediaAttachmentsReq -> RawRequest -> RawRequest
-mediaAttachmentsReq req rawreq =
+mediaAttachmentsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.media
     in
@@ -1544,11 +1505,8 @@ mediaAttachmentsReq req rawreq =
 
 
 mutesReq : MutesReq -> RawRequest -> RawRequest
-mutesReq req rawreq =
+mutesReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.mutes
     in
@@ -1599,11 +1557,8 @@ mutesReq req rawreq =
 
 
 notificationsReq : NotificationsReq -> RawRequest -> RawRequest
-notificationsReq req rawreq =
+notificationsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.notifications
     in
@@ -1663,11 +1618,8 @@ notificationsReq req rawreq =
 
 
 pollsReq : PollsReq -> RawRequest -> RawRequest
-pollsReq req rawreq =
+pollsReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.polls
     in
@@ -1693,18 +1645,16 @@ pollsReq req rawreq =
 
 
 reportsReq : ReportsReq -> RawRequest -> RawRequest
-reportsReq req rawreq =
+reportsReq req res =
     let
-        res =
-            { rawreq | method = m.post }
-
         r =
             apiReq.reports
     in
     case req of
         PostReports { account_id, status_ids, comment, forward } ->
             { res
-                | url =
+                | method = m.post
+                , url =
                     relative [ r ] []
                 , body =
                     Http.jsonBody <|
@@ -1734,11 +1684,8 @@ reportsReq req rawreq =
 
 
 scheduledStatusesReq : ScheduledStatusesReq -> RawRequest -> RawRequest
-scheduledStatusesReq req rawreq =
+scheduledStatusesReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.scheduled_statuses
     in
@@ -1784,11 +1731,8 @@ scheduledStatusesReq req rawreq =
 
 
 searchReq : SearchReq -> RawRequest -> RawRequest
-searchReq req rawreq =
+searchReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.search
     in
@@ -1808,11 +1752,8 @@ searchReq req rawreq =
 
 
 statusesReq : StatusesReq -> RawRequest -> RawRequest
-statusesReq req rawreq =
+statusesReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.statuses
     in
@@ -1963,11 +1904,8 @@ statusesReq req rawreq =
 
 
 timelinesReq : TimelinesReq -> RawRequest -> RawRequest
-timelinesReq req rawreq =
+timelinesReq req res =
     let
-        res =
-            { rawreq | method = m.get }
-
         r =
             apiReq.timelines
     in
