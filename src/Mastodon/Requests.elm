@@ -12,12 +12,14 @@
 
 module Mastodon.Requests exposing
     ( ServerInfo, Request(..), Response, Error(..)
-    , serverRequest
+    , RawRequest
+    , serverRequest, requestToRawRequest, rawRequestToCmd
     , AccountsReq(..), AppsReq(..), BlocksReq(..), FavouritesReq(..)
     , FollowReq(..), MediaAttachmentsReq(..), MutesReq(..), NotificationsReq(..)
     , PollsReq(..), ReportsReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
     , Paging, SourceUpdate, PollDefinition
-    , emptyRawRequest, emptyServerInfo, requestToRawRequest
+    , userAgentHeader, idempotencyKeyHeader
+    , emptyRawRequest, emptyServerInfo
     )
 
 {-| Types to represent the Mastodon REST API.
@@ -32,9 +34,14 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 @docs ServerInfo, Request, Response, Error
 
 
+# Less-used Type
+
+@docs RawRequest
+
+
 # Creating an HTTP request
 
-@docs serverRequest
+@docs serverRequest, requestToRawRequest, rawRequestToCmd
 
 
 # Request details
@@ -49,9 +56,14 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 @docs Paging, SourceUpdate, PollDefinition
 
 
+# Utility
+
+@docs userAgentHeader, idempotencyKeyHeader
+
+
 # Testing
 
-@docs emptyRawRequest, emptyServerInfo, requestToRawRequest
+@docs emptyRawRequest, emptyServerInfo
 
 -}
 
@@ -125,6 +137,16 @@ type alias SourceUpdate =
 
 `GetAccount` does not require an authentication token.
 
+`GetAccount`, `GetVerifyCredentials`, and `PatchUpdateCredentials` result in an `AccountEntity`.
+
+`GetFollowers`, `GetFollowing`, and `GetSearchAccounts` resul in an `AccountListEntity`.
+
+`GetStatuses` results in a `StatusListEntity`.
+
+`PostFollow` and `PostUnfollow` result in a `RelationshipEntity`.
+
+`GetRelationships` results in a `RelationshipListEntity`.
+
 -}
 type AccountsReq
     = GetAccount { id : String }
@@ -160,6 +182,9 @@ type AccountsReq
 
 
 {-| GET/POST /api/v1/apps
+
+`PostApp` results in an `AppEntity`.
+
 -}
 type AppsReq
     = PostApp
@@ -172,6 +197,11 @@ type AppsReq
 
 
 {-| GET/POST /api/v1/blocks
+
+`GetBlocks` results in an `AccountListEntity`.
+
+`PostBlock` and `PostUnblock` result in a `RelationshipEntity`.
+
 -}
 type BlocksReq
     = GetBlocks { limit : Maybe Int }
@@ -180,6 +210,11 @@ type BlocksReq
 
 
 {-| GET/POST /api/v8/domain\_blocks
+
+`GetDomainBlocks` results in a `StringListEntity`, a list of domain names.
+
+`PostDomainBlock` and `DeleteDomainBlock` result in `NoEntity`.
+
 -}
 type DomainBlocksReq
     = GetDomainBlocks { limit : Maybe Int }
@@ -188,6 +223,11 @@ type DomainBlocksReq
 
 
 {-| GET/POST /api/v1/endorsements
+
+`GetEndorsements` results in an `AccountListEntity`.
+
+`PostPinAccount` and `PostUnpinAccount` result in a `RelationshipEntity`.
+
 -}
 type EndorsementsReq
     = GetEndorsements
@@ -196,6 +236,11 @@ type EndorsementsReq
 
 
 {-| GET/POST /api/v1/favourites
+
+`GetFavourites` results in a `StatusListEntity`.
+
+`PostFavourite` and `PostUnfavorite` result in a `StatusEntity`.
+
 -}
 type FavouritesReq
     = GetFavourites { limit : Maybe Int }
@@ -204,6 +249,13 @@ type FavouritesReq
 
 
 {-| GET/POST/PUT /api/v1/filters
+
+`GetFilters` results in a `FilterListEntity`.
+
+`PostFilter`, `GetFilter`, and `PutFilter` result in a `FilterEntity`.
+
+`DeleteFilter` results in `NoEntity`.
+
 -}
 type FiltersReq
     = GetFilters
@@ -227,6 +279,11 @@ type FiltersReq
 
 
 {-| GET/POST /api/v1/follow\_requests
+
+`GetFollowRequest` results in an `AccountEntity`.
+
+`PostAuthorizeFollow` and `PostRejectFollow` result in `NoEntity`.
+
 -}
 type FollowReq
     = GetFollowRequest { limit : Maybe Int }
@@ -235,6 +292,11 @@ type FollowReq
 
 
 {-| GET/DELETE /api/v1/suggestions
+
+`GetFollowSuggestions` results in an `AccountListEntity`.
+
+`DeleteFollowSuggestions` results in `NoEntity`.
+
 -}
 type FollowSuggestionsReq
     = GetFollowSuggestions
@@ -242,6 +304,15 @@ type FollowSuggestionsReq
 
 
 {-| GET/POST/PUT/DELETE /api/v1/lists
+
+`GetLists` and `GetAccountLists` result in a `ListEntityEntity`.
+
+`GetListAccounts` results in an `AccountListEntity`.
+
+`GetList`, `PostList`, and `PutList` result in a `ListEntity`.
+
+`PostListAccounts` and `DeleteListAccounts` result in `NoEntity`.
+
 -}
 type ListsReq
     = GetLists
@@ -268,6 +339,9 @@ type ListsReq
 
 
 {-| GET/POST /api/v1/media
+
+`PostMedia` and `PutMedia` result in an `AttachmentEntity`.
+
 -}
 type MediaAttachmentsReq
     = PostMedia
@@ -283,6 +357,13 @@ type MediaAttachmentsReq
 
 
 {-| GET/POST /api/v1/mutes
+
+`GetAccountMutes` results in an `AccountListEntity`.
+
+`PostAccountMute` and `PostAccountUnmute` result in a `RelationshipEntity`.
+
+`PostStatusMute` and `PostStatusUnmute` result in a `StatusEntity`.
+
 -}
 type MutesReq
     = GetAccountMutes { limit : Maybe Int }
@@ -297,7 +378,13 @@ type MutesReq
 
 {-| GET/POST /api/v1/notifications
 
-This doesn't yet define "POST /api/v1/push/subscription",
+`GetNotifications` results in a `NotificationListEntity`.
+
+`GetNotification` results in `NotificationEntity`.
+
+`PostClearNotifications` and `PostDismissNotifications` result in `NoEntity`.
+
+This doesn't yet define requests for "POST /api/v1/push/subscription",
 "GET /api/v1/push/subscription", "PUT /api/v1/push/subscription", or
 "DELETE /api/v1/push/subscription".
 
@@ -321,6 +408,8 @@ type NotificationsReq
 
 {-| GET/POST /api/v1/polls
 
+`GetPoll` and `PostVotes` result in a `PollInstance`.
+
 `GetPoll` does not require an authentication token.
 
 -}
@@ -333,6 +422,9 @@ type PollsReq
 
 
 {-| POST /api/v1/reports
+
+`PostReports` results in `NoInstance`.
+
 -}
 type ReportsReq
     = PostReports
@@ -344,6 +436,13 @@ type ReportsReq
 
 
 {-| GET/PUT /api/v1/scheduled\_statuses
+
+`GetScheduledStatuses` results in a `ScheduledStatusListInstance`.
+
+`GetScheduledStatus` and `PutScheduledStatus` result in a `ScheduledStatusInstance`.
+
+`DeleteScheduledStatus` results in `NoInstance`.
+
 -}
 type ScheduledStatusesReq
     = GetScheduledStatuses
@@ -356,6 +455,9 @@ type ScheduledStatusesReq
 
 
 {-| GET/POST /api/v1/search
+
+`GetSearch` results in a `ResultsInstance`.
+
 -}
 type SearchReq
     = GetSearch
@@ -379,12 +481,21 @@ type alias PollDefinition =
 
 {-| GET/POST /api/v1/statuses
 
+`GetStatus`, `PostStatus`, `PostReblogStatus`, `PostUnreblogStatus`, `PostPinStatus`, and `PostUnpinStatus` result in a `StatusEntity`.
+
+`GetStatusContext` results in a `ContextEntity`.
+
+`GetStatusCard` results in a `CardEntity`.
+
+`GetStatusRebloggedBy` and `GetStatusFavouritedBy` result in an `AccountListEntity`.
+
+`DeleteStatus` results in `NoEntity`.
+
 The `GetXxx` requests require no authentication token.
 
-TODO:
-`PostStatus` should be accompanied by an `Idempotency-Key` header.
+`PostStatus` should be accompanied by an `Idempotency-Key` header,
+which you can create with `IdempotencyKeyHeader`.
 See <https://stripe.com/blog/idempotency>.
-This code does NOT enable that, yet.
 
 -}
 type StatusesReq
@@ -420,6 +531,10 @@ type StatusesReq
 
 
 {-| GET/POST /api/v1/timelines
+
+`GetHomeTimeline`, `GetPublicTimeline`, `GetTagTimeline`, and `GetListTimeline` result in a `StatusListEntity`.
+
+`GetConversations` results in a `ConversationListEntity`.
 
 `GetPublicTimeline` and `GetTagTimeline` do not require an authentication token.
 
@@ -523,10 +638,20 @@ type Error
     | BadBody Http.Metadata String
 
 
+{-| Represent an HTTP request.
+
+Usually, you will let `serverRequest` create one of these internally.
+
+Sometimes, however, you need to create one yourself, and then call
+`rawRequestToCmd` or call `requestToRawRequest` to create one, make
+some changes to it, and then call `rawRequestToCmd`.
+
+-}
 type alias RawRequest =
     { method : String
     , token : Maybe ResponseToken
     , url : String
+    , headers : List Http.Header
     , body : Http.Body
     , request : Request
     , decoder : Decoder Entity
@@ -536,15 +661,31 @@ type alias RawRequest =
 {-| Create an HTTP request for the server.
 
 The `id` is whatever you need, besides the `Request`, to identify the returned
-`Error` or `Response`
+`Error` or `Response`.
+
+You will often pass `[]` for headers, but including a "User-Agent" header
+is usually a good idea. For example, <https://mammudeck.com> uses:
+
+    [ Mastodon.Request.userAgentHeader "Mammudeck" ]
+
+The result types are mostly documented in the individual `Request` element types,
+with one exception: `InstanceRequest` results in an `InstanceEntity`.
 
 -}
-serverRequest : (id -> Result Error Response -> msg) -> ServerInfo -> id -> Request -> Cmd msg
-serverRequest tagger serverInfo id request =
-    requestToRawRequest serverInfo request
+serverRequest : (id -> Result Error Response -> msg) -> List Http.Header -> ServerInfo -> id -> Request -> Cmd msg
+serverRequest tagger headers serverInfo id request =
+    requestToRawRequest headers serverInfo request
         |> rawRequestToCmd (tagger id)
 
 
+{-| Convert a `RawRequest` into a `Cmd`.
+
+You will usually not call this yourself, but let `serverRequest` do it internally.
+
+Sometimes, however, you need to create a `RawRequest`, by hand or by calling
+`requestToRawRequest`, then pass it here to turn it into a `Cmd`.
+
+-}
 rawRequestToCmd : (Result Error Response -> msg) -> RawRequest -> Cmd msg
 rawRequestToCmd tagger rawRequest =
     if rawRequest.url == "" then
@@ -559,7 +700,7 @@ rawRequestToCmd tagger rawRequest =
                         []
 
                     Just token ->
-                        OAuthMiddleware.use token [ userAgentHeader ]
+                        OAuthMiddleware.use token rawRequest.headers
             , url = rawRequest.url
             , body = rawRequest.body
             , expect =
@@ -598,10 +739,20 @@ processResponse rawRequest response =
 
 
 {-| Only required by GitHub that I know of, but can't hurt.
+
+Pass whatever string describes your user agent. Or fake a common one.
+
 -}
-userAgentHeader : Http.Header
-userAgentHeader =
-    Http.header "User-Agent" "Mammudeck"
+userAgentHeader : String -> Http.Header
+userAgentHeader userAgent =
+    Http.header "User-Agent" userAgent
+
+
+{-| Create an "Idempotency-Key" header for use with `PostStatus`.
+-}
+idempotencyKeyHeader : String -> Http.Header
+idempotencyKeyHeader key =
+    Http.header "Idempotency-Key" key
 
 
 {-| An empty raw request.
@@ -614,6 +765,7 @@ emptyRawRequest =
     { method = m.get
     , token = Nothing
     , url = ""
+    , headers = []
     , body = Http.emptyBody
     , request = InstanceRequest
     , decoder = JD.fail "Unspecified decoder"
@@ -629,14 +781,24 @@ emptyServerInfo =
     }
 
 
-{-| Exposed for testing in `elm repl`.
+{-| Convert a Request into a RawRequest.
+
+You will usually not call this yourself, but let `serverRequest` do it internally.
+
+Sometimes, however, you need to call this to create a `RawRequest`, modify it,
+and then call `rawRequestToCmd` to turn it into a `Cmd`.
+
+The result types are mostly documented in the individual `Request` element types,
+with one exception: `InstanceRequest` results in an `InstanceEntity`.
+
 -}
-requestToRawRequest : ServerInfo -> Request -> RawRequest
-requestToRawRequest serverInfo request =
+requestToRawRequest : List Http.Header -> ServerInfo -> Request -> RawRequest
+requestToRawRequest headers serverInfo request =
     let
         raw =
             { emptyRawRequest
                 | token = serverInfo.token
+                , headers = headers
                 , request = request
             }
 
@@ -1528,7 +1690,7 @@ mutesReq req res =
                     Http.jsonBody <|
                         JE.object
                             [ ( "notifications", JE.bool notifications ) ]
-                , decoder = decoders.accountList
+                , decoder = decoders.relationship
             }
 
         PostAccountUnmute { id } ->
@@ -1784,7 +1946,7 @@ statusesReq req res =
                 | url =
                     relative [ r, id, "reblogged_by" ] <|
                         qps [ ip "limit" limit ]
-                , decoder = decoders.account
+                , decoder = decoders.accountList
             }
 
         GetStatusFavouritedBy { id, limit } ->
@@ -1792,7 +1954,7 @@ statusesReq req res =
                 | url =
                     relative [ r, id, "favourited_by" ] <|
                         qps [ ip "limit" limit ]
-                , decoder = decoders.account
+                , decoder = decoders.accountList
             }
 
         -- Caller needs to handle unique Idempotency-Key header
