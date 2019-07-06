@@ -23,6 +23,7 @@ module Mastodon.Entity exposing
     , ImageMetaInfo, VideoMetaInfo, Focus
     , CardType(..), FilterContext(..), URLs, Stats, NotificationType(..)
     , Visibility(..), Mention, Tag, History, Poll, PollOption, StatusParams
+    , Authorization
     , WrappedAccount(..), WrappedStatus(..)
     )
 
@@ -38,17 +39,17 @@ got over the wire. Code that creates these can set it to
 `Json.Encode.null`.
 
 
-## Entity
+# Entity
 
 @docs Entity
 
 
-## String aliases
+# String aliases
 
 @docs Datetime, UrlString, HtmlString, ISO6391, ISO6392, UnixTimestamp
 
 
-## Entities
+# Entities
 
 @docs Account, Source, Token, Application, App
 @docs Card, Context, Error, Filter, Instance
@@ -57,7 +58,7 @@ got over the wire. Code that creates these can set it to
 @docs Status, ScheduledStatus, Conversation
 
 
-## Entity field types
+# Entity field types
 
 @docs Emoji, Field, Attachment, AttachmentType
 @docs Meta, ImageMetaFields, VideoMetaFields
@@ -66,7 +67,12 @@ got over the wire. Code that creates these can set it to
 @docs Visibility, Mention, Tag, History, Poll, PollOption, StatusParams
 
 
-## Wrappers to prevent type recursion
+# Authorization parameters
+
+@docs Authorization
+
+
+# Wrappers to prevent type recursion
 
 @docs WrappedAccount, WrappedStatus
 
@@ -640,3 +646,16 @@ type Entity
     | ConversationEntity Conversation
     | ConversationListEntity (List Conversation)
     | StringListEntity (List String)
+
+
+{-| Authorization Parameters.
+
+Applications will usually save this in `localStorage`, use the saved token
+until it expires, then use the client ID and secret to mint a new token.
+
+-}
+type alias Authorization =
+    { clientId : String
+    , clientSecret : String
+    , token : String
+    }

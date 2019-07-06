@@ -12,13 +12,13 @@
 
 module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
-    , RawRequest
-    , serverRequest, requestToRawRequest, rawRequestToCmd
+    , serverRequest
     , AccountsReq(..), AppsReq(..), BlocksReq(..), FavouritesReq(..)
     , FollowReq(..), MediaAttachmentsReq(..), MutesReq(..), NotificationsReq(..)
     , PollsReq(..), ReportsReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
     , Paging, SourceUpdate, PollDefinition
     , userAgentHeader, idempotencyKeyHeader
+    , RawRequest, requestToRawRequest, rawRequestToCmd
     , emptyRawRequest, emptyServerInfo
     )
 
@@ -34,14 +34,9 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 @docs ServerInfo, Request, Response, Error
 
 
-# Less-used Type
-
-@docs RawRequest
-
-
 # Creating an HTTP request
 
-@docs serverRequest, requestToRawRequest, rawRequestToCmd
+@docs serverRequest
 
 
 # Request details
@@ -59,6 +54,11 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 # Utility
 
 @docs userAgentHeader, idempotencyKeyHeader
+
+
+# Low-level request creation
+
+@docs RawRequest, requestToRawRequest, rawRequestToCmd
 
 
 # Testing
@@ -588,7 +588,9 @@ type alias Response =
 
 {-| Used to create the HTTP URL and fill in its authentication token.
 
-Example `server`: "mastodon.social". It's the host name for the URL.
+It's the host name for the URL.
+
+Example `server`: "mastodon.social".
 
 A few requests do not require a token. Most do, and will error if you don't include one.
 

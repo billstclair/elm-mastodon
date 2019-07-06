@@ -37,6 +37,7 @@ module Mastodon.EncodeDecode exposing
     , encodeResults, resultsDecoder
     , encodeScheduledStatus, scheduledStatusDecoder
     , encodeConversation, conversationDecoder
+    , encodeAuthorization, authorizationDecoder
     , encodeMaybe
     )
 
@@ -81,6 +82,11 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodeConversation, conversationDecoder
 
 
+# Encoder and decoder for the login parameters.
+
+@docs encodeAuthorization, authorizationDecoder
+
+
 # Utilities
 
 @docs encodeMaybe
@@ -97,6 +103,7 @@ import Mastodon.Entity as Entity
         , Application
         , Attachment
         , AttachmentType(..)
+        , Authorization
         , Card
         , CardType(..)
         , Context
@@ -1444,3 +1451,24 @@ conversationDecoder =
         |> optional "last_status" (JD.nullable statusDecoder) Nothing
         |> required "unread" JD.bool
         |> custom JD.value
+
+
+{-| Encoder for `Authorization`.
+-}
+encodeAuthorization : Authorization -> Value
+encodeAuthorization authorization =
+    JE.object
+        [ ( "clientId", JE.string authorization.clientId )
+        , ( "clientSecret", JE.string authorization.clientSecret )
+        , ( "token", JE.string authorization.token )
+        ]
+
+
+{-| Decoder for `Authorization`.
+-}
+authorizationDecoder : Decoder Authorization
+authorizationDecoder =
+    JD.succeed Authorization
+        |> required "clientId" JD.string
+        |> required "clientSecret" JD.string
+        |> required "token" JD.string
