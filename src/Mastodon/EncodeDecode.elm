@@ -37,6 +37,7 @@ module Mastodon.EncodeDecode exposing
     , encodeResults, resultsDecoder
     , encodeScheduledStatus, scheduledStatusDecoder
     , encodeConversation, conversationDecoder
+    , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
     , encodeMaybe
     )
@@ -80,6 +81,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodeResults, resultsDecoder
 @docs encodeScheduledStatus, scheduledStatusDecoder
 @docs encodeConversation, conversationDecoder
+@docs encodeTag, tagDecoder
 
 
 # Encoder and decoder for the login parameters.
@@ -222,6 +224,9 @@ encodeEntity entity =
         ConversationEntity conversation ->
             encodeConversation conversation
 
+        TagListEntity tags ->
+            JE.list encodeTag tags
+
         StringListEntity stringList ->
             JE.list JE.string stringList
 
@@ -262,6 +267,7 @@ entityDecoder =
         , resultsDecoder |> JD.map ResultsEntity
         , scheduledStatusDecoder |> JD.map ScheduledStatusEntity
         , conversationDecoder |> JD.map ConversationEntity
+        , JD.list tagDecoder |> JD.map TagListEntity
         , JD.list JD.string |> JD.map StringListEntity
         ]
 
@@ -876,6 +882,8 @@ mentionDecoder =
         |> required "id" JD.string
 
 
+{-| Encode a `Tag`.
+-}
 encodeTag : Tag -> Value
 encodeTag { name, url, history } =
     JE.object
@@ -885,6 +893,8 @@ encodeTag { name, url, history } =
         ]
 
 
+{-| Decode a `Tag`.
+-}
 tagDecoder : Decoder Tag
 tagDecoder =
     JD.succeed Tag
@@ -1460,7 +1470,7 @@ encodeAuthorization authorization =
     JE.object
         [ ( "clientId", JE.string authorization.clientId )
         , ( "clientSecret", JE.string authorization.clientSecret )
-        , ( "token", JE.string authorization.token )
+        , ( "auhorization", JE.string authorization.authorization )
         ]
 
 
@@ -1471,4 +1481,4 @@ authorizationDecoder =
     JD.succeed Authorization
         |> required "clientId" JD.string
         |> required "clientSecret" JD.string
-        |> required "token" JD.string
+        |> required "authorization" JD.string

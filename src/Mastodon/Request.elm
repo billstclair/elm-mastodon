@@ -78,7 +78,6 @@ import Mastodon.Entity as Entity
         , FilterContext(..)
         , UnixTimestamp
         )
-import OAuthMiddleware exposing (ResponseToken)
 import Task
 import Url.Builder as Builder exposing (QueryParameter, relative)
 
@@ -88,11 +87,13 @@ import Url.Builder as Builder exposing (QueryParameter, relative)
 Broken down as in the documentation.
 
 The result types are mostly documented in the individual `Request` element types,
-with two exceptions:
+with these exceptions:
 
 `InstanceRequest` results in an `InstanceEntity`.
 
 `CustomEmojisRequest` results in an `EmojiListEntity`.
+
+`TrendsRequest` results in a `TagListEntity`.
 
 `InstanceRequest` and `CustomEmojisRequest` do not require an authentication token.
 
@@ -119,6 +120,7 @@ type Request
     | SearchRequest SearchReq
     | StatusesRequest StatusesReq
     | TimelinesRequest TimelinesReq
+    | TrendsRequest
 
 
 {-| Parameters to control paging for requests that return lists.
@@ -597,7 +599,7 @@ A few requests do not require a token. Most do, and will error if you don't incl
 -}
 type alias ServerInfo =
     { server : String
-    , token : Maybe ResponseToken
+    , authorization : Maybe String
     }
 
 
@@ -630,6 +632,7 @@ apiReq =
     , search = "search"
     , statuses = "statuses"
     , timelines = "timelines"
+    , trends = "trends"
     , conversations = "conversations"
     }
 
@@ -658,7 +661,7 @@ Sometimes, however, you need to create one yourself, or call
 -}
 type alias RawRequest =
     { method : String
-    , token : Maybe ResponseToken
+    , authorization : Maybe String
     , url : String
     , headers : List Http.Header
     , body : Http.Body
@@ -701,12 +704,13 @@ rawRequestToCmd tagger rawRequest =
         Http.request
             { method = rawRequest.method
             , headers =
-                case rawRequest.token of
+                case rawRequest.authorization of
                     Nothing ->
-                        []
+                        rawRequest.headers
 
-                    Just token ->
-                        OAuthMiddleware.use token rawRequest.headers
+                    Just auth ->
+                        Http.header "Authorization" auth
+                            :: rawRequest.headers
             , url = rawRequest.url
             , body = rawRequest.body
             , expect =
@@ -769,7 +773,7 @@ Exposed only for testing in `elm repl`.
 emptyRawRequest : RawRequest
 emptyRawRequest =
     { method = m.get
-    , token = Nothing
+    , authorization = Nothing
     , url = ""
     , headers = []
     , body = Http.emptyBody
@@ -783,7 +787,7 @@ emptyRawRequest =
 emptyServerInfo : ServerInfo
 emptyServerInfo =
     { server = "mastodon.social"
-    , token = Nothing
+    , authorization = Nothing
     }
 
 
@@ -800,7 +804,7 @@ requestToRawRequest headers serverInfo request =
     let
         raw =
             { emptyRawRequest
-                | token = serverInfo.token
+                | authorization = serverInfo.authorization
                 , headers = headers
                 , request = request
             }
@@ -869,6 +873,9 @@ requestToRawRequest headers serverInfo request =
 
                 TimelinesRequest req ->
                     timelinesReq req raw
+
+                TrendsRequest ->
+                    trendsReq raw
     in
     { res
         | url = "https://" ++ serverInfo.server ++ apiUrlPrefix ++ res.url
@@ -993,6 +1000,8 @@ decoders =
     , conversationList =
         JD.list ED.conversationDecoder
             |> JD.map ConversationListEntity
+    , tagList =
+        JD.list ED.tagDecoder |> JD.map TagListEntity
     }
 
 
@@ -2126,3 +2135,16 @@ timelinesReq req res =
                         pagingParameters paging
                 , decoder = decoders.statusList
             }
+
+
+trendsReq : RawRequest -> RawRequest
+trendsReq res =
+    let
+        r =
+            apiReq.trends
+    in
+    { res
+        | url =
+            relative [ r ] []
+        , decoder = decoders.tagList
+    }

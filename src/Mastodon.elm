@@ -39,8 +39,8 @@ See <https://docs.joinmastodon.org/api/guidelines/>
 
 import Http
 import Mastodon.Entity as Entity
+import Mastodon.Login as Login
 import Mastodon.Request as Request
-import OAuthMiddleware exposing (ResponseToken)
 
 
 {-| Used to create the HTTP URL and fill in its authentication token.
@@ -56,7 +56,7 @@ Copy of `Mastodon.Request.ServerInfo`.
 -}
 type alias ServerInfo =
     { server : String
-    , token : Maybe ResponseToken
+    , authorization : Maybe String
     }
 
 
@@ -114,7 +114,7 @@ Copy of `Mastodon.Entity.Authorization`
 type alias Authorization =
     { clientId : String
     , clientSecret : String
-    , token : String
+    , authorization : String
     }
 
 
@@ -127,27 +127,13 @@ type alias Account =
     Entity.Account
 
 
-{-| Get a token and, if possible, the logged in `Account` from the server.
+{-| Do everything necessary to login to a server.
 
-Arguments are:
+The `String` arg is a server url, e.g. "mastodon.social".
 
-    login tagger server maybeAuthorization
-
-If `maybeAuthorization` is not `Nothing`, will attempt to get an
-`Account` using `authorization.token` from there. If that fails, will
-attempt to mint a new token, using `authorization.clientId` and
-`authorization.clientSecret`. If that fails, or if
-`maybeAuthorization` is `Nothing`, will create a new `App` first.
-If it succeeds in getting a token, the tagged `Result` will be `Ok`,
-but its `Maybe Account` component may be `Nothing`, if that could not
-be fetched with the token.
-
-Usually, you will get an `Authorization` from persistent `localStorage`,
-pass that here, and successfully receive the `Authorization` back, along
-with the logged-in users's `Account`.
+See `Login.login` for details.
 
 -}
 login : (Result Error ( Authorization, Maybe Account ) -> msg) -> String -> Maybe Authorization -> Cmd msg
-login tagger server authorization =
-    -- TODO
-    Cmd.none
+login =
+    Login.login

@@ -646,16 +646,19 @@ type Entity
     | ConversationEntity Conversation
     | ConversationListEntity (List Conversation)
     | StringListEntity (List String)
+    | TagListEntity (List Tag)
 
 
 {-| Authorization Parameters.
 
 Applications will usually save this in `localStorage`, use the saved token
-until it expires, then use the client ID and secret to mint a new token.
+until it expires, then use the client ID and secret to mint a new authorization.
+
+The authorization is usually of the type "Bearer <token>".
 
 -}
 type alias Authorization =
     { clientId : String
     , clientSecret : String
-    , token : String
+    , authorization : String
     }
