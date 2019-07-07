@@ -1,30 +1,58 @@
-module Mastodon.Login exposing (login)
+module Mastodon.Login exposing (loginTask)
 
 {-| Support for creating an `App` and logging in to a server.
+
+@docs loginTask
+
 -}
 
-import Mastodon.Entity as Entity exposing (Account, Authorization)
-import Mastodon.Request as Request exposing (Error(..))
+import Browser.Navigation as Navigation
+import Mastodon.Entity as Entity exposing (Account, App, Authorization, Entity(..))
+import Mastodon.Request as Request
+    exposing
+        ( AccountsReq(..)
+        , AppsReq(..)
+        , Error(..)
+        , Request(..)
+        )
+import Task exposing (Task)
+
+
+{-| There should probably be a login version that takes scopes.
+-}
+scopes : List String
+scopes =
+    [ "write", "read", "follow", "push" ]
 
 
 {-| Get a token and, if possible, the logged in `Account` from the server.
 
+Returns a `Task` to either fetch an `Account` for a known authorization token,
+or to redirect to the authentication server to create a code with which
+to mint the token.
+
 Arguments are:
 
-    login tagger server maybeAuthorization
+    loginTask server applicationUri maybeAuthorization
 
 If `maybeAuthorization` is not `Nothing`, will attempt to get an
-`Account` using `authorization.token` from there. If that fails, will
+`Account` using `.authorization` from there. If that fails, will
 attempt to mint a new token, using `authorization.clientId` and
 `authorization.clientSecret`. If that fails, or if
-`maybeAuthorization` is `Nothing`, will create a new `App` first.
-If it succeeds in getting a token, the tagged `Result` will be `Ok`,
-but its `Maybe Account` component may be `Nothing`, if that could not
-be fetched with the token.
+`maybeAuthorization` is `Nothing`, will create a new `App`, and
+redirect to do authentication. When the application is restarted, with
+a code and state in the fragment, call `getTokenAndAccount` to
+continue use those to mint a new token, and to use that to get an
+`Account`.
 
-Usually, you will get an `Authorization` from persistent `localStorage`,
-pass that here, and successfully receive the `Authorization` back, along
-with the logged-in users's `Account`.
+Usually, you will get an `Authorization` from persistent
+`localStorage`, pass that here, and successfully receive the `Account`
+back. No redirects necessary. But the redirects must happen at least
+once, and then whenever the authorization token expires. This is step
+8 below. Only if that fails will this do step 3, or, if there was no
+persisted client id and secret, steps 1 through 3.
+
+Currently, permission for all scopes is requested.
 
 The full login procedure is as follows:
 
@@ -56,7 +84,80 @@ The full login procedure is as follows:
           "created_at":1561845912
         }
 
+8.  Use the `token_type` and `access_token` to authenticate a request
+    for the user's `Account`.
+
 -}
-login : (Result Error ( Authorization, Maybe Account ) -> msg) -> String -> Maybe Authorization -> Cmd msg
-login tagger server authorization =
-    Cmd.none
+loginTask : String -> String -> Maybe Authorization -> FetchAccountOrRedirect msg
+loginTask server applicationUri maybeAuthorization =
+    case maybeAuthorization of
+        Just { authorization } ->
+            let
+                request =
+                    AccountsRequest GetVerifyCredentials
+
+                rawRequest =
+                    Request.requestToRawRequest []
+                        { server = server, authorization = Just authorization }
+                        request
+
+                task =
+                    Request.rawRequestToTask rawRequest
+                        |> Task.andThen
+                            (\response ->
+                                case response.entity of
+                                    AccountEntity account ->
+                                        Task.succeed account
+
+                                    _ ->
+                                        Task.fail <| BadUrl "Shouldn't happen"
+                            )
+            in
+            FetchAccount task
+
+        Nothing ->
+            let
+                postApp =
+                    PostApp
+                        { client_name = server
+                        , redirect_uris = applicationUri
+                        , scopes = scopes
+                        , website = Nothing
+                        }
+
+                rawRequest =
+                    Request.requestToRawRequest []
+                        { server = server, authorization = Nothing }
+                        (AppsRequest postApp)
+
+                redirectTask =
+                    Request.rawRequestToTask rawRequest
+                        |> Task.andThen
+                            (\response ->
+                                case response.entity of
+                                    AppEntity app ->
+                                        appToAuthorizeUrl server app
+                                            |> Navigation.load
+                                            |> Task.succeed
+
+                                    _ ->
+                                        Task.fail (BadUrl "Shouldn't happen")
+                            )
+            in
+            Redirect redirectTask
+
+
+appToAuthorizeUrl : String -> App -> String
+appToAuthorizeUrl server app =
+    ""
+
+
+{-| The result type of the `loginTask` function.
+
+It's either a task to fetch the logged-in user's `Account`
+or a task to redirect to the authorization server to get a code.
+
+-}
+type FetchAccountOrRedirect msg
+    = FetchAccount (Task Error Account)
+    | Redirect (Task Error (Cmd msg))

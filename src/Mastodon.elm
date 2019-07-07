@@ -13,7 +13,6 @@
 module Mastodon exposing
     ( ServerInfo, Request, Response, Error
     , serverRequest
-    , Authorization, Account, login
     )
 
 {-| Talk to the Mastodon API.
@@ -26,20 +25,14 @@ See <https://docs.joinmastodon.org/api/guidelines/>
 @docs ServerInfo, Request, Response, Error
 
 
-# Creating HTTP RESS requests
+# Creating an HTTP REST request.
 
 @docs serverRequest
-
-
-# Logging in
-
-@docs Authorization, Account, login
 
 -}
 
 import Http
 import Mastodon.Entity as Entity
-import Mastodon.Login as Login
 import Mastodon.Request as Request
 
 
@@ -101,39 +94,3 @@ There is a low-level interface for requests in `Mastodon.Request`.
 serverRequest : (id -> Result Error Response -> msg) -> List Http.Header -> ServerInfo -> id -> Request -> Cmd msg
 serverRequest =
     Request.serverRequest
-
-
-{-| Authorization Parameters.
-
-Applications will usually save this in `localStorage`, use the saved token
-until it expires, then use the client ID and secret to mint a new token.
-
-Copy of `Mastodon.Entity.Authorization`
-
--}
-type alias Authorization =
-    { clientId : String
-    , clientSecret : String
-    , authorization : String
-    }
-
-
-{-| A Mastodon account.
-
-Alias of `Mastodon.Entity.Account`. See that module's documentation for details.
-
--}
-type alias Account =
-    Entity.Account
-
-
-{-| Do everything necessary to login to a server.
-
-The `String` arg is a server url, e.g. "mastodon.social".
-
-See `Login.login` for details.
-
--}
-login : (Result Error ( Authorization, Maybe Account ) -> msg) -> String -> Maybe Authorization -> Cmd msg
-login =
-    Login.login
