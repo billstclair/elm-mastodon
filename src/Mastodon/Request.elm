@@ -18,7 +18,7 @@ module Mastodon.Request exposing
     , PollsReq(..), ReportsReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
     , Paging, SourceUpdate, PollDefinition
     , userAgentHeader, idempotencyKeyHeader
-    , RawRequest, requestToRawRequest, rawRequestToCmd
+    , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
     )
 
@@ -58,7 +58,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Low-level request creation
 
-@docs RawRequest, requestToRawRequest, rawRequestToCmd
+@docs RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
 
 
 # Testing
@@ -78,7 +78,7 @@ import Mastodon.Entity as Entity
         , FilterContext(..)
         , UnixTimestamp
         )
-import Task
+import Task exposing (Task)
 import Url.Builder as Builder exposing (QueryParameter, relative)
 
 
@@ -697,11 +697,26 @@ Sometimes, however, you need to create a `RawRequest`, by hand or by calling
 -}
 rawRequestToCmd : (Result Error Response -> msg) -> RawRequest -> Cmd msg
 rawRequestToCmd tagger rawRequest =
+    Task.attempt tagger <| rawRequestToTask rawRequest
+
+
+{-| Same as rawRequestToCmd, but returns a `Task`.
+
+`rawRequestToCmd` could be defined as:
+
+    rawRequestToCmd : (Result Error Response -> msg) -> RawRequest -> Cmd msg
+    rawRequestToCmd tagger rawRequest =
+        Task.attempt tagger <|
+            rawRequestToTask rawRequest
+
+-}
+rawRequestToTask : RawRequest -> Task Error Response
+rawRequestToTask rawRequest =
     if rawRequest.url == "" then
-        Cmd.none
+        Task.fail <| BadUrl "Empty URL"
 
     else
-        Http.request
+        Http.task
             { method = rawRequest.method
             , headers =
                 case rawRequest.authorization of
@@ -713,10 +728,8 @@ rawRequestToCmd tagger rawRequest =
                             :: rawRequest.headers
             , url = rawRequest.url
             , body = rawRequest.body
-            , expect =
-                Http.expectStringResponse tagger <| processResponse rawRequest
+            , resolver = Http.stringResolver <| processResponse rawRequest
             , timeout = Nothing
-            , tracker = Nothing
             }
 
 
@@ -2137,6 +2150,8 @@ timelinesReq req res =
             }
 
 
+{-| This one wasn't documented. I had to reverse engineer it.
+-}
 trendsReq : RawRequest -> RawRequest
 trendsReq res =
     let
