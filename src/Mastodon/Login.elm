@@ -16,6 +16,7 @@ module Mastodon.Login exposing
 
 import Base64
 import Browser.Navigation as Navigation
+import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 import Mastodon.EncodeDecode as ED
@@ -251,4 +252,103 @@ the next time the user starts the application, as a parameter to `loginTask`.
 -}
 getTokenTask : { code : String, state : String } -> Task Error ( Authorization, Account )
 getTokenTask { code, state } =
-    Task.fail <| BadUrl "TODO"
+    case decodeStateString state of
+        Err _ ->
+            Task.fail <| BadUrl "Cannot decode <state> from authentication server."
+
+        Ok ( server, app ) ->
+            let
+                { client_id, client_secret, redirect_uri } =
+                    app
+            in
+            Http.task
+                { method = "POST"
+                , headers =
+                    [ Http.header "Authorization" <|
+                        "Basic "
+                            ++ (Base64.encode <| client_id ++ ":" ++ client_secret)
+                    ]
+                , url =
+                    Builder.crossOrigin ("https://" ++ server)
+                        [ "oauth", "token" ]
+                        []
+                , body =
+                    Http.stringBody "application/x-www-form-url-encoded" <|
+                        ([ Builder.string "grant_type" "authorization_code"
+                         , Builder.string "code" code
+                         , Builder.string "redirect_uri" redirect_uri
+                         ]
+                            |> Builder.toQuery
+                            |> String.dropLeft 1
+                        )
+                , resolver =
+                    Http.stringResolver <|
+                        receiveAuthorization client_id client_secret
+                , timeout = Nothing
+                }
+                |> Task.andThen
+                    (\authorization ->
+                        AccountsRequest GetVerifyCredentials
+                            |> Request.requestToRawRequest []
+                                { server = server
+                                , authorization = Just authorization.authorization
+                                }
+                            |> Request.rawRequestToTask
+                            |> Task.andThen
+                                (\response ->
+                                    case response.entity of
+                                        AccountEntity account ->
+                                            Task.succeed ( authorization, account )
+
+                                        _ ->
+                                            Task.fail <| BadUrl "Wrong entity type."
+                                )
+                    )
+
+
+type alias RawToken =
+    { access_token : String
+    , token_type : String
+    , scope : String
+    , created_at : Int
+    }
+
+
+rawTokenDecoder : Decoder RawToken
+rawTokenDecoder =
+    JD.map4 RawToken
+        (JD.field "access_token" JD.string)
+        (JD.field "token_type" JD.string)
+        (JD.field "scope" JD.string)
+        (JD.field "created_at" JD.int)
+
+
+receiveAuthorization : String -> String -> Http.Response String -> Result Error Entity.Authorization
+receiveAuthorization clientId clientSecret response =
+    case response of
+        Http.BadUrl_ s ->
+            Err <| BadUrl s
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ metadata body ->
+            Err <| BadStatus metadata body
+
+        Http.GoodStatus_ metadata body ->
+            case JD.decodeString rawTokenDecoder body of
+                Err err ->
+                    Err <| BadBody metadata (JD.errorToString err)
+
+                Ok rawToken ->
+                    Ok
+                        { clientId = clientId
+                        , clientSecret = clientSecret
+                        , authorization =
+                            rawToken.token_type
+                                ++ " "
+                                ++ rawToken.access_token
+                        }
