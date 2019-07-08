@@ -17,7 +17,12 @@ module Mastodon exposing
 
 {-| Talk to the Mastodon API.
 
-See <https://docs.joinmastodon.org/api/guidelines/>
+This module contains re-exposed versions of the most-used parts of
+`Mastodon.Entity` and `Mastodon.Request`.
+
+To authorize access, you need to call the functions in `Mastodon.Login`.
+
+For API documentation, see <https://docs.joinmastodon.org/api/guidelines/>
 
 
 # Types

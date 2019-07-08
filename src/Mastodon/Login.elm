@@ -1,12 +1,24 @@
-module Mastodon.Login exposing (loginTask)
+module Mastodon.Login exposing
+    ( FetchAccountOrRedirect(..), loginTask
+    , encodeStateString, decodeStateString, appToAuthorizeUrl
+    )
 
 {-| Support for creating an `App` and logging in to a server.
 
-@docs loginTask
+@docs FetchAccountOrRedirect, loginTask
+
+
+# Internal functions.
+
+@docs encodeStateString, decodeStateString, appToAuthorizeUrl
 
 -}
 
+import Base64
 import Browser.Navigation as Navigation
+import Json.Decode as JD exposing (Decoder)
+import Json.Encode as JE exposing (Value)
+import Mastodon.EncodeDecode as ED
 import Mastodon.Entity as Entity exposing (Account, App, Authorization, Entity(..))
 import Mastodon.Request as Request
     exposing
@@ -16,6 +28,7 @@ import Mastodon.Request as Request
         , Request(..)
         )
 import Task exposing (Task)
+import Url.Builder as Builder
 
 
 {-| There should probably be a login version that takes scopes.
@@ -41,9 +54,8 @@ attempt to mint a new token, using `authorization.clientId` and
 `authorization.clientSecret`. If that fails, or if
 `maybeAuthorization` is `Nothing`, will create a new `App`, and
 redirect to do authentication. When the application is restarted, with
-a code and state in the fragment, call `getTokenAndAccount` to
-continue use those to mint a new token, and to use that to get an
-`Account`.
+a `code` and `state` in the fragment, call `getTokenAndAccountTask` to
+use those to mint a new token, and to use that to get an `Account`.
 
 Usually, you will get an `Authorization` from persistent
 `localStorage`, pass that here, and successfully receive the `Account`
@@ -52,7 +64,8 @@ once, and then whenever the authorization token expires. This is step
 8 below. Only if that fails will this do step 3, or, if there was no
 persisted client id and secret, steps 1 through 3.
 
-Currently, permission for all scopes is requested.
+Currently, permission for all scopes is requested. Maybe the scopes should
+be passed as a parameter.
 
 The full login procedure is as follows:
 
@@ -66,7 +79,7 @@ The full login procedure is as follows:
 
 5.  The server web site redirects to `<redirect_uri>?code=<code>&state=<state>`
 
-6.  The `<state>` encodes the server uri, <client\_id>, <client\_secret>, and <scopes>.
+6.  The `<state>` encodes the server uri, `<client_id>`, `<client_secret>`, and `<scopes>`.
     Use that to POST to `<server_url>/oauth/token`:
 
         POST /oauth/token HTTP/1.1
@@ -78,9 +91,9 @@ The full login procedure is as follows:
 
 7.  Receive back token information, JSON-encoded:
 
-        { "access_token":"cptGSO8ff7xKbBXlTTxH15bnxQS5b9erVUWi_n0_EGc",
+        { "access_token":"cptLSO8ff7zKbBXlTTyH15bnxQS5b9erVUWi_n0_EGd",
           "token_type":"Bearer",
-          "scope":"read",
+          "scope":"write,read,follow,push"
           "created_at":1561845912
         }
 
@@ -147,17 +160,85 @@ loginTask server applicationUri maybeAuthorization =
             Redirect redirectTask
 
 
-appToAuthorizeUrl : String -> App -> String
-appToAuthorizeUrl server app =
-    ""
-
-
 {-| The result type of the `loginTask` function.
 
-It's either a task to fetch the logged-in user's `Account`
+It's either a task to fetch the logged-in user's `Mastodon.Entity.Account`
 or a task to redirect to the authorization server to get a code.
 
 -}
 type FetchAccountOrRedirect msg
     = FetchAccount (Task Error Account)
     | Redirect (Task Error (Cmd msg))
+
+
+{-| Compute URL to redirect to for authentication.
+
+Args are:
+
+    appToAuthorizeUrl server app
+
+Returns:
+
+    https://<server>/oauth/authorize
+       ?client_id=<app.client_id>
+       &redirect_uri=<app.redirect_uri>
+       &response_type=code
+       &scope=<all scopes>
+       &state=<encodeStateString server app>
+
+You will rarely, if ever, call this explicitly It is exposed for debugging.
+
+-}
+appToAuthorizeUrl : String -> App -> String
+appToAuthorizeUrl server app =
+    Builder.crossOrigin
+        ("https://" ++ server)
+        [ "oauth", "authorize" ]
+        [ Builder.string "client_id" app.client_id
+        , Builder.string "redirect_uri" app.redirect_uri
+        , Builder.string "response_type" "code"
+        , Builder.string "scope" <| String.join "," scopes
+        , Builder.string "state" <| encodeStateString server app
+        ]
+
+
+{-| Convert a server domain and a `Mastodon.Entity.App` into a `state` string.
+
+You will rarely, if ever, call this explicitly. It is exposed for debugging.
+
+-}
+encodeStateString : String -> App -> String
+encodeStateString server app =
+    JE.object
+        [ ( "server", JE.string server )
+        , ( "app", ED.encodeApp app )
+        ]
+        |> JE.encode 0
+        |> Base64.encode
+
+
+{-| Decode the string created by `encodeStateString`.
+
+You will rarely, if ever, call this explicitly. It is exposed for debugging.
+
+-}
+decodeStateString : String -> Result String ( String, App )
+decodeStateString string =
+    case Base64.decode string of
+        Err err ->
+            Err err
+
+        Ok s ->
+            case JD.decodeString stateStringDecoder s of
+                Err err ->
+                    Err <| JD.errorToString err
+
+                Ok res ->
+                    Ok res
+
+
+stateStringDecoder : Decoder ( String, App )
+stateStringDecoder =
+    JD.map2 (\server app -> ( server, app ))
+        (JD.field "server" JD.string)
+        (JD.field "app" ED.appDecoder)
