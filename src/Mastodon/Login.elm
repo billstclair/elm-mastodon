@@ -1,11 +1,11 @@
 module Mastodon.Login exposing
-    ( FetchAccountOrRedirect(..), loginTask
+    ( FetchAccountOrRedirect(..), loginTask, getTokenTask
     , encodeStateString, decodeStateString, appToAuthorizeUrl
     )
 
 {-| Support for creating an `App` and logging in to a server.
 
-@docs FetchAccountOrRedirect, loginTask
+@docs FetchAccountOrRedirect, loginTask, getTokenTask
 
 
 # Internal functions.
@@ -44,17 +44,13 @@ Returns a `Task` to either fetch an `Account` for a known authorization token,
 or to redirect to the authentication server to create a code with which
 to mint the token.
 
-Arguments are:
-
-    loginTask server applicationUri maybeAuthorization
-
 If `maybeAuthorization` is not `Nothing`, will attempt to get an
 `Account` using `.authorization` from there. If that fails, will
 attempt to mint a new token, using `authorization.clientId` and
 `authorization.clientSecret`. If that fails, or if
 `maybeAuthorization` is `Nothing`, will create a new `App`, and
 redirect to do authentication. When the application is restarted, with
-a `code` and `state` in the fragment, call `getTokenAndAccountTask` to
+a `code` and `state` in the URL query, call `getTokenTask` to
 use those to mint a new token, and to use that to get an `Account`.
 
 Usually, you will get an `Authorization` from persistent
@@ -101,8 +97,8 @@ The full login procedure is as follows:
     for the user's `Account`.
 
 -}
-loginTask : String -> String -> Maybe Authorization -> FetchAccountOrRedirect msg
-loginTask server applicationUri maybeAuthorization =
+loginTask : { server : String, applicationUri : String } -> Maybe Authorization -> FetchAccountOrRedirect msg
+loginTask { server, applicationUri } maybeAuthorization =
     case maybeAuthorization of
         Just { authorization } ->
             let
@@ -242,3 +238,17 @@ stateStringDecoder =
     JD.map2 (\server app -> ( server, app ))
         (JD.field "server" JD.string)
         (JD.field "app" ED.appDecoder)
+
+
+{-| Continue after being restarted with a `code` and `state` in the URL query.
+
+This continues from step 6 in the full login procedure description,
+which is included with the documentation for `loginTask` above.
+
+Your application will usually persist the `Authorization`, so you can use it
+the next time the user starts the application, as a parameter to `loginTask`.
+
+-}
+getTokenTask : { code : String, state : String } -> Task Error ( Authorization, Account )
+getTokenTask { code, state } =
+    Task.fail <| BadUrl "TODO"
