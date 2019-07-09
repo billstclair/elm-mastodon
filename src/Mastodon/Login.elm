@@ -98,8 +98,8 @@ The full login procedure is as follows:
     for the user's `Account`.
 
 -}
-loginTask : { server : String, applicationUri : String } -> Maybe Authorization -> FetchAccountOrRedirect msg
-loginTask { server, applicationUri } maybeAuthorization =
+loginTask : { client_name : String, server : String, applicationUri : String } -> Maybe Authorization -> FetchAccountOrRedirect msg
+loginTask { client_name, server, applicationUri } maybeAuthorization =
     case maybeAuthorization of
         Just { authorization } ->
             let
@@ -129,7 +129,7 @@ loginTask { server, applicationUri } maybeAuthorization =
             let
                 postApp =
                     PostApp
-                        { client_name = server
+                        { client_name = client_name
                         , redirect_uris = applicationUri
                         , scopes = scopes
                         , website = Nothing
@@ -194,7 +194,7 @@ appToAuthorizeUrl server app =
         [ Builder.string "client_id" app.client_id
         , Builder.string "redirect_uri" app.redirect_uri
         , Builder.string "response_type" "code"
-        , Builder.string "scope" <| String.join "," scopes
+        , Builder.string "scope" <| String.join " " scopes
         , Builder.string "state" <| encodeStateString server app
         ]
 
@@ -273,10 +273,11 @@ getTokenTask { code, state } =
                         [ "oauth", "token" ]
                         []
                 , body =
-                    Http.stringBody "application/x-www-form-url-encoded" <|
+                    Http.stringBody "application/x-www-form-urlencoded" <|
                         ([ Builder.string "grant_type" "authorization_code"
-                         , Builder.string "code" code
+                         , Builder.string "client_id" client_id
                          , Builder.string "redirect_uri" redirect_uri
+                         , Builder.string "code" code
                          ]
                             |> Builder.toQuery
                             |> String.dropLeft 1

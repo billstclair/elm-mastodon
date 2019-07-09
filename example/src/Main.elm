@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Main exposing (Model, Msg(..), getUser, init, lookupProvider, main, providerOption, providerSelect, update, userAgentHeader, view)
+module Main exposing (emptyUrl, main, parseQuery, receiveCodeAndState)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Navigation as Navigation exposing (Key)
@@ -23,6 +23,7 @@ import Html
         , button
         , div
         , h2
+        , input
         , option
         , p
         , pre
@@ -33,47 +34,34 @@ import Html.Attributes
     exposing
         ( href
         , selected
+        , size
         , style
         , target
+        , type_
         , value
         )
 import Html.Events exposing (onClick, onInput)
 import Http
 import Json.Decode as JD
 import Json.Encode as JE exposing (Value)
-import OAuthMiddleware
-    exposing
-        ( Authorization
-        , ResponseToken
-        , TokenAuthorization
-        , TokenState(..)
-        , authorize
-        , getAuthorizations
-        , locationToRedirectBackUri
-        , receiveTokenAndState
-        , use
-        )
-import OAuthMiddleware.EncodeDecode
-    exposing
-        ( authorizationsEncoder
-        , responseTokenEncoder
-        )
+import Mastodon.Entity as Entity exposing (Account, Authorization)
+import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
+import Mastodon.Request exposing (Error(..))
+import Task
 import Url exposing (Url)
+import Url.Parser as Parser exposing ((<?>))
+import Url.Parser.Query as QP
 
 
 type alias Model =
     { key : Key
+    , url : Url
     , hideClientId : Bool
     , authorization : Maybe Authorization
-    , token : Maybe ResponseToken
+    , account : Maybe Account
     , state : Maybe String
     , msg : Maybe String
-    , replyType : String
-    , reply : Maybe Value
-    , redirectBackUri : String
     , provider : String
-    , authorizations : Dict String Authorization
-    , tokenAuthorization : Maybe TokenAuthorization
     , getUserApi : Maybe String
     }
 
@@ -81,23 +69,10 @@ type alias Model =
 type Msg
     = OnUrlRequest UrlRequest
     | OnUrlChange Url
-    | ReceiveAuthorizations (Result Http.Error (List Authorization))
-    | ChangeProvider String
+    | SetProvider String
+    | ReceiveRedirect (Result Error (Cmd Msg))
+    | ReceiveAuthorization (Result Error ( Authorization, Account ))
     | Login
-    | GetUser
-    | ReceiveUser (Result Http.Error Value)
-
-
-{-| GitHub requires the "User-Agent" header.
--}
-userAgentHeader : Http.Header
-userAgentHeader =
-    Http.header "User-Agent" "Xossbow"
-
-
-getUserApi : String
-getUserApi =
-    "accounts/verify_credentials"
 
 
 main =
@@ -111,6 +86,83 @@ main =
         }
 
 
+emptyElement : String
+emptyElement =
+    "foo"
+
+
+emptyUrl : Url
+emptyUrl =
+    { protocol = Url.Https
+    , host = "example.com"
+    , port_ = Nothing
+    , path = "/" ++ emptyElement
+    , query = Nothing
+    , fragment = Nothing
+    }
+
+
+type alias CodeErrorState =
+    { code : Maybe String
+    , error : Maybe String
+    , state : Maybe String
+    }
+
+
+parseQuery : String -> CodeErrorState
+parseQuery queryString =
+    let
+        url =
+            { emptyUrl | query = Just queryString }
+
+        qp =
+            QP.map3 CodeErrorState
+                (QP.string "code")
+                (QP.string "error")
+                (QP.string "state")
+    in
+    Parser.parse (Parser.s emptyElement <?> qp) url
+        |> Maybe.withDefault (CodeErrorState Nothing Nothing Nothing)
+
+
+type CodeAndState
+    = CodeAndState String (Maybe String)
+    | CodeErrorAndState String (Maybe String)
+    | NoCode
+
+
+{-| This recognizes `?code=<code>&state=<state>` or `?error=<error>&state=<state>`
+
+in the URL from the redirect from authentication.
+
+-}
+receiveCodeAndState : Url -> CodeAndState
+receiveCodeAndState url =
+    case url.query of
+        Nothing ->
+            NoCode
+
+        Just q ->
+            case parseQuery q of
+                { code, error, state } ->
+                    case code of
+                        Just cod ->
+                            case state of
+                                Just st ->
+                                    CodeAndState cod state
+
+                                Nothing ->
+                                    CodeErrorAndState "Missing state with code" code
+
+                        Nothing ->
+                            case error of
+                                Just err ->
+                                    CodeErrorAndState err state
+
+                                Nothing ->
+                                    NoCode
+
+
 init : Value -> Url -> Key -> ( Model, Cmd Msg )
 init value url key =
     let
@@ -122,132 +174,38 @@ init value url key =
                 Ok hide ->
                     hide
 
-        ( token, state, msg ) =
-            case receiveTokenAndState url of
-                TokenAndState tok stat ->
-                    ( Just tok, stat, Nothing )
+        ( code, state, msg ) =
+            case receiveCodeAndState url of
+                CodeAndState cod stat ->
+                    ( Just cod, stat, Nothing )
 
-                TokenErrorAndState m stat ->
+                CodeErrorAndState m stat ->
                     ( Nothing, stat, Just m )
 
-                TokenDecodeError m ->
-                    ( Nothing, Nothing, Just m )
-
-                NoToken ->
+                NoCode ->
                     ( Nothing, Nothing, Nothing )
     in
     ( { key = key
+      , url = url
       , hideClientId = hideClientId
       , authorization = Nothing
-      , token = token
+      , account = Nothing
       , state = state
       , msg = msg
-      , replyType = "Token"
-      , reply =
-            case token of
-                Nothing ->
-                    Nothing
-
-                Just tok ->
-                    Just <| responseTokenEncoder tok
-      , redirectBackUri = locationToRedirectBackUri url
-      , authorizations = Dict.empty
-      , provider =
-            case state of
-                Just p ->
-                    p
-
-                Nothing ->
-                    "gab.com"
-      , tokenAuthorization = Nothing
+      , provider = "mastodon.social"
       , getUserApi = Nothing
       }
     , Cmd.batch
-        [ Http.request <|
-            getAuthorizations ReceiveAuthorizations False "authorizations.json"
-        , Navigation.replaceUrl key "#"
+        [ Navigation.replaceUrl key "#"
+        , case ( code, state ) of
+            ( Just cod, Just st ) ->
+                Login.getTokenTask { code = cod, state = st }
+                    |> Task.attempt ReceiveAuthorization
+
+            _ ->
+                Cmd.none
         ]
     )
-
-
-getUser : Model -> ( Model, Cmd Msg )
-getUser model =
-    case model.token of
-        Nothing ->
-            ( { model
-                | msg = Just "You must login before getting user information."
-              }
-            , Cmd.none
-            )
-
-        Just token ->
-            case ( model.getUserApi, model.authorization ) of
-                ( Just api, Just auth ) ->
-                    let
-                        url =
-                            auth.apiUri ++ api
-
-                        req =
-                            Http.request
-                                { method = "GET"
-                                , headers = use token [ userAgentHeader ]
-                                , url = url
-                                , body = Http.emptyBody
-                                , expect = Http.expectJson ReceiveUser JD.value
-                                , timeout = Nothing
-                                , tracker = Nothing
-                                }
-                    in
-                    ( model, req )
-
-                _ ->
-                    ( { model | msg = Just "No known API." }
-                    , Cmd.none
-                    )
-
-
-lookupProvider : Model -> Model
-lookupProvider model =
-    let
-        authorization =
-            case Dict.get model.provider model.authorizations of
-                Nothing ->
-                    case List.head <| Dict.toList model.authorizations of
-                        Nothing ->
-                            Nothing
-
-                        Just ( _, auth ) ->
-                            Just auth
-
-                Just auth ->
-                    Just auth
-    in
-    case authorization of
-        Nothing ->
-            model
-
-        Just auth ->
-            case List.head <| Dict.toList auth.scopes of
-                Nothing ->
-                    model
-
-                Just ( _, scope ) ->
-                    let
-                        provider =
-                            auth.name
-                    in
-                    { model
-                        | provider = provider
-                        , tokenAuthorization =
-                            Just
-                                { authorization = auth
-                                , scope = [ scope ]
-                                , state = Just model.provider
-                                , redirectBackUri = model.redirectBackUri
-                                }
-                        , getUserApi = Just getUserApi
-                        , authorization = authorization
-                    }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -263,92 +221,57 @@ update msg model =
             , Cmd.none
             )
 
-        ReceiveAuthorizations result ->
+        SetProvider provider ->
+            ( { model | provider = provider }
+            , Cmd.none
+            )
+
+        Login ->
+            let
+                url =
+                    model.url
+
+                sau =
+                    { client_name = "elm-mastodon"
+                    , server = model.provider
+                    , applicationUri =
+                        { url
+                            | fragment = Nothing
+                            , query = Nothing
+                        }
+                            |> Url.toString
+                    }
+            in
+            case Login.loginTask sau Nothing of
+                Redirect task ->
+                    ( model, Task.attempt ReceiveRedirect task )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        ReceiveRedirect result ->
             case result of
                 Err err ->
                     ( { model | msg = Just <| Debug.toString err }
                     , Cmd.none
                     )
 
-                Ok authorizations ->
-                    let
-                        ( replyType, reply ) =
-                            case ( model.token, model.msg ) of
-                                ( Nothing, Nothing ) ->
-                                    ( "Authorizations"
-                                    , Just
-                                        (authorizations
-                                            |> List.map
-                                                (\a ->
-                                                    if model.hideClientId then
-                                                        { a | clientId = "<hidden>" }
-
-                                                    else
-                                                        a
-                                                )
-                                            |> authorizationsEncoder
-                                        )
-                                    )
-
-                                _ ->
-                                    ( model.replyType, model.reply )
-                    in
-                    ( lookupProvider
-                        { model
-                            | authorizations =
-                                Dict.fromList <|
-                                    List.map (\a -> ( a.name, a )) authorizations
-                            , replyType = replyType
-                            , reply = reply
-                        }
-                    , Cmd.none
+                Ok cmd ->
+                    ( { model | msg = Nothing }
+                    , cmd
                     )
 
-        ChangeProvider provider ->
-            ( lookupProvider
-                { model | provider = provider }
-            , Cmd.none
-            )
-
-        Login ->
-            case model.tokenAuthorization of
-                Nothing ->
-                    ( { model | msg = Just "No provider selected." }
-                    , Cmd.none
-                    )
-
-                Just authorization ->
-                    case authorize authorization of
-                        Nothing ->
-                            ( { model
-                                | msg = Just "Bad Uri in authorizations.json."
-                              }
-                            , Cmd.none
-                            )
-
-                        Just url ->
-                            ( model
-                            , Navigation.load <| Url.toString url
-                            )
-
-        GetUser ->
-            getUser model
-
-        ReceiveUser result ->
+        ReceiveAuthorization result ->
             case result of
                 Err err ->
-                    ( { model
-                        | reply = Nothing
-                        , msg = Just <| Debug.toString err
-                      }
+                    ( { model | msg = Just <| Debug.toString err }
                     , Cmd.none
                     )
 
-                Ok reply ->
+                Ok ( authorization, account ) ->
                     ( { model
-                        | replyType = "API Response"
-                        , reply = Just reply
-                        , msg = Nothing
+                        | authorization = Debug.log "authorization" <| Just authorization
+                        , account = Just account
                       }
                     , Cmd.none
                     )
@@ -365,12 +288,12 @@ providerOption currentProvider provider =
 
 providerSelect : Model -> Html Msg
 providerSelect model =
-    select [ onInput ChangeProvider ]
-        (Dict.toList model.authorizations
-            |> List.map Tuple.second
-            |> List.map .name
-            |> List.map (providerOption model.provider)
-        )
+    input
+        [ size 30
+        , onInput SetProvider
+        , value model.provider
+        ]
+        []
 
 
 view : Model -> Document Msg
@@ -388,21 +311,14 @@ view model =
             , p []
                 [ button [ onClick Login ]
                     [ text "Login" ]
-                , text " "
-                , button [ onClick GetUser ]
-                    [ text "Get User" ]
                 ]
-            , pre []
-                [ case ( model.msg, model.reply ) of
-                    ( Just msg, _ ) ->
-                        text <| Debug.toString msg
+            , case model.account of
+                Nothing ->
+                    text ""
 
-                    ( _, Just reply ) ->
-                        text <| model.replyType ++ ":\n" ++ JE.encode 2 reply
-
-                    _ ->
-                        text "Nothing to report"
-                ]
+                Just account ->
+                    pre []
+                        [ text <| JE.encode 2 account.v ]
             , p []
                 [ text "Source code: "
                 , a
