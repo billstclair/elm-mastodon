@@ -59,18 +59,25 @@ import Url.Parser as Parser exposing ((<?>))
 import Url.Parser.Query as QP
 
 
+type Started
+    = NotStarted
+    | StartedReadingModel
+    | Started
+
+
 type alias Model =
     { authorization : Maybe Authorization
     , provider : String
 
     -- Non-persistent below here
+    , savedModel : Maybe SavedModel
     , key : Key
     , url : Url
     , hideClientId : Bool
     , account : Maybe Account
     , state : Maybe String
     , msg : Maybe String
-    , started : Bool
+    , started : Started
     , funnelState : State
     }
 
@@ -90,10 +97,17 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         , onUrlRequest = OnUrlRequest
         , onUrlChange = OnUrlChange
         }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ PortFunnels.subscriptions Process model
+        ]
 
 
 emptyElement : String
@@ -199,13 +213,14 @@ init value url key =
     , provider = "mastodon.social"
 
     -- Non-persistent below here
+    , savedModel = Nothing
     , key = key
     , url = url
     , hideClientId = hideClientId
     , account = Nothing
     , state = state
     , msg = msg
-    , started = False
+    , started = NotStarted
     , funnelState = initialFunnelState
     }
         -- As soon as the localStorage module reports in,
@@ -230,15 +245,19 @@ storageHandler response state model =
         mdl =
             { model
                 | started =
-                    if LocalStorage.isLoaded state.storage then
-                        True
+                    if
+                        LocalStorage.isLoaded state.storage
+                            && model.started
+                            == NotStarted
+                    then
+                        StartedReadingModel
 
                     else
                         model.started
             }
 
         cmd =
-            if mdl.started && not model.started then
+            if mdl.started == StartedReadingModel && model.started == NotStarted then
                 get pk.model
 
             else
@@ -251,15 +270,44 @@ storageHandler response state model =
                     mdl |> withNoCmd
 
                 Just v ->
-                    handleGetResponse key v model
+                    handleGetResponse key v mdl
 
         _ ->
             mdl |> withCmd cmd
 
 
+getVerifyCredentials : Model -> Cmd Msg
+getVerifyCredentials model =
+    Cmd.none
+
+
 handleGetResponse : String -> Value -> Model -> ( Model, Cmd Msg )
 handleGetResponse key value model =
-    model |> withNoCmd
+    if key == pk.model then
+        case JD.decodeValue savedModelDecoder value of
+            Err err ->
+                { model
+                    | started = Started
+                    , msg =
+                        Just <|
+                            Debug.log "Error decoding SavedModel"
+                                (JD.errorToString err)
+                }
+                    |> withNoCmd
+
+            Ok savedModel ->
+                let
+                    mdl =
+                        Debug.log "savedModelToModel" <|
+                            savedModelToModel savedModel model
+                in
+                { mdl | started = Started }
+                    |> withCmd
+                        (getVerifyCredentials mdl)
+
+    else
+        model
+            |> withNoCmd
 
 
 socketHandler : Response -> State -> Model -> ( Model, Cmd Msg )
@@ -297,6 +345,45 @@ socketHandler response state mdl =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        ( model2, cmd ) =
+            updateInternal msg model
+
+        savedModel =
+            modelToSavedModel model2
+
+        needsSaving =
+            if model2.started /= Started then
+                False
+
+            else
+                case model2.savedModel of
+                    Nothing ->
+                        True
+
+                    Just sm ->
+                        savedModel /= sm
+    in
+    { model2
+        | savedModel =
+            if needsSaving then
+                Just savedModel
+
+            else
+                model2.savedModel
+    }
+        |> withCmds
+            [ cmd
+            , if needsSaving then
+                put pk.model (Just <| encodeSavedModel savedModel)
+
+              else
+                Cmd.none
+            ]
+
+
+updateInternal : Msg -> Model -> ( Model, Cmd Msg )
+updateInternal msg model =
     case msg of
         OnUrlRequest _ ->
             ( model
@@ -337,8 +424,19 @@ update msg model =
                     ( model, Cmd.none )
 
         Process value ->
-            -- TODO
-            model |> withNoCmd
+            case
+                PortFunnels.processValue funnelDict
+                    value
+                    model.funnelState
+                    model
+            of
+                Err error ->
+                    -- Maybe I should display an error here,
+                    -- but I don't think it will ever happen.
+                    model |> withNoCmd
+
+                Ok res ->
+                    res
 
         ReceiveRedirect result ->
             case result of
@@ -469,12 +567,12 @@ savedModelDecoder =
 
 put : String -> Maybe Value -> Cmd Msg
 put key value =
-    localStorageSend (LocalStorage.put key value)
+    localStorageSend (LocalStorage.put (Debug.log "put" key) value)
 
 
 get : String -> Cmd Msg
 get key =
-    localStorageSend (LocalStorage.get key)
+    localStorageSend (LocalStorage.get <| Debug.log "get" key)
 
 
 clear : Cmd Msg

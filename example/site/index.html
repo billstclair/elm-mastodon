@@ -14,13 +14,14 @@ See LICENSE.txt
     <title>Mastodon/Pleroma API Example</title>
     <script type='text/javascript' src='js/PortFunnel.js'></script>
     <script type='text/javascript' src='js/PortFunnel/LocalStorage.js'></script>
+    <script type='text/javascript' src='js/PortFunnel/WebSocket.js'></script>
     <script type='text/javascript' src='elm.js'></script>
   </head>
   <body>
     <script type='text/javascript'>
       // It's an application, so it doesn't need a div.
       var app = Elm['Main'].init({ flags: true });
-      //PortFunnel.subscribe(app);
+      PortFunnel.subscribe(app);
     </script>
   </body>
 </html>
