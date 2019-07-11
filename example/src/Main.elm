@@ -43,8 +43,10 @@ import Html.Attributes
         )
 import Html.Events exposing (onClick, onInput)
 import Http
-import Json.Decode as JD
+import Json.Decode as JD exposing (Decoder)
+import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
+import Mastodon.EncodeDecode as ED
 import Mastodon.Entity as Entity exposing (Account, Authorization)
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request exposing (Error(..))
@@ -58,18 +60,18 @@ import Url.Parser.Query as QP
 
 
 type alias Model =
-    { key : Key
+    { authorization : Maybe Authorization
+    , provider : String
+
+    -- Non-persistent below here
+    , key : Key
     , url : Url
     , hideClientId : Bool
-    , authorization : Maybe Authorization
     , account : Maybe Account
     , state : Maybe String
     , msg : Maybe String
-    , provider : String
-    , getUserApi : Maybe String
     , started : Bool
     , funnelState : State
-    , error : Maybe String
     }
 
 
@@ -193,19 +195,23 @@ init value url key =
                 NoCode ->
                     ( Nothing, Nothing, Nothing )
     in
-    { key = key
+    { authorization = Nothing
+    , provider = "mastodon.social"
+
+    -- Non-persistent below here
+    , key = key
     , url = url
     , hideClientId = hideClientId
-    , authorization = Nothing
     , account = Nothing
     , state = state
     , msg = msg
-    , provider = "mastodon.social"
-    , getUserApi = Nothing
     , started = False
     , funnelState = initialFunnelState
-    , error = Nothing
     }
+        -- As soon as the localStorage module reports in,
+        -- we'll load the saved model,
+        -- and then all the saved authorizations.
+        -- See `storageHandler` below, `get pk.model`.
         |> withCmds
             [ Navigation.replaceUrl key "#"
             , case ( code, state ) of
@@ -272,7 +278,7 @@ socketHandler response state mdl =
                         model
 
                 _ ->
-                    { model | error = Just <| WebSocket.errorToString error }
+                    { model | msg = Just <| WebSocket.errorToString error }
                         |> withNoCmd
 
         WebSocket.MessageReceivedResponse received ->
@@ -423,6 +429,44 @@ view model =
 ---
 
 
+type alias SavedModel =
+    { authorization : Maybe Authorization
+    , provider : String
+    }
+
+
+modelToSavedModel : Model -> SavedModel
+modelToSavedModel model =
+    { authorization = model.authorization
+    , provider = model.provider
+    }
+
+
+savedModelToModel : SavedModel -> Model -> Model
+savedModelToModel savedModel model =
+    { model
+        | authorization = savedModel.authorization
+        , provider = savedModel.provider
+    }
+
+
+encodeSavedModel : SavedModel -> Value
+encodeSavedModel savedModel =
+    JE.object
+        [ ( "authorization"
+          , ED.encodeMaybe ED.encodeAuthorization savedModel.authorization
+          )
+        , ( "provider", JE.string savedModel.provider )
+        ]
+
+
+savedModelDecoder : Decoder SavedModel
+savedModelDecoder =
+    JD.succeed SavedModel
+        |> required "authorization" (JD.nullable ED.authorizationDecoder)
+        |> required "provider" JD.string
+
+
 put : String -> Maybe Value -> Cmd Msg
 put key value =
     localStorageSend (LocalStorage.put key value)
@@ -440,7 +484,7 @@ clear =
 
 localStoragePrefix : String
 localStoragePrefix =
-    "zephyrnot"
+    "mammudeck"
 
 
 initialFunnelState : PortFunnels.State
