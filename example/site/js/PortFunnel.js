@@ -48,16 +48,18 @@ function subscribe(app, args) {
   }
 
   var ports = app.ports;
-  var sub = ports[portNames[1]];
-  PortFunnel.sub = sub;
+  if (ports) {
+    var sub = ports[portNames[1]];
+    PortFunnel.sub = sub;
 
-  var cmd = ports[portNames[0]];
-  cmd.subscribe(function(command) {
-    var returnValue = commandDispatch(command);
-    if (returnValue) {
-      sub.send(returnValue);
-    }
-  });  
+    var cmd = ports[portNames[0]];
+    cmd.subscribe(function(command) {
+      var returnValue = commandDispatch(command);
+      if (returnValue) {
+        sub.send(returnValue);
+      }
+    });
+  }
 }
 
 // command is of the form:

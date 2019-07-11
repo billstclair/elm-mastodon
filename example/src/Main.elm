@@ -14,6 +14,7 @@ module Main exposing (emptyUrl, main, parseQuery, receiveCodeAndState)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Navigation as Navigation exposing (Key)
+import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
 import Dict exposing (Dict)
 import Html
     exposing
@@ -47,6 +48,9 @@ import Json.Encode as JE exposing (Value)
 import Mastodon.Entity as Entity exposing (Account, Authorization)
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request exposing (Error(..))
+import PortFunnel.LocalStorage as LocalStorage
+import PortFunnel.WebSocket as WebSocket exposing (Response(..))
+import PortFunnels exposing (FunnelDict, Handler(..), State)
 import Task
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((<?>))
@@ -63,6 +67,9 @@ type alias Model =
     , msg : Maybe String
     , provider : String
     , getUserApi : Maybe String
+    , started : Bool
+    , funnelState : State
+    , error : Maybe String
     }
 
 
@@ -73,6 +80,7 @@ type Msg
     | ReceiveRedirect (Result Error (Cmd Msg))
     | ReceiveAuthorization (Result Error ( Authorization, Account ))
     | Login
+    | Process Value
 
 
 main =
@@ -185,27 +193,100 @@ init value url key =
                 NoCode ->
                     ( Nothing, Nothing, Nothing )
     in
-    ( { key = key
-      , url = url
-      , hideClientId = hideClientId
-      , authorization = Nothing
-      , account = Nothing
-      , state = state
-      , msg = msg
-      , provider = "mastodon.social"
-      , getUserApi = Nothing
-      }
-    , Cmd.batch
-        [ Navigation.replaceUrl key "#"
-        , case ( code, state ) of
-            ( Just cod, Just st ) ->
-                Login.getTokenTask { code = cod, state = st }
-                    |> Task.attempt ReceiveAuthorization
+    { key = key
+    , url = url
+    , hideClientId = hideClientId
+    , authorization = Nothing
+    , account = Nothing
+    , state = state
+    , msg = msg
+    , provider = "mastodon.social"
+    , getUserApi = Nothing
+    , started = False
+    , funnelState = initialFunnelState
+    , error = Nothing
+    }
+        |> withCmds
+            [ Navigation.replaceUrl key "#"
+            , case ( code, state ) of
+                ( Just cod, Just st ) ->
+                    Login.getTokenTask { code = cod, state = st }
+                        |> Task.attempt ReceiveAuthorization
 
-            _ ->
+                _ ->
+                    Cmd.none
+            ]
+
+
+storageHandler : LocalStorage.Response -> PortFunnels.State -> Model -> ( Model, Cmd Msg )
+storageHandler response state model =
+    let
+        mdl =
+            { model
+                | started =
+                    if LocalStorage.isLoaded state.storage then
+                        True
+
+                    else
+                        model.started
+            }
+
+        cmd =
+            if mdl.started && not model.started then
+                get pk.model
+
+            else
                 Cmd.none
-        ]
-    )
+    in
+    case response of
+        LocalStorage.GetResponse { label, key, value } ->
+            case value of
+                Nothing ->
+                    mdl |> withNoCmd
+
+                Just v ->
+                    handleGetResponse key v model
+
+        _ ->
+            mdl |> withCmd cmd
+
+
+handleGetResponse : String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetResponse key value model =
+    model |> withNoCmd
+
+
+socketHandler : Response -> State -> Model -> ( Model, Cmd Msg )
+socketHandler response state mdl =
+    let
+        model =
+            { mdl | funnelState = state }
+    in
+    case response of
+        ErrorResponse error ->
+            case error of
+                WebSocket.SocketAlreadyOpenError _ ->
+                    socketHandler
+                        (ConnectedResponse { key = "", description = "" })
+                        state
+                        model
+
+                _ ->
+                    { model | error = Just <| WebSocket.errorToString error }
+                        |> withNoCmd
+
+        WebSocket.MessageReceivedResponse received ->
+            model |> withNoCmd
+
+        ClosedResponse { expected, reason } ->
+            model
+                |> withNoCmd
+
+        ConnectedResponse _ ->
+            model |> withNoCmd
+
+        _ ->
+            model |> withNoCmd
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -248,6 +329,10 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        Process value ->
+            -- TODO
+            model |> withNoCmd
 
         ReceiveRedirect result ->
             case result of
@@ -329,4 +414,72 @@ view model =
                 ]
             ]
         ]
+    }
+
+
+
+---
+--- Persistence
+---
+
+
+put : String -> Maybe Value -> Cmd Msg
+put key value =
+    localStorageSend (LocalStorage.put key value)
+
+
+get : String -> Cmd Msg
+get key =
+    localStorageSend (LocalStorage.get key)
+
+
+clear : Cmd Msg
+clear =
+    localStorageSend (LocalStorage.clear "")
+
+
+localStoragePrefix : String
+localStoragePrefix =
+    "zephyrnot"
+
+
+initialFunnelState : PortFunnels.State
+initialFunnelState =
+    PortFunnels.initialState localStoragePrefix
+
+
+localStorageSend : LocalStorage.Message -> Cmd Msg
+localStorageSend message =
+    LocalStorage.send (getCmdPort LocalStorage.moduleName ())
+        message
+        initialFunnelState.storage
+
+
+webSocketSend : WebSocket.Message -> Cmd Msg
+webSocketSend message =
+    WebSocket.send (getCmdPort WebSocket.moduleName ()) <|
+        Debug.log "webSocketSend" message
+
+
+{-| The `model` parameter is necessary here for `PortFunnels.makeFunnelDict`.
+-}
+getCmdPort : String -> model -> (Value -> Cmd Msg)
+getCmdPort moduleName _ =
+    PortFunnels.getCmdPort Process moduleName False
+
+
+funnelDict : FunnelDict Model Msg
+funnelDict =
+    PortFunnels.makeFunnelDict
+        [ LocalStorageHandler storageHandler
+        , WebSocketHandler socketHandler
+        ]
+        getCmdPort
+
+
+{-| Persistent storage keys
+-}
+pk =
+    { model = "model"
+    , server = "server"
     }
