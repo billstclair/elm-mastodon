@@ -583,6 +583,7 @@ you can get to the headers, if you need them.
 -}
 type alias Response =
     { request : Request
+    , rawRequest : RawRequest
     , metadata : Http.Metadata
     , entity : Entity
     }
@@ -756,6 +757,7 @@ processResponse rawRequest response =
                 Ok entity ->
                     Ok
                         { request = rawRequest.request
+                        , rawRequest = rawRequest
                         , metadata = metadata
                         , entity = entity
                         }

@@ -29,6 +29,7 @@ import Html
         , p
         , pre
         , select
+        , span
         , text
         )
 import Html.Attributes
@@ -47,11 +48,17 @@ import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
 import Mastodon.EncodeDecode as ED
-import Mastodon.Entity as Entity exposing (Account, Authorization)
+import Mastodon.Entity as Entity exposing (Account, Authorization, Entity(..))
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
-import Mastodon.Request exposing (Error(..))
+import Mastodon.Request as Request
+    exposing
+        ( Error(..)
+        , RawRequest
+        , Request(..)
+        , Response
+        )
 import PortFunnel.LocalStorage as LocalStorage
-import PortFunnel.WebSocket as WebSocket exposing (Response(..))
+import PortFunnel.WebSocket as WebSocket
 import PortFunnels exposing (FunnelDict, Handler(..), State)
 import Task
 import Url exposing (Url)
@@ -70,6 +77,8 @@ type alias Model =
     , provider : String
 
     -- Non-persistent below here
+    , request : Maybe RawRequest
+    , response : Maybe Value
     , savedModel : Maybe SavedModel
     , key : Key
     , url : Url
@@ -88,6 +97,7 @@ type Msg
     | SetProvider String
     | ReceiveRedirect (Result Error (Cmd Msg))
     | ReceiveAuthorization (Result Error ( Authorization, Account ))
+    | ReceiveInstance (Result Error Response)
     | Login
     | Process Value
 
@@ -213,6 +223,8 @@ init value url key =
     , provider = "mastodon.social"
 
     -- Non-persistent below here
+    , request = Nothing
+    , response = Nothing
     , savedModel = Nothing
     , key = key
     , url = url
@@ -228,7 +240,7 @@ init value url key =
         -- and then all the saved authorizations.
         -- See `storageHandler` below, `get pk.model`.
         |> withCmds
-            [ Navigation.replaceUrl key "#"
+            [ Navigation.replaceUrl key url.path
             , case ( code, state ) of
                 ( Just cod, Just st ) ->
                     Login.getTokenTask { code = cod, state = st }
@@ -247,8 +259,7 @@ storageHandler response state model =
                 | started =
                     if
                         LocalStorage.isLoaded state.storage
-                            && model.started
-                            == NotStarted
+                            && (model.started == NotStarted)
                     then
                         StartedReadingModel
 
@@ -257,7 +268,10 @@ storageHandler response state model =
             }
 
         cmd =
-            if mdl.started == StartedReadingModel && model.started == NotStarted then
+            if
+                (mdl.started == StartedReadingModel)
+                    && (model.started == NotStarted)
+            then
                 get pk.model
 
             else
@@ -265,15 +279,25 @@ storageHandler response state model =
     in
     case response of
         LocalStorage.GetResponse { label, key, value } ->
-            case value of
-                Nothing ->
-                    mdl |> withNoCmd
-
-                Just v ->
-                    handleGetResponse key v mdl
+            handleGetResponse key value mdl
 
         _ ->
             mdl |> withCmd cmd
+
+
+getInstance : Model -> Cmd Msg
+getInstance model =
+    let
+        serverInfo =
+            { server = model.provider
+            , authorization = Nothing
+            }
+    in
+    Request.serverRequest (\id -> ReceiveInstance)
+        []
+        serverInfo
+        ()
+        InstanceRequest
 
 
 getVerifyCredentials : Model -> Cmd Msg
@@ -281,47 +305,59 @@ getVerifyCredentials model =
     Cmd.none
 
 
-handleGetResponse : String -> Value -> Model -> ( Model, Cmd Msg )
-handleGetResponse key value model =
+handleGetResponse : String -> Maybe Value -> Model -> ( Model, Cmd Msg )
+handleGetResponse key maybeValue model =
     if key == pk.model then
-        case JD.decodeValue savedModelDecoder value of
-            Err err ->
+        case maybeValue of
+            Nothing ->
                 { model
                     | started = Started
-                    , msg =
-                        Just <|
-                            Debug.log "Error decoding SavedModel"
-                                (JD.errorToString err)
+                    , msg = Nothing
                 }
                     |> withNoCmd
 
-            Ok savedModel ->
-                let
-                    mdl =
-                        Debug.log "savedModelToModel" <|
-                            savedModelToModel savedModel model
-                in
-                { mdl | started = Started }
-                    |> withCmd
-                        (getVerifyCredentials mdl)
+            Just value ->
+                case JD.decodeValue savedModelDecoder value of
+                    Err err ->
+                        { model
+                            | started = Started
+                            , msg =
+                                Just <|
+                                    Debug.log "Error decoding SavedModel"
+                                        (JD.errorToString err)
+                        }
+                            |> withNoCmd
+
+                    Ok savedModel ->
+                        let
+                            mdl =
+                                Debug.log "savedModelToModel" <|
+                                    savedModelToModel savedModel model
+                        in
+                        { mdl
+                            | started = Started
+                            , msg = Nothing
+                        }
+                            |> withCmd
+                                (getVerifyCredentials mdl)
 
     else
         model
             |> withNoCmd
 
 
-socketHandler : Response -> State -> Model -> ( Model, Cmd Msg )
+socketHandler : WebSocket.Response -> State -> Model -> ( Model, Cmd Msg )
 socketHandler response state mdl =
     let
         model =
             { mdl | funnelState = state }
     in
     case response of
-        ErrorResponse error ->
+        WebSocket.ErrorResponse error ->
             case error of
                 WebSocket.SocketAlreadyOpenError _ ->
                     socketHandler
-                        (ConnectedResponse { key = "", description = "" })
+                        (WebSocket.ConnectedResponse { key = "", description = "" })
                         state
                         model
 
@@ -332,11 +368,11 @@ socketHandler response state mdl =
         WebSocket.MessageReceivedResponse received ->
             model |> withNoCmd
 
-        ClosedResponse { expected, reason } ->
+        WebSocket.ClosedResponse { expected, reason } ->
             model
                 |> withNoCmd
 
-        ConnectedResponse _ ->
+        WebSocket.ConnectedResponse _ ->
             model |> withNoCmd
 
         _ ->
@@ -396,9 +432,18 @@ updateInternal msg model =
             )
 
         SetProvider provider ->
-            ( { model | provider = provider }
-            , Cmd.none
-            )
+            let
+                mdl =
+                    { model | provider = provider }
+            in
+            mdl
+                |> withCmd
+                    (if String.contains "." provider then
+                        getInstance mdl
+
+                     else
+                        Cmd.none
+                    )
 
         Login ->
             let
@@ -465,6 +510,24 @@ updateInternal msg model =
                     , Cmd.none
                     )
 
+        ReceiveInstance result ->
+            case result of
+                Err _ ->
+                    -- We'll get lots of errors, for non-existant domains
+                    model |> withNoCmd
+
+                Ok res ->
+                    case res.entity of
+                        InstanceEntity instance ->
+                            { model
+                                | request = Just res.rawRequest
+                                , response = Just instance.v
+                            }
+                                |> withNoCmd
+
+                        _ ->
+                            model |> withNoCmd
+
 
 providerOption : String -> String -> Html Msg
 providerOption currentProvider provider =
@@ -485,14 +548,19 @@ providerSelect model =
         []
 
 
+b : String -> Html msg
+b string =
+    Html.b [] [ text string ]
+
+
 view : Model -> Document Msg
 view model =
-    { title = "Mastodon Authorization Example"
+    { title = "Mastodon API Explorer"
     , body =
         [ div
             [ style "margin-left" "3em"
             ]
-            [ h2 [] [ text "Mastodon Authorization Example" ]
+            [ h2 [] [ text "Mastodon API Explorer" ]
             , p []
                 [ text "Provider: "
                 , providerSelect model
@@ -501,13 +569,32 @@ view model =
                 [ button [ onClick Login ]
                     [ text "Login" ]
                 ]
-            , case model.account of
-                Nothing ->
-                    text ""
+            , p [ style "color" "red" ]
+                [ Maybe.withDefault "" model.msg |> text ]
+            , p [] [ b "Sent:" ]
+            , pre []
+                [ case model.request of
+                    Nothing ->
+                        text ""
 
-                Just account ->
-                    pre []
-                        [ text <| JE.encode 2 account.v ]
+                    Just request ->
+                        span []
+                            [ text request.method
+                            , text " "
+                            , text request.url
+
+                            -- Need a jsonBody property
+                            ]
+                ]
+            , p [] [ b "Received:" ]
+            , pre []
+                [ case model.response of
+                    Nothing ->
+                        text ""
+
+                    Just v ->
+                        text <| JE.encode 2 v
+                ]
             , p []
                 [ text "Source code: "
                 , a
