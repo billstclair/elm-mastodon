@@ -254,8 +254,10 @@ which is included with the documentation for `loginTask` above.
 Your application will usually persist the `Authorization`, so you can use it
 the next time the user starts the application, as a parameter to `loginTask`.
 
+The `String` in the `Task` is the server name, e.g. "mastodon.social".
+
 -}
-getTokenTask : { code : String, state : String } -> Task Error ( Authorization, Account )
+getTokenTask : { code : String, state : String } -> Task Error ( String, Authorization, Account )
 getTokenTask { code, state } =
     case decodeStateString state of
         Err _ ->
@@ -304,7 +306,8 @@ getTokenTask { code, state } =
                                 (\response ->
                                     case response.entity of
                                         AccountEntity account ->
-                                            Task.succeed ( authorization, account )
+                                            Task.succeed
+                                                ( server, authorization, account )
 
                                         _ ->
                                             Task.fail <| BadUrl "Wrong entity type."
