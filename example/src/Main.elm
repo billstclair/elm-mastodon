@@ -34,7 +34,8 @@ import Html
         )
 import Html.Attributes
     exposing
-        ( href
+        ( checked
+        , href
         , selected
         , size
         , style
@@ -48,7 +49,7 @@ import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
 import Mastodon.EncodeDecode as ED
-import Mastodon.Entity as Entity exposing (Account, Authorization, Entity(..))
+import Mastodon.Entity as Entity exposing (Account, App, Authorization, Entity(..))
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request as Request
     exposing
@@ -60,6 +61,7 @@ import Mastodon.Request as Request
 import PortFunnel.LocalStorage as LocalStorage
 import PortFunnel.WebSocket as WebSocket
 import PortFunnels exposing (FunnelDict, Handler(..), State)
+import String.Extra as SE
 import Task
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((<?>))
@@ -75,6 +77,7 @@ type Started
 type alias Model =
     { authorization : Maybe Authorization
     , provider : String
+    , prettify : Bool
 
     -- Non-persistent below here
     , request : Maybe RawRequest
@@ -83,6 +86,9 @@ type alias Model =
     , key : Key
     , url : Url
     , hideClientId : Bool
+    , apps : Dict String App
+    , tokens : Dict String String
+    , loginProvider : Maybe String
     , account : Maybe Account
     , state : Maybe String
     , msg : Maybe String
@@ -95,9 +101,11 @@ type Msg
     = OnUrlRequest UrlRequest
     | OnUrlChange Url
     | SetProvider String
-    | ReceiveRedirect (Result Error (Cmd Msg))
+    | TogglePrettify
+    | ReceiveRedirect (Result Error ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result Error ( Authorization, Account ))
     | ReceiveInstance (Result Error Response)
+    | ReceiveAccount (Result Error ( String, Account ))
     | Login
     | Process Value
 
@@ -221,6 +229,7 @@ init value url key =
     in
     { authorization = Nothing
     , provider = "mastodon.social"
+    , prettify = True
 
     -- Non-persistent below here
     , request = Nothing
@@ -229,6 +238,9 @@ init value url key =
     , key = key
     , url = url
     , hideClientId = hideClientId
+    , apps = Dict.empty
+    , tokens = Dict.empty
+    , loginProvider = Nothing
     , account = Nothing
     , state = state
     , msg = msg
@@ -422,14 +434,10 @@ updateInternal : Msg -> Model -> ( Model, Cmd Msg )
 updateInternal msg model =
     case msg of
         OnUrlRequest _ ->
-            ( model
-            , Cmd.none
-            )
+            model |> withNoCmd
 
         OnUrlChange _ ->
-            ( model
-            , Cmd.none
-            )
+            model |> withNoCmd
 
         SetProvider provider ->
             let
@@ -445,13 +453,17 @@ updateInternal msg model =
                         Cmd.none
                     )
 
+        TogglePrettify ->
+            { model | prettify = not model.prettify }
+                |> withNoCmd
+
         Login ->
             let
                 url =
                     model.url
 
                 sau =
-                    { client_name = "elm-mastodon"
+                    { client_name = "mammudeck"
                     , server = model.provider
                     , applicationUri =
                         { url
@@ -461,12 +473,12 @@ updateInternal msg model =
                             |> Url.toString
                     }
             in
-            case Login.loginTask sau Nothing of
+            case Login.loginTask sau model.authorization of
                 Redirect task ->
                     ( model, Task.attempt ReceiveRedirect task )
 
-                _ ->
-                    ( model, Cmd.none )
+                FetchAccount task ->
+                    ( model, Task.attempt ReceiveAccount task )
 
         Process value ->
             case
@@ -476,9 +488,8 @@ updateInternal msg model =
                     model
             of
                 Err error ->
-                    -- Maybe I should display an error here,
-                    -- but I don't think it will ever happen.
-                    model |> withNoCmd
+                    { model | msg = Just <| Debug.toString error }
+                        |> withNoCmd
 
                 Ok res ->
                     res
@@ -490,7 +501,7 @@ updateInternal msg model =
                     , Cmd.none
                     )
 
-                Ok cmd ->
+                Ok ( provider, app, cmd ) ->
                     ( { model | msg = Nothing }
                     , cmd
                     )
@@ -516,17 +527,44 @@ updateInternal msg model =
                     -- We'll get lots of errors, for non-existant domains
                     model |> withNoCmd
 
-                Ok res ->
-                    case res.entity of
+                Ok response ->
+                    case response.entity of
                         InstanceEntity instance ->
                             { model
-                                | request = Just res.rawRequest
+                                | request = Just response.rawRequest
                                 , response = Just instance.v
                             }
                                 |> withNoCmd
 
                         _ ->
                             model |> withNoCmd
+
+        ReceiveAccount result ->
+            case result of
+                Err error ->
+                    { model | msg = Just <| Debug.toString error }
+                        |> withNoCmd
+
+                Ok ( loginProvider, account ) ->
+                    let
+                        serverInfo =
+                            { server = loginProvider
+                            , authorization = Nothing
+                            }
+
+                        request =
+                            -- Fake the request
+                            Request.requestToRawRequest []
+                                serverInfo
+                                (AccountsRequest Request.GetVerifyCredentials)
+                    in
+                    { model
+                        | loginProvider = Just loginProvider
+                        , account = Just account
+                        , request = Just request
+                        , response = Just account.v
+                    }
+                        |> withNoCmd
 
 
 providerOption : String -> String -> Html Msg
@@ -551,6 +589,11 @@ providerSelect model =
 b : String -> Html msg
 b string =
     Html.b [] [ text string ]
+
+
+br : Html msg
+br =
+    Html.br [] []
 
 
 view : Model -> Document Msg
@@ -586,14 +629,26 @@ view model =
                             -- Need a jsonBody property
                             ]
                 ]
-            , p [] [ b "Received:" ]
+            , p []
+                [ input
+                    [ type_ "checkbox"
+                    , onClick TogglePrettify
+                    , checked model.prettify
+                    ]
+                    []
+                , b " Prettify"
+                , text " (easier to read, may no longer be valid JSON)"
+                , br
+                , b "Received:"
+                ]
             , pre []
                 [ case model.response of
                     Nothing ->
                         text ""
 
-                    Just v ->
-                        text <| JE.encode 2 v
+                    Just value ->
+                        text <|
+                            encodeWrap model.prettify value
                 ]
             , p []
                 [ text "Source code: "
@@ -608,6 +663,63 @@ view model =
     }
 
 
+convertJsonNewlines : String -> String
+convertJsonNewlines json =
+    String.replace "\\r" "" json
+        |> String.replace "\\n" "\n"
+
+
+wrapJsonLine : Int -> String -> List String
+wrapJsonLine width line =
+    let
+        body =
+            String.trimLeft line
+
+        indentN =
+            String.length line - String.length body + 2
+
+        initialIndent =
+            String.repeat (indentN - 2) " "
+
+        indent =
+            String.repeat indentN " "
+
+        wrapped =
+            convertJsonNewlines body
+                |> String.split "\n"
+                |> List.map (SE.softWrap <| max 20 (width - indentN))
+                |> String.join "\n"
+
+        lines =
+            String.split "\n" wrapped
+    in
+    case lines of
+        [] ->
+            []
+
+        first :: rest ->
+            (initialIndent ++ first)
+                :: List.map ((++) indent) rest
+
+
+wrapJsonLines : Int -> String -> String
+wrapJsonLines width string =
+    String.split "\n" string
+        |> List.concatMap (wrapJsonLine width)
+        |> String.join "\n"
+
+
+encodeWrap : Bool -> Value -> String
+encodeWrap prettify value =
+    JE.encode 2 value
+        |> (if prettify then
+                wrapJsonLines 80
+
+            else
+                identity
+           )
+
+
 
 ---
 --- Persistence
@@ -617,6 +729,7 @@ view model =
 type alias SavedModel =
     { authorization : Maybe Authorization
     , provider : String
+    , prettify : Bool
     }
 
 
@@ -624,6 +737,7 @@ modelToSavedModel : Model -> SavedModel
 modelToSavedModel model =
     { authorization = model.authorization
     , provider = model.provider
+    , prettify = model.prettify
     }
 
 
@@ -632,6 +746,7 @@ savedModelToModel savedModel model =
     { model
         | authorization = savedModel.authorization
         , provider = savedModel.provider
+        , prettify = savedModel.prettify
     }
 
 
@@ -642,6 +757,7 @@ encodeSavedModel savedModel =
           , ED.encodeMaybe ED.encodeAuthorization savedModel.authorization
           )
         , ( "provider", JE.string savedModel.provider )
+        , ( "prettify", JE.bool savedModel.prettify )
         ]
 
 
@@ -650,6 +766,7 @@ savedModelDecoder =
     JD.succeed SavedModel
         |> required "authorization" (JD.nullable ED.authorizationDecoder)
         |> required "provider" JD.string
+        |> optional "prettify" JD.bool True
 
 
 put : String -> Maybe Value -> Cmd Msg

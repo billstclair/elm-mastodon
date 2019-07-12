@@ -117,7 +117,7 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
                             (\response ->
                                 case response.entity of
                                     AccountEntity account ->
-                                        Task.succeed account
+                                        Task.succeed ( server, account )
 
                                     _ ->
                                         Task.fail <| BadUrl "Shouldn't happen"
@@ -146,8 +146,11 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
                             (\response ->
                                 case response.entity of
                                     AppEntity app ->
-                                        appToAuthorizeUrl server app
+                                        ( server
+                                        , app
+                                        , appToAuthorizeUrl server app
                                             |> Navigation.load
+                                        )
                                             |> Task.succeed
 
                                     _ ->
@@ -162,10 +165,12 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
 It's either a task to fetch the logged-in user's `Mastodon.Entity.Account`
 or a task to redirect to the authorization server to get a code.
 
+The `String` parts of the successful results are the server domain.
+
 -}
 type FetchAccountOrRedirect msg
-    = FetchAccount (Task Error Account)
-    | Redirect (Task Error (Cmd msg))
+    = FetchAccount (Task Error ( String, Account ))
+    | Redirect (Task Error ( String, App, Cmd msg ))
 
 
 {-| Compute URL to redirect to for authentication.
