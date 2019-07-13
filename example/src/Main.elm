@@ -87,7 +87,7 @@ type alias Model =
     , url : Url
     , hideClientId : Bool
     , apps : Dict String App
-    , authorizations : Dict String String
+    , tokens : Dict String String
     , loginServer : Maybe String
     , account : Maybe Account
     , state : Maybe String
@@ -239,7 +239,7 @@ init value url key =
     , url = url
     , hideClientId = hideClientId
     , apps = Dict.empty
-    , authorizations = Dict.empty
+    , tokens = Dict.empty
     , loginServer = Nothing
     , account = Nothing
     , state = state
@@ -249,7 +249,7 @@ init value url key =
     }
         -- As soon as the localStorage module reports in,
         -- we'll load the saved model,
-        -- and then all the saved authorizations.
+        -- and then all the saved tokens.
         -- See `storageHandler` below, `get pk.model`.
         |> withCmds
             [ Navigation.replaceUrl key url.path
@@ -284,14 +284,21 @@ storageHandler response state model =
                 (mdl.started == StartedReadingModel)
                     && (model.started == NotStarted)
             then
-                get pk.model
+                Cmd.batch
+                    [ get pk.model
+                    , listKeysLabeled pk.app (pk.app ++ ".")
+                    , listKeysLabeled pk.token (pk.token ++ ".")
+                    ]
 
             else
                 Cmd.none
     in
     case response of
         LocalStorage.GetResponse { label, key, value } ->
-            handleGetResponse key value mdl
+            handleGetResponse label key value mdl
+
+        LocalStorage.ListKeysResponse { label, prefix, keys } ->
+            handleListKeysResponse label prefix keys model
 
         _ ->
             mdl |> withCmd cmd
@@ -317,45 +324,125 @@ getVerifyCredentials model =
     Cmd.none
 
 
-handleGetResponse : String -> Maybe Value -> Model -> ( Model, Cmd Msg )
-handleGetResponse key maybeValue model =
-    if key == pk.model then
-        case maybeValue of
-            Nothing ->
-                { model
-                    | started = Started
-                    , msg = Nothing
-                }
-                    |> withNoCmd
+handleListKeysResponse : Maybe String -> String -> List String -> Model -> ( Model, Cmd Msg )
+handleListKeysResponse maybeLabel prefix keys model =
+    case maybeLabel of
+        Nothing ->
+            model |> withNoCmd
 
-            Just value ->
-                case JD.decodeValue savedModelDecoder value of
-                    Err err ->
-                        { model
-                            | started = Started
-                            , msg =
-                                Just <|
-                                    Debug.log "Error decoding SavedModel"
-                                        (JD.errorToString err)
-                        }
-                            |> withNoCmd
+        Just label ->
+            -- label will be either pk.app or pk.token,
+            -- but we won't care about that until the value comes in
+            -- to handleGetResponse below.
+            model |> withCmds (List.map (getLabeled label) keys)
 
-                    Ok savedModel ->
-                        let
-                            mdl =
-                                Debug.log "savedModelToModel" <|
-                                    savedModelToModel savedModel model
-                        in
-                        { mdl
-                            | started = Started
-                            , msg = Nothing
-                        }
-                            |> withCmd
-                                (getVerifyCredentials mdl)
 
-    else
-        model
-            |> withNoCmd
+handleGetModel : Maybe Value -> Model -> ( Model, Cmd Msg )
+handleGetModel maybeValue model =
+    case maybeValue of
+        Nothing ->
+            { model
+                | started = Started
+                , msg = Nothing
+            }
+                |> withNoCmd
+
+        Just value ->
+            case JD.decodeValue savedModelDecoder value of
+                Err err ->
+                    { model
+                        | started = Started
+                        , msg =
+                            Just <|
+                                Debug.log "Error decoding SavedModel"
+                                    (JD.errorToString err)
+                    }
+                        |> withNoCmd
+
+                Ok savedModel ->
+                    let
+                        mdl =
+                            Debug.log "savedModelToModel" <|
+                                savedModelToModel savedModel model
+                    in
+                    { mdl
+                        | started = Started
+                        , msg = Nothing
+                    }
+                        |> withCmd
+                            (getVerifyCredentials mdl)
+
+
+handleGetApp : String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetApp key value model =
+    case JD.decodeValue ED.appDecoder value of
+        Err err ->
+            let
+                ignore =
+                    Debug.log ("Error decoding " ++ key) err
+            in
+            model |> withNoCmd
+
+        Ok app ->
+            let
+                apps =
+                    model.apps
+
+                server =
+                    Debug.log "Received app for server" <|
+                        appStorageKeyServer key
+            in
+            { model | apps = Dict.insert server app apps }
+                |> withNoCmd
+
+
+handleGetToken : String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetToken key value model =
+    case JD.decodeValue JD.string value of
+        Err err ->
+            let
+                ignore =
+                    Debug.log ("Error decoding " ++ key) err
+            in
+            model |> withNoCmd
+
+        Ok token ->
+            let
+                tokens =
+                    model.tokens
+
+                server =
+                    Debug.log "Received token for server" <|
+                        tokenStorageKeyServer key
+            in
+            { model | tokens = Dict.insert server token tokens }
+                |> withNoCmd
+
+
+handleGetResponse : Maybe String -> String -> Maybe Value -> Model -> ( Model, Cmd Msg )
+handleGetResponse maybeLabel key maybeValue model =
+    case maybeLabel of
+        Nothing ->
+            if key == pk.model then
+                handleGetModel maybeValue model
+
+            else
+                model |> withNoCmd
+
+        Just label ->
+            case maybeValue of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just value ->
+                    if label == pk.app then
+                        handleGetApp key value model
+
+                    else if label == pk.token then
+                        handleGetToken key value model
+
+                    else
+                        model |> withNoCmd
 
 
 socketHandler : WebSocket.Response -> State -> Model -> ( Model, Cmd Msg )
@@ -601,16 +688,16 @@ saveApp server app model =
 saveAuthorization : String -> Authorization -> Model -> ( Model, Cmd Msg )
 saveAuthorization server authorization model =
     let
-        authorizations =
-            model.authorizations
+        tokens =
+            model.tokens
     in
     { model
-        | authorizations =
+        | tokens =
             Dict.insert server
                 authorization.authorization
-                authorizations
+                tokens
     }
-        |> withCmd (putAuthorization server authorization.authorization)
+        |> withCmd (putToken server authorization.authorization)
 
 
 serverOption : String -> String -> Html Msg
@@ -825,15 +912,58 @@ get key =
     localStorageSend (LocalStorage.get <| Debug.log "get" key)
 
 
+getLabeled : String -> String -> Cmd Msg
+getLabeled label key =
+    localStorageSend
+        (LocalStorage.getLabeled label <|
+            Debug.log ("getLabeled " ++ label) key
+        )
+
+
+listKeysLabeled : String -> String -> Cmd Msg
+listKeysLabeled label prefix =
+    localStorageSend (LocalStorage.listKeysLabeled label prefix)
+
+
+appStorageKey : String -> String
+appStorageKey server =
+    pk.app ++ "." ++ server
+
+
+appStorageKeyServer : String -> String
+appStorageKeyServer key =
+    String.dropLeft (String.length pk.app + 1) key
+
+
+getApp : String -> Cmd Msg
+getApp server =
+    getLabeled pk.app <| appStorageKey server
+
+
 putApp : String -> App -> Cmd Msg
 putApp server app =
-    put (pk.app ++ "." ++ server) <|
+    put (appStorageKey server) <|
         Just (ED.encodeApp app)
 
 
-putAuthorization : String -> String -> Cmd Msg
-putAuthorization server authorization =
-    put (pk.authorization ++ "." ++ server) <|
+tokenStorageKey : String -> String
+tokenStorageKey server =
+    pk.token ++ "." ++ server
+
+
+tokenStorageKeyServer : String -> String
+tokenStorageKeyServer key =
+    String.dropLeft (String.length pk.token + 1) key
+
+
+getToken : String -> Cmd Msg
+getToken server =
+    getLabeled pk.token <| tokenStorageKey server
+
+
+putToken : String -> String -> Cmd Msg
+putToken server authorization =
+    put (tokenStorageKey server) <|
         Just (JE.string authorization)
 
 
@@ -886,5 +1016,5 @@ funnelDict =
 pk =
     { model = "model"
     , app = "app"
-    , authorization = "authorization"
+    , token = "token"
     }
