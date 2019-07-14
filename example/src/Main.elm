@@ -35,7 +35,9 @@ import Html
 import Html.Attributes
     exposing
         ( checked
+        , disabled
         , href
+        , placeholder
         , selected
         , size
         , style
@@ -89,7 +91,6 @@ type alias Model =
     , hideClientId : Bool
     , tokens : Dict String String
     , account : Maybe Account
-    , state : Maybe String
     , msg : Maybe String
     , started : Started
     , funnelState : State
@@ -108,6 +109,7 @@ type Msg
     | ReceiveAccount (Result Error Response)
     | Login
     | Logout
+    | ClearAll
     | Process Value
 
 
@@ -229,7 +231,7 @@ init value url key =
                     ( Nothing, Nothing, Nothing )
     in
     { token = Nothing
-    , server = "mastodon.social"
+    , server = ""
     , prettify = True
 
     -- Non-persistent below here
@@ -242,7 +244,6 @@ init value url key =
     , tokens = Dict.empty
     , loginServer = Nothing
     , account = Nothing
-    , state = state
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -385,7 +386,13 @@ handleGetModel maybeValue model =
                         | started = Started
                         , msg = Nothing
                     }
-                        |> withNoCmd
+                        |> withCmd
+                            (if mdl.loginServer == Nothing then
+                                Task.perform SetServer <| Task.succeed mdl.server
+
+                             else
+                                Cmd.none
+                            )
 
 
 handleGetToken : String -> Value -> Model -> ( Model, Cmd Msg )
@@ -525,22 +532,18 @@ updateInternal msg model =
             model |> withNoCmd
 
         SetServer server ->
-            if server == "" then
-                model |> withNoCmd
+            let
+                mdl =
+                    { model | server = server }
+            in
+            mdl
+                |> withCmd
+                    (if String.contains "." server then
+                        getInstance mdl
 
-            else
-                let
-                    mdl =
-                        { model | server = server }
-                in
-                mdl
-                    |> withCmd
-                        (if String.contains "." server then
-                            getInstance mdl
-
-                         else
-                            Cmd.none
-                        )
+                     else
+                        Cmd.none
+                    )
 
         TogglePrettify ->
             { model | prettify = not model.prettify }
@@ -580,8 +583,29 @@ updateInternal msg model =
                         , loginServer = Nothing
                         , account = Nothing
                         , tokens = Dict.remove server model.tokens
+                        , token = Nothing
+                        , request = Nothing
+                        , response = Nothing
+                        , msg = Nothing
                     }
                         |> withCmd (putToken server Nothing)
+
+        ClearAll ->
+            let
+                mdl =
+                    { model
+                        | tokens = Dict.empty
+                        , server = ""
+                        , loginServer = Nothing
+                        , account = Nothing
+                        , token = Nothing
+                        , request = Nothing
+                        , response = Nothing
+                        , msg = Nothing
+                    }
+            in
+            { mdl | savedModel = Just <| modelToSavedModel mdl }
+                |> withCmd clear
 
         Process value ->
             case
@@ -775,13 +799,17 @@ view model =
                     [ size 30
                     , onInput SetServer
                     , value model.server
+                    , placeholder "mastodon.social"
                     ]
                     []
                 , text " "
                 , serverSelect model
                 ]
             , p []
-                [ button [ onClick Login ]
+                [ button
+                    [ onClick Login
+                    , disabled <| model.server == ""
+                    ]
                     [ text "Login" ]
                 ]
             , p [ style "color" "red" ]
@@ -853,6 +881,10 @@ view model =
                     , target "_blank"
                     ]
                     [ text "GitHub" ]
+                ]
+            , p []
+                [ button [ onClick ClearAll ]
+                    [ text "Clear All Persistent State" ]
                 ]
             ]
         ]
