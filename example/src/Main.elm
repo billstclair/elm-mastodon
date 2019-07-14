@@ -106,12 +106,14 @@ type Msg
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
     | ReceiveInstance (Result Error Response)
-    | ReceiveFetchAccount (Result ( String, Error ) ( String, Account ))
+    | ReceiveFetchAccount (Result ( String, Error ) ( String, String, Account ))
     | ReceiveAccount (Result Error Response)
+    | Process Value
     | Login
     | Logout
     | ClearAll
-    | Process Value
+    | ReceiveResponse (Result Error Response)
+    | SetLoginServer
 
 
 main =
@@ -327,9 +329,10 @@ getVerifyCredentials model =
             Cmd.none
 
         Just server ->
-            case Dict.get server model.tokens of
+            case model.token of
                 Nothing ->
-                    Cmd.none
+                    sendRequest InstanceRequest model
+                        |> Tuple.second
 
                 Just token ->
                     Request.serverRequest (\_ -> ReceiveAccount)
@@ -392,7 +395,7 @@ handleGetModel maybeValue model =
                                 Task.perform SetServer <| Task.succeed mdl.server
 
                              else
-                                Cmd.none
+                                getVerifyCredentials mdl
                             )
 
 
@@ -414,18 +417,9 @@ handleGetToken key value model =
                 server =
                     Debug.log "Received token for server" <|
                         tokenStorageKeyServer key
-
-                mdl =
-                    { model | tokens = Dict.insert server token tokens }
             in
-            mdl
-                |> withCmd
-                    (if Just server == model.loginServer then
-                        getVerifyCredentials mdl
-
-                     else
-                        Cmd.none
-                    )
+            { model | tokens = Dict.insert server token tokens }
+                |> withNoCmd
 
 
 handleGetResponse : Maybe String -> String -> Maybe Value -> Model -> ( Model, Cmd Msg )
@@ -550,6 +544,132 @@ updateInternal msg model =
             { model | prettify = not model.prettify }
                 |> withNoCmd
 
+        ReceiveRedirect result ->
+            case result of
+                Err ( server, err ) ->
+                    ( { model | msg = Just <| Debug.toString err }
+                    , Cmd.none
+                    )
+
+                Ok ( server, app, cmd ) ->
+                    { model | msg = Nothing }
+                        |> withCmd cmd
+
+        ReceiveAuthorization result ->
+            case result of
+                Err ( server, err ) ->
+                    ( { model | msg = Just <| Debug.toString err }
+                    , Cmd.none
+                    )
+
+                Ok ( server, authorization, account ) ->
+                    let
+                        ( mdl, cmd ) =
+                            saveAuthorization server authorization model
+
+                        serverInfo =
+                            { server = server
+                            , token = Just authorization.token
+                            }
+                    in
+                    { mdl
+                        | msg = Nothing
+                        , token = Just authorization.token
+                        , loginServer = Just server
+                        , account = Just account
+                        , request =
+                            -- Fake the request
+                            Just <|
+                                Request.requestToRawRequest []
+                                    serverInfo
+                                    (AccountsRequest Request.GetVerifyCredentials)
+                        , response = Just account.v
+                    }
+                        |> withCmd cmd
+
+        ReceiveFetchAccount result ->
+            case result of
+                Err error ->
+                    { model | msg = Just <| Debug.toString error }
+                        |> withNoCmd
+
+                Ok ( loginServer, token, account ) ->
+                    let
+                        serverInfo =
+                            { server = loginServer
+                            , token = Just token
+                            }
+
+                        request =
+                            -- Fake the request
+                            Request.requestToRawRequest []
+                                serverInfo
+                                (AccountsRequest Request.GetVerifyCredentials)
+                    in
+                    { model
+                        | msg = Nothing
+                        , server = loginServer
+                        , loginServer = Just loginServer
+                        , token = Just token
+                        , account = Just account
+                        , request = Just request
+                        , response = Just account.v
+                    }
+                        |> withNoCmd
+
+        ReceiveInstance result ->
+            case result of
+                Err _ ->
+                    -- We'll get lots of errors, for non-existant domains
+                    model |> withNoCmd
+
+                Ok response ->
+                    case response.entity of
+                        InstanceEntity instance ->
+                            { model
+                                | msg = Nothing
+                                , request = Just response.rawRequest
+                                , response = Just instance.v
+                            }
+                                |> withNoCmd
+
+                        _ ->
+                            model |> withNoCmd
+
+        ReceiveAccount result ->
+            case result of
+                Err error ->
+                    { model | msg = Just <| Debug.toString error }
+                        |> withNoCmd
+
+                Ok response ->
+                    case response.entity of
+                        AccountEntity account ->
+                            { model
+                                | msg = Nothing
+                                , request = Just response.rawRequest
+                                , response = Just account.v
+                                , account = Just account
+                            }
+                                |> withNoCmd
+
+                        _ ->
+                            model |> withNoCmd
+
+        Process value ->
+            case
+                PortFunnels.processValue funnelDict
+                    value
+                    model.funnelState
+                    model
+            of
+                Err error ->
+                    { model | msg = Just <| Debug.toString error }
+                        |> withNoCmd
+
+                Ok res ->
+                    res
+
         Login ->
             let
                 url =
@@ -608,130 +728,62 @@ updateInternal msg model =
             { mdl | savedModel = Just <| modelToSavedModel mdl }
                 |> withCmd clear
 
-        Process value ->
-            case
-                PortFunnels.processValue funnelDict
-                    value
-                    model.funnelState
-                    model
-            of
-                Err error ->
-                    { model | msg = Just <| Debug.toString error }
-                        |> withNoCmd
+        ReceiveResponse result ->
+            receiveResponse result model
 
-                Ok res ->
-                    res
+        SetLoginServer ->
+            if model.server == "" then
+                model |> withNoCmd
 
-        ReceiveRedirect result ->
-            case result of
-                Err ( server, err ) ->
-                    ( { model | msg = Just <| Debug.toString err }
-                    , Cmd.none
-                    )
-
-                Ok ( server, app, cmd ) ->
-                    { model | msg = Nothing }
-                        |> withCmd cmd
-
-        ReceiveAuthorization result ->
-            case result of
-                Err ( server, err ) ->
-                    ( { model | msg = Just <| Debug.toString err }
-                    , Cmd.none
-                    )
-
-                Ok ( server, authorization, account ) ->
-                    let
-                        ( mdl, cmd ) =
-                            saveAuthorization server authorization model
-
-                        serverInfo =
-                            { server = server
-                            , token = Just authorization.token
-                            }
-                    in
-                    { mdl
-                        | msg = Nothing
-                        , token = Just authorization.token
-                        , loginServer = Just server
-                        , account = Just account
-                        , request =
-                            -- Fake the request
-                            Just <|
-                                Request.requestToRawRequest []
-                                    serverInfo
-                                    (AccountsRequest Request.GetVerifyCredentials)
-                        , response = Just account.v
-                    }
-                        |> withCmd cmd
-
-        ReceiveFetchAccount result ->
-            case result of
-                Err error ->
-                    { model | msg = Just <| Debug.toString error }
-                        |> withNoCmd
-
-                Ok ( loginServer, account ) ->
-                    let
-                        serverInfo =
-                            { server = loginServer
+            else
+                let
+                    mdl =
+                        { model
+                            | loginServer = Just model.server
                             , token = Nothing
-                            }
+                            , account = Nothing
+                        }
+                in
+                sendRequest InstanceRequest mdl
 
-                        request =
-                            -- Fake the request
-                            Request.requestToRawRequest []
-                                serverInfo
-                                (AccountsRequest Request.GetVerifyCredentials)
-                    in
-                    { model
-                        | msg = Nothing
-                        , server = loginServer
-                        , loginServer = Just loginServer
-                        , account = Just account
-                        , request = Just request
-                        , response = Just account.v
-                    }
-                        |> withNoCmd
 
-        ReceiveInstance result ->
-            case result of
-                Err _ ->
-                    -- We'll get lots of errors, for non-existant domains
-                    model |> withNoCmd
+receiveResponse : Result Error Response -> Model -> ( Model, Cmd Msg )
+receiveResponse result model =
+    case result of
+        Err err ->
+            { model
+                | msg = Just <| Debug.toString err
+                , request = Nothing
+                , response = Nothing
+            }
+                |> withNoCmd
 
-                Ok response ->
-                    case response.entity of
-                        InstanceEntity instance ->
-                            { model
-                                | msg = Nothing
-                                , request = Just response.rawRequest
-                                , response = Just instance.v
-                            }
-                                |> withNoCmd
+        Ok response ->
+            { model
+                | msg = Nothing
+                , request = Just response.rawRequest
+                , response = Just <| ED.entityValue response.entity
+            }
+                |> withNoCmd
 
-                        _ ->
-                            model |> withNoCmd
 
-        ReceiveAccount result ->
-            case result of
-                Err error ->
-                    { model | msg = Just <| Debug.toString error }
-                        |> withNoCmd
+sendRequest : Request -> Model -> ( Model, Cmd Msg )
+sendRequest request model =
+    case model.loginServer of
+        Nothing ->
+            model |> withNoCmd
 
-                Ok response ->
-                    case response.entity of
-                        AccountEntity account ->
-                            { model
-                                | msg = Nothing
-                                , request = Just response.rawRequest
-                                , response = Just account.v
-                                , account = Just account
-                            }
-                                |> withNoCmd
-
-                        _ ->
-                            model |> withNoCmd
+        Just server ->
+            model
+                |> withCmd
+                    (Request.serverRequest (\_ -> ReceiveResponse)
+                        []
+                        { server = server
+                        , token = model.token
+                        }
+                        ()
+                        request
+                    )
 
 
 saveAuthorization : String -> Authorization -> Model -> ( Model, Cmd Msg )
@@ -812,6 +864,12 @@ view model =
                     , disabled <| model.server == ""
                     ]
                     [ text "Login" ]
+                , text " "
+                , button
+                    [ onClick SetLoginServer
+                    , disabled <| model.server == ""
+                    ]
+                    [ text "Set Server" ]
                 ]
             , p [ style "color" "red" ]
                 [ Maybe.withDefault "" model.msg |> text ]
@@ -982,6 +1040,7 @@ encodeWrap prettify value =
 
 type alias SavedModel =
     { loginServer : Maybe String
+    , token : Maybe String
     , server : String
     , prettify : Bool
     }
@@ -990,6 +1049,7 @@ type alias SavedModel =
 modelToSavedModel : Model -> SavedModel
 modelToSavedModel model =
     { loginServer = model.loginServer
+    , token = model.token
     , server = model.server
     , prettify = model.prettify
     }
@@ -999,6 +1059,7 @@ savedModelToModel : SavedModel -> Model -> Model
 savedModelToModel savedModel model =
     { model
         | loginServer = savedModel.loginServer
+        , token = savedModel.token
         , server = savedModel.server
         , prettify = savedModel.prettify
     }
@@ -1008,6 +1069,7 @@ encodeSavedModel : SavedModel -> Value
 encodeSavedModel savedModel =
     JE.object
         [ ( "loginServer", ED.encodeMaybe JE.string savedModel.loginServer )
+        , ( "token", ED.encodeMaybe JE.string savedModel.token )
         , ( "server", JE.string savedModel.server )
         , ( "prettify", JE.bool savedModel.prettify )
         ]
@@ -1017,6 +1079,7 @@ savedModelDecoder : Decoder SavedModel
 savedModelDecoder =
     JD.succeed SavedModel
         |> optional "loginServer" (JD.nullable JD.string) Nothing
+        |> optional "token" (JD.nullable JD.string) Nothing
         |> required "server" JD.string
         |> optional "prettify" JD.bool True
 

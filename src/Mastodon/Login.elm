@@ -119,7 +119,7 @@ loginTask { client_name, server, applicationUri } maybeToken =
                             (\response ->
                                 case response.entity of
                                     AccountEntity account ->
-                                        Task.succeed ( server, account )
+                                        Task.succeed ( server, token, account )
 
                                     _ ->
                                         Task.fail
@@ -174,11 +174,12 @@ loginTask { client_name, server, applicationUri } maybeToken =
 It's either a task to fetch the logged-in user's `Mastodon.Entity.Account`
 or a task to redirect to the authorization server to get a code.
 
-The `String` parts of the results are the server domain.
+The two `String`s in `FetchAccount` are the server name and token.
+The `String` in `Redirect` is the server name.
 
 -}
 type FetchAccountOrRedirect msg
-    = FetchAccount (Task ( String, Error ) ( String, Account ))
+    = FetchAccount (Task ( String, Error ) ( String, String, Account ))
     | Redirect (Task ( String, Error ) ( String, App, Cmd msg ))
 
 

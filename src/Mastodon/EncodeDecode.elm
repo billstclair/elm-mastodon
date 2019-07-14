@@ -11,7 +11,7 @@
 
 
 module Mastodon.EncodeDecode exposing
-    ( encodeEntity, entityDecoder
+    ( encodeEntity, entityDecoder, entityValue
     , accountDecoder, encodeAccount
     , fieldDecoder, encodeField
     , appDecoder, encodeApp
@@ -51,7 +51,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 
 # For the one type to rule them all
 
-@docs encodeEntity, entityDecoder
+@docs encodeEntity, entityDecoder, entityValue
 
 
 # For the individual entity types
@@ -164,8 +164,8 @@ encodeEntity entity =
         SourceEntity source ->
             encodeSource source
 
-        TokenEntity source ->
-            encodeToken source
+        TokenEntity token ->
+            encodeToken token
 
         ApplicationEntity application ->
             encodeApplication application
@@ -270,6 +270,164 @@ entityDecoder =
         , JD.list tagDecoder |> JD.map TagListEntity
         , JD.list JD.string |> JD.map StringListEntity
         ]
+
+
+{-| Similar to `encodeEntity`, but returns the `v` field, if it is non-null,
+
+giving you the raw data that came over the wire, if this entity DID come over
+the wire, and is not one of the few that don't have a `v` field.
+
+-}
+entityValue : Entity -> Value
+entityValue entity =
+    case entity of
+        NoEntity ->
+            JE.null
+
+        AccountEntity account ->
+            if account.v == JE.null then
+                encodeAccount account
+
+            else
+                account.v
+
+        AppEntity app ->
+            if app.v == JE.null then
+                encodeApp app
+
+            else
+                app.v
+
+        AccountListEntity accounts ->
+            JE.list entityValue (List.map AccountEntity accounts)
+
+        SourceEntity source ->
+            if source.v == JE.null then
+                encodeSource source
+
+            else
+                source.v
+
+        TokenEntity token ->
+            if token.v == JE.null then
+                encodeToken token
+
+            else
+                token.v
+
+        ApplicationEntity application ->
+            if application.v == JE.null then
+                encodeApplication application
+
+            else
+                application.v
+
+        CardEntity card ->
+            if card.v == JE.null then
+                encodeCard card
+
+            else
+                card.v
+
+        ContextEntity context ->
+            encodeContext context
+
+        EmojiEntity emoji ->
+            encodeEmoji emoji
+
+        EmojiListEntity emojis ->
+            JE.list encodeEmoji emojis
+
+        StatusEntity status ->
+            if status.v == JE.null then
+                encodeStatus status
+
+            else
+                status.v
+
+        PollEntity poll ->
+            if poll.v == JE.null then
+                encodePoll poll
+
+            else
+                poll.v
+
+        StatusListEntity statuses ->
+            JE.list entityValue (List.map StatusEntity statuses)
+
+        FilterEntity filter ->
+            if filter.v == JE.null then
+                encodeFilter filter
+
+            else
+                filter.v
+
+        FilterListEntity filters ->
+            JE.list entityValue (List.map FilterEntity filters)
+
+        InstanceEntity instance ->
+            if instance.v == JE.null then
+                encodeInstance instance
+
+            else
+                instance.v
+
+        ListEntityEntity list ->
+            encodeListEntity list
+
+        NotificationEntity notification ->
+            if notification.v == JE.null then
+                encodeNotification notification
+
+            else
+                notification.v
+
+        PushSubscriptionEntity pushSubscription ->
+            if pushSubscription.v == JE.null then
+                encodePushSubscription pushSubscription
+
+            else
+                pushSubscription.v
+
+        RelationshipEntity relationship ->
+            if relationship.v == JE.null then
+                encodeRelationship relationship
+
+            else
+                relationship.v
+
+        RelationshipListEntity relationships ->
+            JE.list entityValue (List.map RelationshipEntity relationships)
+
+        ResultsEntity results ->
+            if results.v == JE.null then
+                encodeResults results
+
+            else
+                results.v
+
+        ScheduledStatusEntity scheduledStatus ->
+            if scheduledStatus.v == JE.null then
+                encodeScheduledStatus scheduledStatus
+
+            else
+                scheduledStatus.v
+
+        ConversationEntity conversation ->
+            if conversation.v == JE.null then
+                encodeConversation conversation
+
+            else
+                conversation.v
+
+        TagListEntity tags ->
+            JE.list encodeTag tags
+
+        StringListEntity stringList ->
+            JE.list JE.string stringList
+
+        _ ->
+            JE.string "TODO"
 
 
 {-| Encode `Maybe x` to `Json.Encode.null` if it's Nothing,
