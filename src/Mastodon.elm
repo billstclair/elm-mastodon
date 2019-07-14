@@ -54,7 +54,7 @@ Copy of `Mastodon.Request.ServerInfo`.
 -}
 type alias ServerInfo =
     { server : String
-    , authorization : Maybe String
+    , token : Maybe String
     }
 
 

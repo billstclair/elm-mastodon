@@ -880,7 +880,7 @@ view model =
 
                     Just server ->
                         span []
-                            [ b "Logged in to: "
+                            [ b "Use API for: "
                             , text server
                             , text " "
                             , button [ onClick Logout ]
@@ -963,11 +963,13 @@ Type a server name in the "Server" box at the top of the screen. As soon as you 
 
 Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access.
 
+Click the "Set Server" button to use the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there.
+
 Your `Account` record will be fetched and displayed.
 
 The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` record. Click the "Login" button to fetch your `Account` record there. No authentication will be necessary, since the access token is persistent.
 
-Click the "Logout" button to log out of the "Logged in to" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
+Click the "Logout" button to log out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
 Click the "Clear All Persistent State" button at the bottom of the page to do that.
 
