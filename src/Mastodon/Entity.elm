@@ -118,6 +118,25 @@ type alias UnixTimestamp =
 
 
 {-| Account entity
+
+Pleroma servers have an additional field here, not yet supported:
+
+    "pleroma":{"tags":[],
+               "skip_thread_containment":false,
+               "settings_store":{},
+               "relationship":{"subscribing":false,
+                               "showing_reblogs":true,
+                               "requested":false,
+                               "muting_notifications":false,
+                               "muting":false,
+                               "id":"9kL2555DTtECY9TEQK",
+                               "following":true,
+                               "followed_by":true,
+                               "endorsed":false,
+                               "domain_blocking":false,
+                               "blocking":false
+                              }
+
 -}
 type alias Account =
     { id : String
@@ -166,6 +185,11 @@ type alias Field =
 
 
 {-| Source entity.
+
+Pleroma servers have an additional field here, not yet supported:
+
+    "pleroma":{"show_role":true,"no_rich_text":false}
+
 -}
 type alias Source =
     { privacy : Maybe String
@@ -660,5 +684,5 @@ The authorization is usually of the type "Bearer <token>".
 type alias Authorization =
     { clientId : String
     , clientSecret : String
-    , authorization : String
+    , token : String
     }

@@ -41,20 +41,21 @@ scopes =
 
 {-| Get a token and, if possible, the logged in `Account` from the server.
 
+The `Maybe String` arg is a login token, called `maybeToken` below, if
+it is not Nothing.
+
 Returns a `Task` to either fetch an `Account` for a known authorization token,
 or to redirect to the authentication server to create a code with which
 to mint the token.
 
-If `maybeAuthorization` is not `Nothing`, will attempt to get an
-`Account` using `.authorization` from there. If that fails, will
-attempt to mint a new token, using `authorization.clientId` and
-`authorization.clientSecret`. If that fails, or if
-`maybeAuthorization` is `Nothing`, will create a new `App`, and
+If `maybeToken` is not `Nothing`, will attempt to get an
+`Account` using that token. If that fails, will
+return an error. If `maybeToken` is `Nothing`, will create a new `App`, and
 redirect to do authentication. When the application is restarted, with
 a `code` and `state` in the URL query, call `getTokenTask` to
 use those to mint a new token, and to use that to get an `Account`.
 
-Usually, you will get an `Authorization` from persistent
+Usually, you will get a `Token` from persistent
 `localStorage`, pass that here, and successfully receive the `Account`
 back. No redirects necessary. But the redirects must happen at least
 once, and then whenever the authorization token expires. This is step
@@ -98,21 +99,22 @@ The full login procedure is as follows:
     for the user's `Account`.
 
 -}
-loginTask : { client_name : String, server : String, applicationUri : String } -> Maybe Authorization -> FetchAccountOrRedirect msg
-loginTask { client_name, server, applicationUri } maybeAuthorization =
-    case maybeAuthorization of
-        Just { authorization } ->
+loginTask : { client_name : String, server : String, applicationUri : String } -> Maybe String -> FetchAccountOrRedirect msg
+loginTask { client_name, server, applicationUri } maybeToken =
+    case maybeToken of
+        Just token ->
             let
                 request =
                     AccountsRequest GetVerifyCredentials
 
                 rawRequest =
                     Request.requestToRawRequest []
-                        { server = server, authorization = Just authorization }
+                        { server = server, token = Just token }
                         request
 
                 task =
                     Request.rawRequestToTask rawRequest
+                        |> Task.mapError (\err -> ( server, err ))
                         |> Task.andThen
                             (\response ->
                                 case response.entity of
@@ -120,7 +122,10 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
                                         Task.succeed ( server, account )
 
                                     _ ->
-                                        Task.fail <| BadUrl "Shouldn't happen"
+                                        Task.fail
+                                            ( server
+                                            , BadUrl "Shouldn't happen"
+                                            )
                             )
             in
             FetchAccount task
@@ -137,11 +142,12 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
 
                 rawRequest =
                     Request.requestToRawRequest []
-                        { server = server, authorization = Nothing }
+                        { server = server, token = Nothing }
                         (AppsRequest postApp)
 
                 redirectTask =
                     Request.rawRequestToTask rawRequest
+                        |> Task.mapError (\err -> ( server, err ))
                         |> Task.andThen
                             (\response ->
                                 case response.entity of
@@ -154,7 +160,10 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
                                             |> Task.succeed
 
                                     _ ->
-                                        Task.fail (BadUrl "Shouldn't happen")
+                                        Task.fail
+                                            ( server
+                                            , BadUrl "Shouldn't happen"
+                                            )
                             )
             in
             Redirect redirectTask
@@ -165,12 +174,12 @@ loginTask { client_name, server, applicationUri } maybeAuthorization =
 It's either a task to fetch the logged-in user's `Mastodon.Entity.Account`
 or a task to redirect to the authorization server to get a code.
 
-The `String` parts of the successful results are the server domain.
+The `String` parts of the results are the server domain.
 
 -}
 type FetchAccountOrRedirect msg
-    = FetchAccount (Task Error ( String, Account ))
-    | Redirect (Task Error ( String, App, Cmd msg ))
+    = FetchAccount (Task ( String, Error ) ( String, Account ))
+    | Redirect (Task ( String, Error ) ( String, App, Cmd msg ))
 
 
 {-| Compute URL to redirect to for authentication.
@@ -188,7 +197,11 @@ Returns:
        &scope=<all scopes>
        &state=<encodeStateString server app>
 
-You will rarely, if ever, call this explicitly It is exposed for debugging.
+You will call this only when a token expires, and you need to mint a new one
+from a previously created `App`:
+
+    appToAuthorizeUrl server app
+        |> Browser.Navigation.load
 
 -}
 appToAuthorizeUrl : String -> App -> String
@@ -257,11 +270,12 @@ the next time the user starts the application, as a parameter to `loginTask`.
 The `String` in the `Task` is the server name, e.g. "mastodon.social".
 
 -}
-getTokenTask : { code : String, state : String } -> Task Error ( String, Authorization, Account )
+getTokenTask : { code : String, state : String } -> Task ( String, Error ) ( String, Authorization, Account )
 getTokenTask { code, state } =
     case decodeStateString state of
         Err _ ->
-            Task.fail <| BadUrl "Cannot decode <state> from authentication server."
+            Task.fail
+                ( "", BadUrl "Cannot decode <state> from authentication server." )
 
         Ok ( server, app ) ->
             let
@@ -294,14 +308,16 @@ getTokenTask { code, state } =
                         receiveAuthorization client_id client_secret
                 , timeout = Nothing
                 }
+                |> Task.mapError (\err -> ( server, err ))
                 |> Task.andThen
                     (\authorization ->
                         AccountsRequest GetVerifyCredentials
                             |> Request.requestToRawRequest []
                                 { server = server
-                                , authorization = Just authorization.authorization
+                                , token = Just authorization.token
                                 }
                             |> Request.rawRequestToTask
+                            |> Task.mapError (\err -> ( server, err ))
                             |> Task.andThen
                                 (\response ->
                                     case response.entity of
@@ -310,7 +326,10 @@ getTokenTask { code, state } =
                                                 ( server, authorization, account )
 
                                         _ ->
-                                            Task.fail <| BadUrl "Wrong entity type."
+                                            Task.fail
+                                                ( server
+                                                , BadUrl "Wrong entity type."
+                                                )
                                 )
                     )
 
@@ -356,7 +375,7 @@ receiveAuthorization clientId clientSecret response =
                     Ok
                         { clientId = clientId
                         , clientSecret = clientSecret
-                        , authorization =
+                        , token =
                             rawToken.token_type
                                 ++ " "
                                 ++ rawToken.access_token

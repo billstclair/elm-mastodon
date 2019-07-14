@@ -474,7 +474,7 @@ sourceDecoder =
         |> optional "sensitive" JD.bool False
         |> optional "language" (JD.nullable JD.string) Nothing
         |> required "note" JD.string
-        |> required "fields" (JD.list fieldDecoder)
+        |> optional "fields" (JD.list fieldDecoder) []
         |> custom JD.value
 
 
@@ -1470,7 +1470,7 @@ encodeAuthorization authorization =
     JE.object
         [ ( "clientId", JE.string authorization.clientId )
         , ( "clientSecret", JE.string authorization.clientSecret )
-        , ( "auhorization", JE.string authorization.authorization )
+        , ( "token", JE.string authorization.token )
         ]
 
 
@@ -1481,4 +1481,4 @@ authorizationDecoder =
     JD.succeed Authorization
         |> required "clientId" JD.string
         |> required "clientSecret" JD.string
-        |> required "authorization" JD.string
+        |> required "token" JD.string

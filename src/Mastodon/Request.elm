@@ -600,7 +600,7 @@ A few requests do not require a token. Most do, and will error if you don't incl
 -}
 type alias ServerInfo =
     { server : String
-    , authorization : Maybe String
+    , token : Maybe String
     }
 
 
@@ -662,7 +662,7 @@ Sometimes, however, you need to create one yourself, or call
 -}
 type alias RawRequest =
     { method : String
-    , authorization : Maybe String
+    , token : Maybe String
     , url : String
     , headers : List Http.Header
     , body : Http.Body
@@ -720,7 +720,7 @@ rawRequestToTask rawRequest =
         Http.task
             { method = rawRequest.method
             , headers =
-                case rawRequest.authorization of
+                case rawRequest.token of
                     Nothing ->
                         rawRequest.headers
 
@@ -788,7 +788,7 @@ Exposed only for testing in `elm repl`.
 emptyRawRequest : RawRequest
 emptyRawRequest =
     { method = m.get
-    , authorization = Nothing
+    , token = Nothing
     , url = ""
     , headers = []
     , body = Http.emptyBody
@@ -802,7 +802,7 @@ emptyRawRequest =
 emptyServerInfo : ServerInfo
 emptyServerInfo =
     { server = "mastodon.social"
-    , authorization = Nothing
+    , token = Nothing
     }
 
 
@@ -819,7 +819,7 @@ requestToRawRequest headers serverInfo request =
     let
         raw =
             { emptyRawRequest
-                | authorization = serverInfo.authorization
+                | token = serverInfo.token
                 , headers = headers
                 , request = request
             }

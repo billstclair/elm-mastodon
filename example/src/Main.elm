@@ -75,20 +75,19 @@ type Started
 
 
 type alias Model =
-    { authorization : Maybe Authorization
-    , server : String
+    { server : String
+    , loginServer : Maybe String
     , prettify : Bool
 
     -- Non-persistent below here
+    , token : Maybe String
     , request : Maybe RawRequest
     , response : Maybe Value
     , savedModel : Maybe SavedModel
     , key : Key
     , url : Url
     , hideClientId : Bool
-    , apps : Dict String App
     , tokens : Dict String String
-    , loginServer : Maybe String
     , account : Maybe Account
     , state : Maybe String
     , msg : Maybe String
@@ -102,11 +101,13 @@ type Msg
     | OnUrlChange Url
     | SetServer String
     | TogglePrettify
-    | ReceiveRedirect (Result Error ( String, App, Cmd Msg ))
-    | ReceiveAuthorization (Result Error ( String, Authorization, Account ))
+    | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
+    | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
     | ReceiveInstance (Result Error Response)
-    | ReceiveAccount (Result Error ( String, Account ))
+    | ReceiveFetchAccount (Result ( String, Error ) ( String, Account ))
+    | ReceiveAccount (Result Error Response)
     | Login
+    | Logout
     | Process Value
 
 
@@ -227,7 +228,7 @@ init value url key =
                 NoCode ->
                     ( Nothing, Nothing, Nothing )
     in
-    { authorization = Nothing
+    { token = Nothing
     , server = "mastodon.social"
     , prettify = True
 
@@ -238,7 +239,6 @@ init value url key =
     , key = key
     , url = url
     , hideClientId = hideClientId
-    , apps = Dict.empty
     , tokens = Dict.empty
     , loginServer = Nothing
     , account = Nothing
@@ -286,7 +286,6 @@ storageHandler response state model =
             then
                 Cmd.batch
                     [ get pk.model
-                    , listKeysLabeled pk.app (pk.app ++ ".")
                     , listKeysLabeled pk.token (pk.token ++ ".")
                     ]
 
@@ -309,7 +308,7 @@ getInstance model =
     let
         serverInfo =
             { server = model.server
-            , authorization = Nothing
+            , token = Nothing
             }
     in
     Request.serverRequest (\id -> ReceiveInstance)
@@ -321,7 +320,24 @@ getInstance model =
 
 getVerifyCredentials : Model -> Cmd Msg
 getVerifyCredentials model =
-    Cmd.none
+    case model.loginServer of
+        Nothing ->
+            Cmd.none
+
+        Just server ->
+            case Dict.get server model.tokens of
+                Nothing ->
+                    Cmd.none
+
+                Just token ->
+                    Request.serverRequest (\_ -> ReceiveAccount)
+                        []
+                        { server = server
+                        , token = Just token
+                        }
+                        ()
+                    <|
+                        AccountsRequest Request.GetVerifyCredentials
 
 
 handleListKeysResponse : Maybe String -> String -> List String -> Model -> ( Model, Cmd Msg )
@@ -331,7 +347,7 @@ handleListKeysResponse maybeLabel prefix keys model =
             model |> withNoCmd
 
         Just label ->
-            -- label will be either pk.app or pk.token,
+            -- label will be pk.token,
             -- but we won't care about that until the value comes in
             -- to handleGetResponse below.
             model |> withCmds (List.map (getLabeled label) keys)
@@ -369,31 +385,7 @@ handleGetModel maybeValue model =
                         | started = Started
                         , msg = Nothing
                     }
-                        |> withCmd
-                            (getVerifyCredentials mdl)
-
-
-handleGetApp : String -> Value -> Model -> ( Model, Cmd Msg )
-handleGetApp key value model =
-    case JD.decodeValue ED.appDecoder value of
-        Err err ->
-            let
-                ignore =
-                    Debug.log ("Error decoding " ++ key) err
-            in
-            model |> withNoCmd
-
-        Ok app ->
-            let
-                apps =
-                    model.apps
-
-                server =
-                    Debug.log "Received app for server" <|
-                        appStorageKeyServer key
-            in
-            { model | apps = Dict.insert server app apps }
-                |> withNoCmd
+                        |> withNoCmd
 
 
 handleGetToken : String -> Value -> Model -> ( Model, Cmd Msg )
@@ -414,9 +406,18 @@ handleGetToken key value model =
                 server =
                     Debug.log "Received token for server" <|
                         tokenStorageKeyServer key
+
+                mdl =
+                    { model | tokens = Dict.insert server token tokens }
             in
-            { model | tokens = Dict.insert server token tokens }
-                |> withNoCmd
+            mdl
+                |> withCmd
+                    (if Just server == model.loginServer then
+                        getVerifyCredentials mdl
+
+                     else
+                        Cmd.none
+                    )
 
 
 handleGetResponse : Maybe String -> String -> Maybe Value -> Model -> ( Model, Cmd Msg )
@@ -435,10 +436,7 @@ handleGetResponse maybeLabel key maybeValue model =
                     model |> withNoCmd
 
                 Just value ->
-                    if label == pk.app then
-                        handleGetApp key value model
-
-                    else if label == pk.token then
+                    if label == pk.token then
                         handleGetToken key value model
 
                     else
@@ -527,18 +525,22 @@ updateInternal msg model =
             model |> withNoCmd
 
         SetServer server ->
-            let
-                mdl =
-                    { model | server = server }
-            in
-            mdl
-                |> withCmd
-                    (if String.contains "." server then
-                        getInstance mdl
+            if server == "" then
+                model |> withNoCmd
 
-                     else
-                        Cmd.none
-                    )
+            else
+                let
+                    mdl =
+                        { model | server = server }
+                in
+                mdl
+                    |> withCmd
+                        (if String.contains "." server then
+                            getInstance mdl
+
+                         else
+                            Cmd.none
+                        )
 
         TogglePrettify ->
             { model | prettify = not model.prettify }
@@ -560,12 +562,26 @@ updateInternal msg model =
                             |> Url.toString
                     }
             in
-            case Login.loginTask sau model.authorization of
+            case Login.loginTask sau <| Dict.get model.server model.tokens of
                 Redirect task ->
                     ( model, Task.attempt ReceiveRedirect task )
 
                 FetchAccount task ->
-                    ( model, Task.attempt ReceiveAccount task )
+                    ( model, Task.attempt ReceiveFetchAccount task )
+
+        Logout ->
+            case model.loginServer of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just server ->
+                    { model
+                        | server = ""
+                        , loginServer = Nothing
+                        , account = Nothing
+                        , tokens = Dict.remove server model.tokens
+                    }
+                        |> withCmd (putToken server Nothing)
 
         Process value ->
             case
@@ -583,22 +599,18 @@ updateInternal msg model =
 
         ReceiveRedirect result ->
             case result of
-                Err err ->
+                Err ( server, err ) ->
                     ( { model | msg = Just <| Debug.toString err }
                     , Cmd.none
                     )
 
                 Ok ( server, app, cmd ) ->
-                    let
-                        ( mdl, cmd2 ) =
-                            saveApp server app model
-                    in
-                    { mdl | msg = Nothing }
-                        |> withCmds [ cmd, cmd2 ]
+                    { model | msg = Nothing }
+                        |> withCmd cmd
 
         ReceiveAuthorization result ->
             case result of
-                Err err ->
+                Err ( server, err ) ->
                     ( { model | msg = Just <| Debug.toString err }
                     , Cmd.none
                     )
@@ -610,12 +622,13 @@ updateInternal msg model =
 
                         serverInfo =
                             { server = server
-                            , authorization = Just authorization.authorization
+                            , token = Just authorization.token
                             }
                     in
                     { mdl
                         | msg = Nothing
-                        , authorization = Just authorization
+                        , token = Just authorization.token
+                        , loginServer = Just server
                         , account = Just account
                         , request =
                             -- Fake the request
@@ -626,6 +639,35 @@ updateInternal msg model =
                         , response = Just account.v
                     }
                         |> withCmd cmd
+
+        ReceiveFetchAccount result ->
+            case result of
+                Err error ->
+                    { model | msg = Just <| Debug.toString error }
+                        |> withNoCmd
+
+                Ok ( loginServer, account ) ->
+                    let
+                        serverInfo =
+                            { server = loginServer
+                            , token = Nothing
+                            }
+
+                        request =
+                            -- Fake the request
+                            Request.requestToRawRequest []
+                                serverInfo
+                                (AccountsRequest Request.GetVerifyCredentials)
+                    in
+                    { model
+                        | msg = Nothing
+                        , server = loginServer
+                        , loginServer = Just loginServer
+                        , account = Just account
+                        , request = Just request
+                        , response = Just account.v
+                    }
+                        |> withNoCmd
 
         ReceiveInstance result ->
             case result of
@@ -652,37 +694,19 @@ updateInternal msg model =
                     { model | msg = Just <| Debug.toString error }
                         |> withNoCmd
 
-                Ok ( loginServer, account ) ->
-                    let
-                        serverInfo =
-                            { server = loginServer
-                            , authorization = Nothing
+                Ok response ->
+                    case response.entity of
+                        AccountEntity account ->
+                            { model
+                                | msg = Nothing
+                                , request = Just response.rawRequest
+                                , response = Just account.v
+                                , account = Just account
                             }
+                                |> withNoCmd
 
-                        request =
-                            -- Fake the request
-                            Request.requestToRawRequest []
-                                serverInfo
-                                (AccountsRequest Request.GetVerifyCredentials)
-                    in
-                    { model
-                        | msg = Nothing
-                        , loginServer = Just loginServer
-                        , account = Just account
-                        , request = Just request
-                        , response = Just account.v
-                    }
-                        |> withNoCmd
-
-
-saveApp : String -> App -> Model -> ( Model, Cmd Msg )
-saveApp server app model =
-    let
-        apps =
-            model.apps
-    in
-    { model | apps = Dict.insert server app apps }
-        |> withCmd (putApp server app)
+                        _ ->
+                            model |> withNoCmd
 
 
 saveAuthorization : String -> Authorization -> Model -> ( Model, Cmd Msg )
@@ -694,10 +718,10 @@ saveAuthorization server authorization model =
     { model
         | tokens =
             Dict.insert server
-                authorization.authorization
+                authorization.token
                 tokens
     }
-        |> withCmd (putToken server authorization.authorization)
+        |> withCmd (putToken server <| Just authorization.token)
 
 
 serverOption : String -> String -> Html Msg
@@ -711,12 +735,20 @@ serverOption currentServer server =
 
 serverSelect : Model -> Html Msg
 serverSelect model =
-    input
-        [ size 30
-        , onInput SetServer
-        , value model.server
-        ]
-        []
+    let
+        currentServer =
+            case model.loginServer of
+                Nothing ->
+                    ""
+
+                Just server ->
+                    server
+    in
+    select [ onInput SetServer ]
+        (option [ value "" ]
+            [ text "-- select a server --" ]
+            :: (List.map (serverOption currentServer) <| Dict.keys model.tokens)
+        )
 
 
 b : String -> Html msg
@@ -739,6 +771,13 @@ view model =
             [ h2 [] [ text "Mastodon API Explorer" ]
             , p []
                 [ text "Server: "
+                , input
+                    [ size 30
+                    , onInput SetServer
+                    , value model.server
+                    ]
+                    []
+                , text " "
                 , serverSelect model
                 ]
             , p []
@@ -747,6 +786,30 @@ view model =
                 ]
             , p [ style "color" "red" ]
                 [ Maybe.withDefault "" model.msg |> text ]
+            , p []
+                [ case model.loginServer of
+                    Nothing ->
+                        text ""
+
+                    Just server ->
+                        span []
+                            [ b "Logged in to: "
+                            , text server
+                            , text " "
+                            , button [ onClick Logout ]
+                                [ text "Logout" ]
+                            ]
+                , br
+                , case model.account of
+                    Nothing ->
+                        text ""
+
+                    Just account ->
+                        span []
+                            [ b "Username: "
+                            , text account.username
+                            ]
+                ]
             , p [] [ b "Sent:" ]
             , pre []
                 [ case model.request of
@@ -860,7 +923,7 @@ encodeWrap prettify value =
 
 
 type alias SavedModel =
-    { authorization : Maybe Authorization
+    { loginServer : Maybe String
     , server : String
     , prettify : Bool
     }
@@ -868,7 +931,7 @@ type alias SavedModel =
 
 modelToSavedModel : Model -> SavedModel
 modelToSavedModel model =
-    { authorization = model.authorization
+    { loginServer = model.loginServer
     , server = model.server
     , prettify = model.prettify
     }
@@ -877,7 +940,7 @@ modelToSavedModel model =
 savedModelToModel : SavedModel -> Model -> Model
 savedModelToModel savedModel model =
     { model
-        | authorization = savedModel.authorization
+        | loginServer = savedModel.loginServer
         , server = savedModel.server
         , prettify = savedModel.prettify
     }
@@ -886,9 +949,7 @@ savedModelToModel savedModel model =
 encodeSavedModel : SavedModel -> Value
 encodeSavedModel savedModel =
     JE.object
-        [ ( "authorization"
-          , ED.encodeMaybe ED.encodeAuthorization savedModel.authorization
-          )
+        [ ( "loginServer", ED.encodeMaybe JE.string savedModel.loginServer )
         , ( "server", JE.string savedModel.server )
         , ( "prettify", JE.bool savedModel.prettify )
         ]
@@ -897,7 +958,7 @@ encodeSavedModel savedModel =
 savedModelDecoder : Decoder SavedModel
 savedModelDecoder =
     JD.succeed SavedModel
-        |> required "authorization" (JD.nullable ED.authorizationDecoder)
+        |> optional "loginServer" (JD.nullable JD.string) Nothing
         |> required "server" JD.string
         |> optional "prettify" JD.bool True
 
@@ -925,27 +986,6 @@ listKeysLabeled label prefix =
     localStorageSend (LocalStorage.listKeysLabeled label prefix)
 
 
-appStorageKey : String -> String
-appStorageKey server =
-    pk.app ++ "." ++ server
-
-
-appStorageKeyServer : String -> String
-appStorageKeyServer key =
-    String.dropLeft (String.length pk.app + 1) key
-
-
-getApp : String -> Cmd Msg
-getApp server =
-    getLabeled pk.app <| appStorageKey server
-
-
-putApp : String -> App -> Cmd Msg
-putApp server app =
-    put (appStorageKey server) <|
-        Just (ED.encodeApp app)
-
-
 tokenStorageKey : String -> String
 tokenStorageKey server =
     pk.token ++ "." ++ server
@@ -961,10 +1001,15 @@ getToken server =
     getLabeled pk.token <| tokenStorageKey server
 
 
-putToken : String -> String -> Cmd Msg
-putToken server authorization =
+putToken : String -> Maybe String -> Cmd Msg
+putToken server token =
     put (tokenStorageKey server) <|
-        Just (JE.string authorization)
+        case token of
+            Nothing ->
+                Nothing
+
+            Just tok ->
+                Just <| JE.string tok
 
 
 clear : Cmd Msg
@@ -1015,6 +1060,5 @@ funnelDict =
 -}
 pk =
     { model = "model"
-    , app = "app"
     , token = "token"
     }
