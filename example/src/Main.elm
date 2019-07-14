@@ -50,6 +50,7 @@ import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
+import Markdown
 import Mastodon.EncodeDecode as ED
 import Mastodon.Entity as Entity exposing (Account, App, Authorization, Entity(..))
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
@@ -838,6 +839,17 @@ view model =
                             , text account.username
                             ]
                 ]
+            , p []
+                [ input
+                    [ type_ "checkbox"
+                    , onClick TogglePrettify
+                    , checked model.prettify
+                    ]
+                    []
+                , b " Prettify"
+                , text " (easier to read, may no longer be valid JSON)"
+                , br
+                ]
             , p [] [ b "Sent:" ]
             , pre []
                 [ case model.request of
@@ -854,17 +866,7 @@ view model =
                             ]
                 ]
             , p []
-                [ input
-                    [ type_ "checkbox"
-                    , onClick TogglePrettify
-                    , checked model.prettify
-                    ]
-                    []
-                , b " Prettify"
-                , text " (easier to read, may no longer be valid JSON)"
-                , br
-                , b "Received:"
-                ]
+                [ b "Received:" ]
             , pre []
                 [ case model.response of
                     Nothing ->
@@ -886,9 +888,33 @@ view model =
                 [ button [ onClick ClearAll ]
                     [ text "Clear All Persistent State" ]
                 ]
+            , div []
+                [ help ]
             ]
         ]
     }
+
+
+help : Html Msg
+help =
+    Markdown.toHtml []
+        """
+**Instructions**
+
+Type a server name in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` record.
+
+Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access.
+
+Your `Account` record will be fetched and displayed.
+
+The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` record. Click the "Login" button to fetch your `Account` record there. No authentication will be necessary, since the access token is persistent.
+
+Click the "Logout" button to log out of the "Logged in to" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
+
+Click the "Clear All Persistent State" button at the bottom of the page to do that.
+
+More coming soon.
+         """
 
 
 convertJsonNewlines : String -> String
