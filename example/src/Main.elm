@@ -14,6 +14,7 @@ module Main exposing (emptyUrl, main, parseQuery, receiveCodeAndState)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Navigation as Navigation exposing (Key)
+import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
 import Dict exposing (Dict)
 import Html
@@ -1152,11 +1153,6 @@ view model =
                                 text <|
                                     encodeWrap model.prettify value
                         ]
-                    , p []
-                        [ text "Source code: "
-                        , link "GitHub"
-                            "https://github.com/billstclair/elm-mastodon"
-                        ]
                     , p [ onClick ToggleStyle ]
                         [ input
                             [ type_ "checkbox"
@@ -1165,12 +1161,21 @@ view model =
                             []
                         , b " Dark Mode"
                         ]
+                    , div []
+                        [ help model ]
+                    , br
                     , p []
                         [ button [ onClick ClearAll ]
                             [ text "Clear All Persistent State" ]
                         ]
-                    , div []
-                        [ help model ]
+                    , br
+                    , p []
+                        [ text <| "Copyright " ++ special.copyright ++ " 2019, Bill St. Clair"
+                        , br
+                        , text "Source code: "
+                        , link "GitHub"
+                            "https://github.com/billstclair/elm-mastodon"
+                        ]
                     ]
                 ]
             ]
@@ -1196,11 +1201,11 @@ Click a radio button to choose the user interface for that section of the API.
 
 Type a server name in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` record.
 
-Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access.
+The selector to the right of the "Server" input area shows the servers into which you have successfully logged in. Tokens are saved for each, so you don't need to visit the server authentication page again to login to that account. Selecting one of the servers here changes the "Server" input box, and looks up that server's `Instance` record, but does NOT change the "Use API for" setting.
 
-Click the "Set Server" button to use the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there.
+Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` record will be fetched and displayed.
 
-Your `Account` record will be fetched and displayed.
+Click the "Set Server" button to use the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` record will be fetched and displayed.
 
 The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` record. Click the "Login" button to fetch your `Account` record there. No authentication will be necessary, since the access token is persistent.
 
@@ -1447,4 +1452,21 @@ funnelDict =
 pk =
     { model = "model"
     , token = "token"
+    }
+
+
+
+---
+--- Special characters
+---
+
+
+stringFromCode : Int -> String
+stringFromCode code =
+    String.fromList [ Char.fromCode code ]
+
+
+special =
+    { nbsp = stringFromCode 160 -- \u00A0
+    , copyright = stringFromCode 169 -- \u00A9
     }
