@@ -30,13 +30,18 @@ import Html
         , pre
         , select
         , span
+        , table
+        , td
         , text
+        , th
+        , tr
         )
 import Html.Attributes
     exposing
         ( checked
         , disabled
         , href
+        , name
         , placeholder
         , selected
         , size
@@ -45,7 +50,7 @@ import Html.Attributes
         , type_
         , value
         )
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onCheck, onClick, onInput)
 import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
@@ -82,6 +87,7 @@ type alias Model =
     , loginServer : Maybe String
     , prettify : Bool
     , style : Style
+    , selectedRequest : SelectedRequest
 
     -- Non-persistent below here
     , token : Maybe String
@@ -103,8 +109,10 @@ type Msg
     = OnUrlRequest UrlRequest
     | OnUrlChange Url
     | SetServer String
+    | ClearSentReceived
     | TogglePrettify
     | ToggleStyle
+    | SetSelectedRequest SelectedRequest Bool
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
     | ReceiveInstance (Result Error Response)
@@ -239,6 +247,7 @@ init value url key =
     , server = ""
     , prettify = True
     , style = LightStyle
+    , selectedRequest = LoginSelected
 
     -- Non-persistent below here
     , request = Nothing
@@ -543,6 +552,13 @@ updateInternal msg model =
                         Cmd.none
                     )
 
+        ClearSentReceived ->
+            { model
+                | request = Nothing
+                , response = Nothing
+            }
+                |> withNoCmd
+
         TogglePrettify ->
             { model | prettify = not model.prettify }
                 |> withNoCmd
@@ -555,6 +571,17 @@ updateInternal msg model =
 
                     else
                         LightStyle
+            }
+                |> withNoCmd
+
+        SetSelectedRequest selectedRequest selected ->
+            { model
+                | selectedRequest =
+                    if selected then
+                        selectedRequest
+
+                    else
+                        model.selectedRequest
             }
                 |> withNoCmd
 
@@ -900,6 +927,98 @@ theStyle =
     DarkStyle
 
 
+type SelectedRequest
+    = LoginSelected
+    | AccountsSelected
+
+
+encodeSelectedRequest : SelectedRequest -> Value
+encodeSelectedRequest selectedRequest =
+    JE.string <| selectedRequestToString selectedRequest
+
+
+selectedRequestToString : SelectedRequest -> String
+selectedRequestToString selectedRequest =
+    case selectedRequest of
+        LoginSelected ->
+            "login"
+
+        AccountsSelected ->
+            "accounts"
+
+
+selectedRequestDecoder : Decoder SelectedRequest
+selectedRequestDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                JD.succeed <|
+                    selectedRequestFromString s
+            )
+
+
+selectedRequestFromString : String -> SelectedRequest
+selectedRequestFromString s =
+    case s of
+        "accounts" ->
+            AccountsSelected
+
+        _ ->
+            LoginSelected
+
+
+selectedRequestRadioName : String
+selectedRequestRadioName =
+    "selectedRequest"
+
+
+selectedRequestRadio : SelectedRequest -> Model -> Html Msg
+selectedRequestRadio selectedRequest model =
+    let
+        string =
+            selectedRequestToString selectedRequest
+    in
+    span [ onClick <| SetSelectedRequest selectedRequest True ]
+        [ input
+            [ type_ "radio"
+            , name selectedRequestRadioName
+            , value string
+            , checked <| model.selectedRequest == selectedRequest
+            , onCheck (SetSelectedRequest selectedRequest)
+            ]
+            []
+        , text " "
+        , text string
+        ]
+
+
+selectedRequestHtml : SelectedRequest -> Model -> (() -> Html Msg) -> Html Msg
+selectedRequestHtml selectedRequest model body =
+    span []
+        [ selectedRequestRadio selectedRequest model
+        , br
+        , if selectedRequest /= model.selectedRequest then
+            text ""
+
+          else
+            body ()
+        ]
+
+
+link : String -> String -> Html Msg
+link label url =
+    a
+        [ href url
+        , blankTarget
+        ]
+        [ text label ]
+
+
+blankTarget : Attribute msg
+blankTarget =
+    target "_blank"
+
+
 view : Model -> Document Msg
 view model =
     let
@@ -924,31 +1043,6 @@ view model =
                 ]
                 [ div []
                     [ h2 [] [ text "Mastodon API Explorer" ]
-                    , p []
-                        [ text "Server: "
-                        , input
-                            [ size 30
-                            , onInput SetServer
-                            , value model.server
-                            , placeholder "mastodon.social"
-                            ]
-                            []
-                        , text " "
-                        , serverSelect model
-                        ]
-                    , p []
-                        [ button
-                            [ onClick Login
-                            , disabled <| model.server == ""
-                            ]
-                            [ text "Login" ]
-                        , text " "
-                        , button
-                            [ onClick SetLoginServer ]
-                            [ text "Set Server" ]
-                        ]
-                    , p [ style "color" "red" ]
-                        [ Maybe.withDefault "" model.msg |> text ]
                     , case model.loginServer of
                         Nothing ->
                             text ""
@@ -956,7 +1050,7 @@ view model =
                         Just server ->
                             p []
                                 [ b "Use API for: "
-                                , text server
+                                , link server <| "https://" ++ server
                                 , text " "
                                 , button [ onClick Logout ]
                                     [ text "Logout" ]
@@ -968,9 +1062,56 @@ view model =
                                     Just account ->
                                         span []
                                             [ b "Username: "
-                                            , text account.username
+                                            , text account.display_name
+                                            , text " ("
+                                            , link account.username account.url
+                                            , text ")"
                                             ]
                                 ]
+                    , p []
+                        [ selectedRequestHtml LoginSelected
+                            model
+                            (\_ ->
+                                table []
+                                    [ tr []
+                                        [ td [ style "color" color ]
+                                            [ text "Server: " ]
+                                        , td []
+                                            [ input
+                                                [ size 30
+                                                , onInput SetServer
+                                                , value model.server
+                                                , placeholder "mastodon.social"
+                                                ]
+                                                []
+                                            , text " "
+                                            , serverSelect model
+                                            ]
+                                        ]
+                                    , tr []
+                                        [ td [] []
+                                        , td []
+                                            [ button
+                                                [ onClick Login
+                                                , disabled <| model.server == ""
+                                                ]
+                                                [ text "Login" ]
+                                            , text " "
+                                            , button
+                                                [ onClick SetLoginServer ]
+                                                [ text "Set Server" ]
+                                            ]
+                                        ]
+                                    ]
+                            )
+                        , selectedRequestHtml AccountsSelected
+                            model
+                            (\_ ->
+                                text "Accounts commands go here"
+                            )
+                        ]
+                    , p [ style "color" "red" ]
+                        [ Maybe.withDefault "" model.msg |> text ]
                     , p []
                         [ input
                             [ type_ "checkbox"
@@ -980,7 +1121,9 @@ view model =
                             []
                         , b " Prettify"
                         , text " (easier to read, may no longer be valid JSON)"
-                        , br
+                        , text " "
+                        , button [ onClick ClearSentReceived ]
+                            [ text "Clear" ]
                         ]
                     , p [] [ b "Sent:" ]
                     , pre []
@@ -1010,11 +1153,8 @@ view model =
                         ]
                     , p []
                         [ text "Source code: "
-                        , a
-                            [ href "https://github.com/billstclair/elm-mastodon"
-                            , target "_blank"
-                            ]
-                            [ text "GitHub" ]
+                        , link "GitHub"
+                            "https://github.com/billstclair/elm-mastodon"
                         ]
                     , p []
                         [ input
@@ -1030,7 +1170,7 @@ view model =
                             [ text "Clear All Persistent State" ]
                         ]
                     , div []
-                        [ help ]
+                        [ help model ]
                     ]
                 ]
             ]
@@ -1038,11 +1178,21 @@ view model =
     }
 
 
-help : Html Msg
-help =
-    Markdown.toHtml []
-        """
-**Instructions**
+help : Model -> Html Msg
+help model =
+    Markdown.toHtml [] <|
+        if model.selectedRequest == AccountsSelected then
+            """
+**Accounts Help**
+
+Accounts help goes here.
+            """
+
+        else
+            """
+**Login Help**
+
+Click a radio button to choose the user interface for that section of the API.
 
 Type a server name in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` record.
 
@@ -1061,7 +1211,7 @@ Click the "Dark Style" checkbox to toggle between light and dark style.
 Click the "Clear All Persistent State" button at the bottom of the page to do that.
 
 More coming soon.
-         """
+    """
 
 
 convertJsonNewlines : String -> String
@@ -1133,6 +1283,7 @@ type alias SavedModel =
     , server : String
     , prettify : Bool
     , style : Style
+    , selectedRequest : SelectedRequest
     }
 
 
@@ -1143,6 +1294,7 @@ modelToSavedModel model =
     , server = model.server
     , prettify = model.prettify
     , style = model.style
+    , selectedRequest = model.selectedRequest
     }
 
 
@@ -1154,6 +1306,7 @@ savedModelToModel savedModel model =
         , server = savedModel.server
         , prettify = savedModel.prettify
         , style = savedModel.style
+        , selectedRequest = savedModel.selectedRequest
     }
 
 
@@ -1165,6 +1318,7 @@ encodeSavedModel savedModel =
         , ( "server", JE.string savedModel.server )
         , ( "prettify", JE.bool savedModel.prettify )
         , ( "darkstyle", JE.bool <| savedModel.style == DarkStyle )
+        , ( "selectedRequest", encodeSelectedRequest savedModel.selectedRequest )
         ]
 
 
@@ -1188,6 +1342,7 @@ savedModelDecoder =
                     )
             )
             LightStyle
+        |> optional "selectedRequest" selectedRequestDecoder LoginSelected
 
 
 put : String -> Maybe Value -> Cmd Msg
