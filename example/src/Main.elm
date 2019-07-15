@@ -1113,14 +1113,15 @@ view model =
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
                     , p []
-                        [ input
-                            [ type_ "checkbox"
-                            , onClick TogglePrettify
-                            , checked model.prettify
+                        [ span [ onClick TogglePrettify ]
+                            [ input
+                                [ type_ "checkbox"
+                                , checked model.prettify
+                                ]
+                                []
+                            , b " Prettify"
+                            , text " (easier to read, may no longer be valid JSON)"
                             ]
-                            []
-                        , b " Prettify"
-                        , text " (easier to read, may no longer be valid JSON)"
                         , text " "
                         , button [ onClick ClearSentReceived ]
                             [ text "Clear" ]
@@ -1156,14 +1157,13 @@ view model =
                         , link "GitHub"
                             "https://github.com/billstclair/elm-mastodon"
                         ]
-                    , p []
+                    , p [ onClick ToggleStyle ]
                         [ input
                             [ type_ "checkbox"
                             , checked <| model.style == DarkStyle
-                            , onClick ToggleStyle
                             ]
                             []
-                        , b "Dark Style"
+                        , b " Dark Mode"
                         ]
                     , p []
                         [ button [ onClick ClearAll ]
@@ -1206,7 +1206,11 @@ The selector to the right of the "Server" type-in box shows all the servers that
 
 Click the "Logout" button to log out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
-Click the "Dark Style" checkbox to toggle between light and dark style.
+The "Prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON.
+
+The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent" and "Received" sections, making this help easier to see.
+
+Click the "Dark Mode" checkbox to toggle between light and dark mode.
 
 Click the "Clear All Persistent State" button at the bottom of the page to do that.
 
