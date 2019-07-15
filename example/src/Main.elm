@@ -81,6 +81,7 @@ type alias Model =
     { server : String
     , loginServer : Maybe String
     , prettify : Bool
+    , style : Style
 
     -- Non-persistent below here
     , token : Maybe String
@@ -103,6 +104,7 @@ type Msg
     | OnUrlChange Url
     | SetServer String
     | TogglePrettify
+    | ToggleStyle
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
     | ReceiveInstance (Result Error Response)
@@ -236,6 +238,7 @@ init value url key =
     { token = Nothing
     , server = ""
     , prettify = True
+    , style = LightStyle
 
     -- Non-persistent below here
     , request = Nothing
@@ -544,6 +547,17 @@ updateInternal msg model =
             { model | prettify = not model.prettify }
                 |> withNoCmd
 
+        ToggleStyle ->
+            { model
+                | style =
+                    if model.style == LightStyle then
+                        DarkStyle
+
+                    else
+                        LightStyle
+            }
+                |> withNoCmd
+
         ReceiveRedirect result ->
             case result of
                 Err ( server, err ) ->
@@ -733,7 +747,13 @@ updateInternal msg model =
 
         SetLoginServer ->
             if model.server == "" then
-                model |> withNoCmd
+                { model
+                    | msg = Nothing
+                    , loginServer = Nothing
+                    , request = Nothing
+                    , response = Nothing
+                }
+                    |> withNoCmd
 
             else
                 let
@@ -838,116 +858,181 @@ br =
     Html.br [] []
 
 
+type alias StyleProperties =
+    { backgroundColor : String
+    , color : String
+    }
+
+
+type Style
+    = DarkStyle
+    | LightStyle
+
+
+styles :
+    { dark : StyleProperties
+    , light : StyleProperties
+    }
+styles =
+    { dark =
+        { backgroundColor = "#222"
+        , color = "#eee"
+        }
+    , light =
+        { backgroundColor = "white"
+        , color = "black"
+        }
+    }
+
+
+getStyle : Style -> StyleProperties
+getStyle style =
+    case style of
+        DarkStyle ->
+            styles.dark
+
+        LightStyle ->
+            styles.light
+
+
+theStyle : Style
+theStyle =
+    DarkStyle
+
+
 view : Model -> Document Msg
 view model =
+    let
+        { backgroundColor, color } =
+            getStyle model.style
+    in
     { title = "Mastodon API Explorer"
     , body =
         [ div
-            [ style "margin-left" "3em"
+            [ style "background-color" styles.dark.backgroundColor
+            , style "padding" "1em 0 0 0"
+            , style "margin" "0"
+            , style "width" "100%"
             ]
-            [ h2 [] [ text "Mastodon API Explorer" ]
-            , p []
-                [ text "Server: "
-                , input
-                    [ size 30
-                    , onInput SetServer
-                    , value model.server
-                    , placeholder "mastodon.social"
-                    ]
-                    []
-                , text " "
-                , serverSelect model
+            [ div
+                [ style "color" color
+                , style "background-color" backgroundColor
+                , style "padding" "1em 3em 1em 3em"
+                , style "max-width" "fill-available"
+                , style "width" "40em"
+                , style "margin" "auto"
                 ]
-            , p []
-                [ button
-                    [ onClick Login
-                    , disabled <| model.server == ""
-                    ]
-                    [ text "Login" ]
-                , text " "
-                , button
-                    [ onClick SetLoginServer
-                    , disabled <| model.server == ""
-                    ]
-                    [ text "Set Server" ]
-                ]
-            , p [ style "color" "red" ]
-                [ Maybe.withDefault "" model.msg |> text ]
-            , p []
-                [ case model.loginServer of
-                    Nothing ->
-                        text ""
-
-                    Just server ->
-                        span []
-                            [ b "Use API for: "
-                            , text server
-                            , text " "
-                            , button [ onClick Logout ]
-                                [ text "Logout" ]
+                [ div []
+                    [ h2 [] [ text "Mastodon API Explorer" ]
+                    , p []
+                        [ text "Server: "
+                        , input
+                            [ size 30
+                            , onInput SetServer
+                            , value model.server
+                            , placeholder "mastodon.social"
                             ]
-                , br
-                , case model.account of
-                    Nothing ->
-                        text ""
-
-                    Just account ->
-                        span []
-                            [ b "Username: "
-                            , text account.username
+                            []
+                        , text " "
+                        , serverSelect model
+                        ]
+                    , p []
+                        [ button
+                            [ onClick Login
+                            , disabled <| model.server == ""
                             ]
-                ]
-            , p []
-                [ input
-                    [ type_ "checkbox"
-                    , onClick TogglePrettify
-                    , checked model.prettify
-                    ]
-                    []
-                , b " Prettify"
-                , text " (easier to read, may no longer be valid JSON)"
-                , br
-                ]
-            , p [] [ b "Sent:" ]
-            , pre []
-                [ case model.request of
-                    Nothing ->
-                        text ""
+                            [ text "Login" ]
+                        , text " "
+                        , button
+                            [ onClick SetLoginServer ]
+                            [ text "Set Server" ]
+                        ]
+                    , p [ style "color" "red" ]
+                        [ Maybe.withDefault "" model.msg |> text ]
+                    , case model.loginServer of
+                        Nothing ->
+                            text ""
 
-                    Just request ->
-                        span []
-                            [ text request.method
-                            , text " "
-                            , text request.url
+                        Just server ->
+                            p []
+                                [ b "Use API for: "
+                                , text server
+                                , text " "
+                                , button [ onClick Logout ]
+                                    [ text "Logout" ]
+                                , br
+                                , case model.account of
+                                    Nothing ->
+                                        text ""
 
-                            -- Need a jsonBody property
+                                    Just account ->
+                                        span []
+                                            [ b "Username: "
+                                            , text account.username
+                                            ]
+                                ]
+                    , p []
+                        [ input
+                            [ type_ "checkbox"
+                            , onClick TogglePrettify
+                            , checked model.prettify
                             ]
-                ]
-            , p []
-                [ b "Received:" ]
-            , pre []
-                [ case model.response of
-                    Nothing ->
-                        text ""
+                            []
+                        , b " Prettify"
+                        , text " (easier to read, may no longer be valid JSON)"
+                        , br
+                        ]
+                    , p [] [ b "Sent:" ]
+                    , pre []
+                        [ case model.request of
+                            Nothing ->
+                                text ""
 
-                    Just value ->
-                        text <|
-                            encodeWrap model.prettify value
-                ]
-            , p []
-                [ text "Source code: "
-                , a
-                    [ href "https://github.com/billstclair/elm-mastodon"
-                    , target "_blank"
+                            Just request ->
+                                span []
+                                    [ text request.method
+                                    , text " "
+                                    , text request.url
+
+                                    -- Need a jsonBody property
+                                    ]
+                        ]
+                    , p []
+                        [ b "Received:" ]
+                    , pre []
+                        [ case model.response of
+                            Nothing ->
+                                text ""
+
+                            Just value ->
+                                text <|
+                                    encodeWrap model.prettify value
+                        ]
+                    , p []
+                        [ text "Source code: "
+                        , a
+                            [ href "https://github.com/billstclair/elm-mastodon"
+                            , target "_blank"
+                            ]
+                            [ text "GitHub" ]
+                        ]
+                    , p []
+                        [ input
+                            [ type_ "checkbox"
+                            , checked <| model.style == DarkStyle
+                            , onClick ToggleStyle
+                            ]
+                            []
+                        , b "Dark Style"
+                        ]
+                    , p []
+                        [ button [ onClick ClearAll ]
+                            [ text "Clear All Persistent State" ]
+                        ]
+                    , div []
+                        [ help ]
                     ]
-                    [ text "GitHub" ]
                 ]
-            , p []
-                [ button [ onClick ClearAll ]
-                    [ text "Clear All Persistent State" ]
-                ]
-            , div []
-                [ help ]
             ]
         ]
     }
@@ -970,6 +1055,8 @@ Your `Account` record will be fetched and displayed.
 The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` record. Click the "Login" button to fetch your `Account` record there. No authentication will be necessary, since the access token is persistent.
 
 Click the "Logout" button to log out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
+
+Click the "Dark Style" checkbox to toggle between light and dark style.
 
 Click the "Clear All Persistent State" button at the bottom of the page to do that.
 
@@ -1045,6 +1132,7 @@ type alias SavedModel =
     , token : Maybe String
     , server : String
     , prettify : Bool
+    , style : Style
     }
 
 
@@ -1054,6 +1142,7 @@ modelToSavedModel model =
     , token = model.token
     , server = model.server
     , prettify = model.prettify
+    , style = model.style
     }
 
 
@@ -1064,6 +1153,7 @@ savedModelToModel savedModel model =
         , token = savedModel.token
         , server = savedModel.server
         , prettify = savedModel.prettify
+        , style = savedModel.style
     }
 
 
@@ -1074,6 +1164,7 @@ encodeSavedModel savedModel =
         , ( "token", ED.encodeMaybe JE.string savedModel.token )
         , ( "server", JE.string savedModel.server )
         , ( "prettify", JE.bool savedModel.prettify )
+        , ( "darkstyle", JE.bool <| savedModel.style == DarkStyle )
         ]
 
 
@@ -1084,6 +1175,19 @@ savedModelDecoder =
         |> optional "token" (JD.nullable JD.string) Nothing
         |> required "server" JD.string
         |> optional "prettify" JD.bool True
+        |> optional "darkstyle"
+            (JD.bool
+                |> JD.andThen
+                    (\x ->
+                        JD.succeed <|
+                            if x then
+                                DarkStyle
+
+                            else
+                                LightStyle
+                    )
+            )
+            LightStyle
 
 
 put : String -> Maybe Value -> Cmd Msg
