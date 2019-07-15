@@ -909,10 +909,10 @@ view model =
     { title = "Mastodon API Explorer"
     , body =
         [ div
-            [ style "background-color" styles.dark.backgroundColor
+            [ style "background-color" backgroundColor
             , style "padding" "1em 0 0 0"
             , style "margin" "0"
-            , style "width" "100%"
+            , style "width" "auto"
             ]
             [ div
                 [ style "color" color
