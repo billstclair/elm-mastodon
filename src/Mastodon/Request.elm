@@ -13,9 +13,11 @@
 module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
     , serverRequest
-    , AccountsReq(..), AppsReq(..), BlocksReq(..), FavouritesReq(..)
-    , FollowReq(..), MediaAttachmentsReq(..), MutesReq(..), NotificationsReq(..)
-    , PollsReq(..), ReportsReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
+    , AccountsReq(..), AppsReq(..), BlocksReq(..), DomainBlocksReq(..)
+    , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowReq(..)
+    , FollowSuggestionsReq(..), ListsReq(..), MediaAttachmentsReq(..)
+    , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
+    , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
     , Paging, SourceUpdate, PollDefinition
     , userAgentHeader, idempotencyKeyHeader
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
@@ -41,9 +43,11 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Request details
 
-@docs AccountsReq, AppsReq, BlocksReq, FavouritesReq
-@docs FollowReq, MediaAttachmentsReq, MutesReq, NotificationsReq
-@docs PollsReq, ReportsReq, SearchReq, StatusesReq, TimelinesReq
+@docs AccountsReq, AppsReq, BlocksReq, DomainBlocksReq
+@docs EndorsementsReq, FavouritesReq, FiltersReq, FollowReq
+@docs FollowSuggestionsReq, ListsReq, MediaAttachmentsReq
+@docs MutesReq, NotificationsReq, PollsReq, ReportsReq
+@docs ScheduledStatusesReq, SearchReq, StatusesReq, TimelinesReq
 
 
 # Non-atomic data in requests
@@ -162,7 +166,7 @@ type alias SourceUpdate =
 
 `GetAccountByUsername`, `GetAccount`, `GetVerifyCredentials`, and `PatchUpdateCredentials` result in an `AccountEntity`.
 
-`GetFollowers`, `GetFollowing`, and `GetSearchAccounts` resul in an `AccountListEntity`.
+`GetFollowers`, `GetFollowing`, and `GetSearchAccounts` result in an `AccountListEntity`.
 
 `GetStatuses` results in a `StatusListEntity`.
 
