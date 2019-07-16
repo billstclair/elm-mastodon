@@ -89,6 +89,7 @@ type alias Model =
     , prettify : Bool
     , style : Style
     , selectedRequest : SelectedRequest
+    , username : String
     , accountId : String
     , limit : String
     , accountIds : String
@@ -127,9 +128,11 @@ type Msg
     | Logout
     | ClearAll
     | SendVerifyCredentials
+    | SetUsername String
     | SetAccountId String
     | SetLimit String
     | SetAccountIds String
+    | SendGetAccountByUsername
     | SendGetAccount
     | SendGetFollowers
     | SendGetFollowing
@@ -260,6 +263,7 @@ init value url key =
     , prettify = True
     , style = LightStyle
     , selectedRequest = LoginSelected
+    , username = ""
     , accountId = ""
     , limit = ""
     , accountIds = ""
@@ -787,6 +791,10 @@ updateInternal msg model =
         SendVerifyCredentials ->
             sendRequest (AccountsRequest Request.GetVerifyCredentials) model
 
+        SetUsername username ->
+            { model | username = username }
+                |> withNoCmd
+
         SetAccountId accountId ->
             { model | accountId = accountId }
                 |> withNoCmd
@@ -799,10 +807,19 @@ updateInternal msg model =
             { model | accountIds = accountIds }
                 |> withNoCmd
 
+        SendGetAccountByUsername ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetAccountByUsername
+                        { username = getUsername model }
+                )
+                model
+
         SendGetAccount ->
             sendRequest
                 (AccountsRequest <|
-                    Request.GetAccount { id = model.accountId }
+                    Request.GetAccount
+                        { id = getAccountId model }
                 )
                 model
 
@@ -862,6 +879,24 @@ updateInternal msg model =
                 sendRequest InstanceRequest mdl
 
 
+getUsername : Model -> String
+getUsername model =
+    let
+        username =
+            model.username
+    in
+    if username /= "" then
+        username
+
+    else
+        case model.account of
+            Just account ->
+                account.username
+
+            Nothing ->
+                ""
+
+
 getAccountId : Model -> String
 getAccountId model =
     let
@@ -892,12 +927,31 @@ receiveResponse result model =
                 |> withNoCmd
 
         Ok response ->
-            { model
+            let
+                mdl =
+                    applyResponseSideEffects response model
+            in
+            { mdl
                 | msg = Nothing
                 , request = Just response.rawRequest
                 , response = Just <| ED.entityValue response.entity
             }
                 |> withNoCmd
+
+
+applyResponseSideEffects : Response -> Model -> Model
+applyResponseSideEffects response model =
+    case response.request of
+        AccountsRequest (Request.GetAccountByUsername _) ->
+            case response.entity of
+                AccountEntity { id } ->
+                    { model | accountId = id }
+
+                _ ->
+                    model
+
+        _ ->
+            model
 
 
 sendRequest : Request -> Model -> ( Model, Cmd Msg )
@@ -1195,6 +1249,17 @@ view model =
                                     [ button [ onClick SendVerifyCredentials ]
                                         [ text "GetVerifyCredentials" ]
                                     , br
+                                    , b "username: "
+                                    , input
+                                        [ size 30
+                                        , onInput SetUsername
+                                        , value model.username
+                                        ]
+                                        []
+                                    , text " "
+                                    , button [ onClick SendGetAccountByUsername ]
+                                        [ text "GetAccountByUsername" ]
+                                    , br
                                     , b "id: "
                                     , input
                                         [ size 20
@@ -1320,6 +1385,8 @@ help model =
 
 The "GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
 
+The "GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "id" with that user's account ID.
+
 The "GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
 
 The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it should be the maximum number of entities to return.
@@ -1340,27 +1407,25 @@ Blocks help goes here.
 
 Click a radio button to choose the user interface for that section of the API.
 
-Type a server name in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` entity.
+Type a server name, e.g. `mastodon.social`, in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` entity.
 
 The selector to the right of the "Server" input area shows the servers into which you have successfully logged in. Tokens are saved for each, so you don't need to visit the server authentication page again to login to that account. Selecting one of the servers here changes the "Server" input box, and looks up that server's `Instance` entity, but does NOT change the "Use API for" setting.
 
-Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` entity will be fetched and displayed.
+The "Login" button logs in to the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` entity will be fetched and displayed.
 
-Click the "Set Server" button to use the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` entity will be fetched and displayed.
+The "Set Server" button uses the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` entity will be fetched and displayed.
 
 The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` entity. Click the "Login" button to fetch your `Account` entity there. No authentication will be necessary, since the access token is persistent.
 
-Click the "Logout" button to log out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
+The "Logout" button logs out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
 The "Prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON.
 
 The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent" and "Received" sections, making this help easier to see.
 
-Click the "Dark Mode" checkbox to toggle between light and dark mode.
+The "Dark Mode" checkbox toggles between light and dark mode.
 
-Click the "Clear All Persistent State" button at the bottom of the page to do that.
-
-More coming soon.
+The "Clear All Persistent State" button at the bottom of the page does that, with no confirmation. Be careful. This is a sharp tool.
     """
 
 
@@ -1434,6 +1499,7 @@ type alias SavedModel =
     , prettify : Bool
     , style : Style
     , selectedRequest : SelectedRequest
+    , username : String
     , accountId : String
     , limit : String
     , accountIds : String
@@ -1448,6 +1514,7 @@ modelToSavedModel model =
     , prettify = model.prettify
     , style = model.style
     , selectedRequest = model.selectedRequest
+    , username = model.username
     , accountId = model.accountId
     , limit = model.limit
     , accountIds = model.accountIds
@@ -1463,6 +1530,7 @@ savedModelToModel savedModel model =
         , prettify = savedModel.prettify
         , style = savedModel.style
         , selectedRequest = savedModel.selectedRequest
+        , username = savedModel.username
         , accountId = savedModel.accountId
         , limit = savedModel.limit
         , accountIds = savedModel.accountIds
@@ -1478,6 +1546,7 @@ encodeSavedModel savedModel =
         , ( "prettify", JE.bool savedModel.prettify )
         , ( "darkstyle", JE.bool <| savedModel.style == DarkStyle )
         , ( "selectedRequest", encodeSelectedRequest savedModel.selectedRequest )
+        , ( "username", JE.string savedModel.username )
         , ( "accountId", JE.string savedModel.accountId )
         , ( "limit", JE.string savedModel.limit )
         , ( "accountIds", JE.string savedModel.accountIds )
@@ -1505,6 +1574,7 @@ savedModelDecoder =
             )
             LightStyle
         |> optional "selectedRequest" selectedRequestDecoder LoginSelected
+        |> optional "username" JD.string ""
         |> optional "accountId" JD.string ""
         |> optional "limit" JD.string ""
         |> optional "accountIds" JD.string ""

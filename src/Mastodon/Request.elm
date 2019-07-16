@@ -123,6 +123,18 @@ type Request
     | TrendsRequest
 
 
+
+---
+--- Requests that have only a `limit`, and none of the other `Paging`
+--- parameters often return a `link` header.
+--- That header needs to be parsed, and the ids returned.
+--- Plus those requests should all have `Paging` parameters to use them.
+---
+--- Example:
+--- link: <https://develop.gab.com/api/v1/accounts/69317/following?limit=3&max_id=1031>; rel="next", <https://develop.gab.com/api/v1/accounts/69317/following?limit=3&since_id=1359>; rel="prev"
+---
+
+
 {-| Parameters to control paging for requests that return lists.
 -}
 type alias Paging =
@@ -144,9 +156,11 @@ type alias SourceUpdate =
 
 {-| GET/POST/PATCH /api/v1/accounts
 
-`GetAccount` does not require an authentication token.
+(and `GET /api/v1/account_by_username`)
 
-`GetAccount`, `GetVerifyCredentials`, and `PatchUpdateCredentials` result in an `AccountEntity`.
+`GetAccountByUsername` and `GetAccount` do not require an authentication token.
+
+`GetAccountByUsername`, `GetAccount`, `GetVerifyCredentials`, and `PatchUpdateCredentials` result in an `AccountEntity`.
 
 `GetFollowers`, `GetFollowing`, and `GetSearchAccounts` resul in an `AccountListEntity`.
 
@@ -158,7 +172,8 @@ type alias SourceUpdate =
 
 -}
 type AccountsReq
-    = GetAccount { id : String }
+    = GetAccountByUsername { username : String } --not documented
+    | GetAccount { id : String }
     | GetVerifyCredentials
     | PatchUpdateCredentials
         { display_name : Maybe String
@@ -1037,6 +1052,12 @@ accountsReq req res =
             apiReq.accounts
     in
     case req of
+        GetAccountByUsername { username } ->
+            { res
+                | url = relative [ "account_by_username", username ] []
+                , decoder = decoders.account
+            }
+
         GetAccount { id } ->
             { res
                 | url = relative [ r, id ] []
