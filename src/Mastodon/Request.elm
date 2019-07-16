@@ -974,7 +974,7 @@ idListValue : List String -> String
 idListValue ids =
     let
         idlist =
-            List.map (\s -> "'" ++ s ++ "'") ids
+            List.map (\s -> "\"" ++ s ++ "\"") ids
                 |> String.join ","
     in
     "[" ++ idlist ++ "]"
@@ -1188,16 +1188,13 @@ accountsReq req res =
                 , decoder = decoders.relationship
             }
 
-        -- This is sending ?id=['1'] (with the value url-encoded)
-        -- That's how I read the documentation.
-        -- The web clients I have send ?id[]=1
-        -- I don't know how to get them to request multiple ids.
-        -- So this may not work.
+        -- This sends ?id[]=<id1>&id[]=<id2>...
+        -- JSON doesn't work in a URL query parameter.
         GetRelationships { ids } ->
             { res
                 | url =
-                    relative [ r, "relationships" ]
-                        [ Builder.string "id" <| idListValue ids ]
+                    relative [ r, "relationships" ] <|
+                        List.map (Builder.string "id[]") ids
                 , decoder = decoders.relationshipList
             }
 

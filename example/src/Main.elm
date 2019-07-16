@@ -89,6 +89,9 @@ type alias Model =
     , prettify : Bool
     , style : Style
     , selectedRequest : SelectedRequest
+    , accountId : String
+    , limit : String
+    , accountIds : String
 
     -- Non-persistent below here
     , token : Maybe String
@@ -123,6 +126,14 @@ type Msg
     | Login
     | Logout
     | ClearAll
+    | SendVerifyCredentials
+    | SetAccountId String
+    | SetLimit String
+    | SetAccountIds String
+    | SendGetAccount
+    | SendGetFollowers
+    | SendGetFollowing
+    | SendGetRelationships
     | ReceiveResponse (Result Error Response)
     | SetLoginServer
 
@@ -249,6 +260,9 @@ init value url key =
     , prettify = True
     , style = LightStyle
     , selectedRequest = LoginSelected
+    , accountId = ""
+    , limit = ""
+    , accountIds = ""
 
     -- Non-persistent below here
     , request = Nothing
@@ -770,6 +784,59 @@ updateInternal msg model =
             { mdl | savedModel = Just <| modelToSavedModel mdl }
                 |> withCmd clear
 
+        SendVerifyCredentials ->
+            sendRequest (AccountsRequest Request.GetVerifyCredentials) model
+
+        SetAccountId accountId ->
+            { model | accountId = accountId }
+                |> withNoCmd
+
+        SetLimit limit ->
+            { model | limit = limit }
+                |> withNoCmd
+
+        SetAccountIds accountIds ->
+            { model | accountIds = accountIds }
+                |> withNoCmd
+
+        SendGetAccount ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetAccount { id = model.accountId }
+                )
+                model
+
+        SendGetFollowers ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetFollowers
+                        { id = getAccountId model
+                        , limit = String.toInt model.limit
+                        }
+                )
+                model
+
+        SendGetFollowing ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetFollowing
+                        { id = getAccountId model
+                        , limit = String.toInt model.limit
+                        }
+                )
+                model
+
+        SendGetRelationships ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetRelationships
+                        { ids =
+                            String.split "," model.accountIds
+                                |> List.map String.trim
+                        }
+                )
+                model
+
         ReceiveResponse result ->
             receiveResponse result model
 
@@ -793,6 +860,24 @@ updateInternal msg model =
                         }
                 in
                 sendRequest InstanceRequest mdl
+
+
+getAccountId : Model -> String
+getAccountId model =
+    let
+        id =
+            model.accountId
+    in
+    if id /= "" then
+        id
+
+    else
+        case model.account of
+            Just account ->
+                account.id
+
+            Nothing ->
+                ""
 
 
 receiveResponse : Result Error Response -> Model -> ( Model, Cmd Msg )
@@ -931,6 +1016,7 @@ theStyle =
 type SelectedRequest
     = LoginSelected
     | AccountsSelected
+    | BlocksSelected
 
 
 encodeSelectedRequest : SelectedRequest -> Value
@@ -946,6 +1032,9 @@ selectedRequestToString selectedRequest =
 
         AccountsSelected ->
             "accounts"
+
+        BlocksSelected ->
+            "blocks"
 
 
 selectedRequestDecoder : Decoder SelectedRequest
@@ -963,6 +1052,9 @@ selectedRequestFromString s =
     case s of
         "accounts" ->
             AccountsSelected
+
+        "block" ->
+            BlocksSelected
 
         _ ->
             LoginSelected
@@ -1073,42 +1165,78 @@ view model =
                         [ selectedRequestHtml LoginSelected
                             model
                             (\_ ->
-                                table []
-                                    [ tr []
-                                        [ td [ style "color" color ]
-                                            [ text "Server: " ]
-                                        , td []
-                                            [ input
-                                                [ size 30
-                                                , onInput SetServer
-                                                , value model.server
-                                                , placeholder "mastodon.social"
-                                                ]
-                                                []
-                                            , text " "
-                                            , serverSelect model
-                                            ]
+                                p []
+                                    [ b "Server: "
+                                    , input
+                                        [ size 30
+                                        , onInput SetServer
+                                        , value model.server
+                                        , placeholder "mastodon.social"
                                         ]
-                                    , tr []
-                                        [ td [] []
-                                        , td []
-                                            [ button
-                                                [ onClick Login
-                                                , disabled <| model.server == ""
-                                                ]
-                                                [ text "Login" ]
-                                            , text " "
-                                            , button
-                                                [ onClick SetLoginServer ]
-                                                [ text "Set Server" ]
-                                            ]
+                                        []
+                                    , text " "
+                                    , serverSelect model
+                                    , br
+                                    , button
+                                        [ onClick Login
+                                        , disabled <| model.server == ""
                                         ]
+                                        [ text "Login" ]
+                                    , text " "
+                                    , button
+                                        [ onClick SetLoginServer ]
+                                        [ text "Set Server" ]
                                     ]
                             )
                         , selectedRequestHtml AccountsSelected
                             model
                             (\_ ->
-                                text "Accounts commands go here"
+                                p []
+                                    [ button [ onClick SendVerifyCredentials ]
+                                        [ text "GetVerifyCredentials" ]
+                                    , br
+                                    , b "id: "
+                                    , input
+                                        [ size 20
+                                        , onInput SetAccountId
+                                        , value model.accountId
+                                        ]
+                                        []
+                                    , text " "
+                                    , button [ onClick SendGetAccount ]
+                                        [ text "GetAccount" ]
+                                    , br
+                                    , b "limit: "
+                                    , input
+                                        [ size 10
+                                        , onInput SetLimit
+                                        , value model.limit
+                                        ]
+                                        []
+                                    , text " "
+                                    , button [ onClick SendGetFollowers ]
+                                        [ text "GetFollowers" ]
+                                    , text " "
+                                    , button [ onClick SendGetFollowing ]
+                                        [ text "GetFollowing" ]
+                                    , br
+                                    , b "ids (1,2,...): "
+                                    , input
+                                        [ size 40
+                                        , onInput SetAccountIds
+                                        , value model.accountIds
+                                        ]
+                                        []
+                                    , br
+                                    , button [ onClick SendGetRelationships ]
+                                        [ text "GetRelationships" ]
+                                    ]
+                            )
+                        , selectedRequestHtml BlocksSelected
+                            model
+                            (\_ ->
+                                p []
+                                    [ text "Blocks requests go here." ]
                             )
                         ]
                     , p [ style "color" "red" ]
@@ -1190,7 +1318,20 @@ help model =
             """
 **Accounts Help**
 
-Accounts help goes here.
+The "GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
+
+The "GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
+
+The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it should be the maximum number of entities to return.
+
+The "GetRelationships" button returns a list of `Relationship` entities, one for each of the (comma-separated) "ids".
+            """
+
+        else if model.selectedRequest == BlocksSelected then
+            """
+**Blocks Help**
+
+Blocks help goes here.
             """
 
         else
@@ -1199,15 +1340,15 @@ Accounts help goes here.
 
 Click a radio button to choose the user interface for that section of the API.
 
-Type a server name in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` record.
+Type a server name in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` entity.
 
-The selector to the right of the "Server" input area shows the servers into which you have successfully logged in. Tokens are saved for each, so you don't need to visit the server authentication page again to login to that account. Selecting one of the servers here changes the "Server" input box, and looks up that server's `Instance` record, but does NOT change the "Use API for" setting.
+The selector to the right of the "Server" input area shows the servers into which you have successfully logged in. Tokens are saved for each, so you don't need to visit the server authentication page again to login to that account. Selecting one of the servers here changes the "Server" input box, and looks up that server's `Instance` entity, but does NOT change the "Use API for" setting.
 
-Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` record will be fetched and displayed.
+Click the "Login" button to log into the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` entity will be fetched and displayed.
 
-Click the "Set Server" button to use the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` record will be fetched and displayed.
+Click the "Set Server" button to use the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` entity will be fetched and displayed.
 
-The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` record. Click the "Login" button to fetch your `Account` record there. No authentication will be necessary, since the access token is persistent.
+The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` entity. Click the "Login" button to fetch your `Account` entity there. No authentication will be necessary, since the access token is persistent.
 
 Click the "Logout" button to log out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
@@ -1293,6 +1434,9 @@ type alias SavedModel =
     , prettify : Bool
     , style : Style
     , selectedRequest : SelectedRequest
+    , accountId : String
+    , limit : String
+    , accountIds : String
     }
 
 
@@ -1304,6 +1448,9 @@ modelToSavedModel model =
     , prettify = model.prettify
     , style = model.style
     , selectedRequest = model.selectedRequest
+    , accountId = model.accountId
+    , limit = model.limit
+    , accountIds = model.accountIds
     }
 
 
@@ -1316,6 +1463,9 @@ savedModelToModel savedModel model =
         , prettify = savedModel.prettify
         , style = savedModel.style
         , selectedRequest = savedModel.selectedRequest
+        , accountId = savedModel.accountId
+        , limit = savedModel.limit
+        , accountIds = savedModel.accountIds
     }
 
 
@@ -1328,6 +1478,9 @@ encodeSavedModel savedModel =
         , ( "prettify", JE.bool savedModel.prettify )
         , ( "darkstyle", JE.bool <| savedModel.style == DarkStyle )
         , ( "selectedRequest", encodeSelectedRequest savedModel.selectedRequest )
+        , ( "accountId", JE.string savedModel.accountId )
+        , ( "limit", JE.string savedModel.limit )
+        , ( "accountIds", JE.string savedModel.accountIds )
         ]
 
 
@@ -1352,6 +1505,9 @@ savedModelDecoder =
             )
             LightStyle
         |> optional "selectedRequest" selectedRequestDecoder LoginSelected
+        |> optional "accountId" JD.string ""
+        |> optional "limit" JD.string ""
+        |> optional "accountIds" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
