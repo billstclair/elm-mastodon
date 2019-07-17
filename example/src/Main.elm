@@ -588,7 +588,8 @@ updateInternal msg model =
                         Cmd.none
 
                      else
-                        Task.attempt (\_ -> Noop) <| Dom.focus cancelButtonId
+                        Task.attempt (\_ -> Noop) <|
+                            Dom.focus cancelButtonId
                     )
 
         OnKeyPress key ->
@@ -1432,7 +1433,7 @@ clearAllDialog : Model -> Html Msg
 clearAllDialog model =
     Dialog.render
         { styles = [ ( "width", "40%" ) ]
-        , title = "Confirm Clear All Persistent State"
+        , title = "Confirm"
         , content = [ text "Do you really want to erase everything?" ]
         , actionBar =
             [ button
