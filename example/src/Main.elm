@@ -127,6 +127,7 @@ type Msg
     | SetServer String
     | ClearSentReceived
     | TogglePrettify
+    | ToggleShowMetadata
     | ToggleStyle
     | SetSelectedRequest SelectedRequest Bool
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
@@ -633,6 +634,10 @@ updateInternal msg model =
             { model | prettify = not model.prettify }
                 |> withNoCmd
 
+        ToggleShowMetadata ->
+            { model | showMetadata = not model.showMetadata }
+                |> withNoCmd
+
         ToggleStyle ->
             { model
                 | style =
@@ -740,6 +745,7 @@ updateInternal msg model =
                             { model
                                 | msg = Nothing
                                 , request = Just response.rawRequest
+                                , metadata = Just response.metadata
                                 , response = Just instance.v
                             }
                                 |> withNoCmd
@@ -759,6 +765,7 @@ updateInternal msg model =
                             { model
                                 | msg = Nothing
                                 , request = Just response.rawRequest
+                                , metadata = Just response.metadata
                                 , response = Just account.v
                                 , account = Just account
                             }
@@ -989,8 +996,8 @@ receiveResponse result model =
             in
             { mdl
                 | msg = Nothing
-                , response = Just <| ED.entityValue response.entity
                 , metadata = Just response.metadata
+                , response = Just <| ED.entityValue response.entity
             }
                 |> withNoCmd
 
@@ -1165,10 +1172,10 @@ selectedRequestDecoder =
 selectedRequestFromString : String -> SelectedRequest
 selectedRequestFromString s =
     case s of
-        "accounts" ->
+        "AccountsRequest" ->
             AccountsSelected
 
-        "block" ->
+        "BlocksRequest" ->
             BlocksSelected
 
         _ ->
@@ -1411,6 +1418,29 @@ view model =
                                     -- Need a jsonBody property
                                     ]
                         ]
+                    , p [] <|
+                        if model.showMetadata then
+                            [ b "Headers: "
+                            , button [ onClick ToggleShowMetadata ]
+                                [ text "Hide" ]
+                            ]
+
+                        else
+                            [ b "Headers "
+                            , button [ onClick ToggleShowMetadata ]
+                                [ text "Show" ]
+                            ]
+                    , if not model.showMetadata then
+                        text ""
+
+                      else
+                        case model.metadata of
+                            Nothing ->
+                                text ""
+
+                            Just metadata ->
+                                p []
+                                    [ renderHeaders color metadata ]
                     , p []
                         [ b "Received:" ]
                     , pre []
@@ -1454,6 +1484,23 @@ view model =
             ]
         ]
     }
+
+
+renderHeaders : String -> Http.Metadata -> Html Msg
+renderHeaders color metadata =
+    let
+        fold k v res =
+            tr []
+                [ td [] [ pre [] [ text k ] ]
+                , td [] [ pre [] [ text v ] ]
+                ]
+                :: res
+    in
+    Dict.foldr fold [] metadata.headers
+        |> table
+            [ style "color" color
+            , style "font-size" "14px"
+            ]
 
 
 cancelButtonId : String
