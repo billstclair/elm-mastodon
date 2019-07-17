@@ -980,7 +980,6 @@ receiveResponse result model =
             in
             { mdl
                 | msg = Nothing
-                , request = Just response.rawRequest
                 , response = Just <| ED.entityValue response.entity
             }
                 |> withNoCmd
@@ -1008,16 +1007,20 @@ sendRequest request model =
             model |> withNoCmd
 
         Just server ->
-            model
-                |> withCmd
-                    (Request.serverRequest (\_ -> ReceiveResponse)
-                        []
+            let
+                rawRequest =
+                    Request.requestToRawRequest []
                         { server = server
                         , token = model.token
                         }
-                        ()
                         request
-                    )
+            in
+            { model
+                | request = Just rawRequest
+                , response = Nothing
+            }
+                |> withCmd
+                    (Request.rawRequestToCmd ReceiveResponse rawRequest)
 
 
 saveAuthorization : String -> Authorization -> Model -> ( Model, Cmd Msg )
@@ -1132,10 +1135,10 @@ selectedRequestToString selectedRequest =
             "login"
 
         AccountsSelected ->
-            "accounts"
+            "AccountsRequest"
 
         BlocksSelected ->
-            "blocks"
+            "BlocksRequest"
 
 
 selectedRequestDecoder : Decoder SelectedRequest
@@ -1413,6 +1416,10 @@ view model =
                     , p []
                         [ text <| "Copyright " ++ special.copyright ++ " 2019, Bill St. Clair"
                         , br
+                        , text "API Docs: "
+                        , link "docs.joinmastodon.org"
+                            "https://docs.joinmastodon.org/api/guidelines"
+                        , br
                         , text "Source code: "
                         , link "GitHub"
                             "https://github.com/billstclair/elm-mastodon"
@@ -1454,7 +1461,7 @@ help model =
     Markdown.toHtml [] <|
         if model.selectedRequest == AccountsSelected then
             """
-**Accounts Help**
+**AccountsRequest Help**
 
 The "GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
 
@@ -1469,7 +1476,7 @@ The "GetRelationships" button returns a list of `Relationship` entities, one for
 
         else if model.selectedRequest == BlocksSelected then
             """
-**Blocks Help**
+**BlocksRequest Help**
 
 Blocks help goes here.
             """
