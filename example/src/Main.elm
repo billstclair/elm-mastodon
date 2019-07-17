@@ -1227,6 +1227,16 @@ blankTarget =
     target "_blank"
 
 
+{-| The Material Design CSS puts paragraph spacing BELOW the paragraph.
+
+Use this to make a paragraph worth of vertical white space.
+
+-}
+pspace : Html msg
+pspace =
+    p [] [ text "" ]
+
+
 view : Model -> Document Msg
 view model =
     let
@@ -1282,7 +1292,8 @@ view model =
                             model
                             (\_ ->
                                 p []
-                                    [ b "Server: "
+                                    [ pspace
+                                    , b "Server: "
                                     , input
                                         [ size 30
                                         , onInput SetServer
@@ -1308,7 +1319,8 @@ view model =
                             model
                             (\_ ->
                                 p []
-                                    [ button [ onClick SendVerifyCredentials ]
+                                    [ pspace
+                                    , button [ onClick SendVerifyCredentials ]
                                         [ text "GetVerifyCredentials" ]
                                     , br
                                     , b "username: "
@@ -1363,7 +1375,9 @@ view model =
                             model
                             (\_ ->
                                 p []
-                                    [ text "Blocks requests go here." ]
+                                    [ pspace
+                                    , text "Blocks requests go here."
+                                    ]
                             )
                         ]
                     , p [ style "color" "red" ]
