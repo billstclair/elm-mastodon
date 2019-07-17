@@ -99,11 +99,13 @@ type alias Model =
     , accountId : String
     , limit : String
     , accountIds : String
+    , showMetadata : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
     , request : Maybe RawRequest
     , response : Maybe Value
+    , metadata : Maybe Http.Metadata
     , savedModel : Maybe SavedModel
     , key : Key
     , url : Url
@@ -288,11 +290,13 @@ init value url key =
     , accountId = ""
     , limit = ""
     , accountIds = ""
+    , showMetadata = False
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
     , request = Nothing
     , response = Nothing
+    , metadata = Nothing
     , savedModel = Nothing
     , key = key
     , url = url
@@ -621,6 +625,7 @@ updateInternal msg model =
             { model
                 | request = Nothing
                 , response = Nothing
+                , metadata = Nothing
             }
                 |> withNoCmd
 
@@ -813,6 +818,7 @@ updateInternal msg model =
                         , token = Nothing
                         , request = Nothing
                         , response = Nothing
+                        , metadata = Nothing
                         , msg = Nothing
                     }
                         |> withCmd (putToken server Nothing)
@@ -829,6 +835,7 @@ updateInternal msg model =
                         , token = Nothing
                         , request = Nothing
                         , response = Nothing
+                        , metadata = Nothing
                         , msg = Nothing
                     }
             in
@@ -911,6 +918,7 @@ updateInternal msg model =
                     , loginServer = Nothing
                     , request = Nothing
                     , response = Nothing
+                    , metadata = Nothing
                 }
                     |> withNoCmd
 
@@ -970,6 +978,7 @@ receiveResponse result model =
                 | msg = Just <| Debug.toString err
                 , request = Nothing
                 , response = Nothing
+                , metadata = Nothing
             }
                 |> withNoCmd
 
@@ -981,6 +990,7 @@ receiveResponse result model =
             { mdl
                 | msg = Nothing
                 , response = Just <| ED.entityValue response.entity
+                , metadata = Just response.metadata
             }
                 |> withNoCmd
 
@@ -1018,6 +1028,7 @@ sendRequest request model =
             { model
                 | request = Just rawRequest
                 , response = Nothing
+                , metadata = Nothing
             }
                 |> withCmd
                     (Request.rawRequestToCmd ReceiveResponse rawRequest)
@@ -1583,6 +1594,7 @@ type alias SavedModel =
     , accountId : String
     , limit : String
     , accountIds : String
+    , showMetadata : Bool
     }
 
 
@@ -1598,6 +1610,7 @@ modelToSavedModel model =
     , accountId = model.accountId
     , limit = model.limit
     , accountIds = model.accountIds
+    , showMetadata = model.showMetadata
     }
 
 
@@ -1614,6 +1627,7 @@ savedModelToModel savedModel model =
         , accountId = savedModel.accountId
         , limit = savedModel.limit
         , accountIds = savedModel.accountIds
+        , showMetadata = savedModel.showMetadata
     }
 
 
@@ -1630,6 +1644,7 @@ encodeSavedModel savedModel =
         , ( "accountId", JE.string savedModel.accountId )
         , ( "limit", JE.string savedModel.limit )
         , ( "accountIds", JE.string savedModel.accountIds )
+        , ( "showMetadata", JE.bool savedModel.showMetadata )
         ]
 
 
@@ -1658,6 +1673,7 @@ savedModelDecoder =
         |> optional "accountId" JD.string ""
         |> optional "limit" JD.string ""
         |> optional "accountIds" JD.string ""
+        |> optional "showMetadata" JD.bool False
 
 
 put : String -> Maybe Value -> Cmd Msg
