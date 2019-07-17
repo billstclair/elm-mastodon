@@ -686,6 +686,7 @@ type alias RawRequest =
     , headers : List Http.Header
     , body : Http.Body
     , request : Request
+    , jsonBody : Maybe Value
     , decoder : Decoder Entity
     }
 
@@ -812,6 +813,7 @@ emptyRawRequest =
     , headers = []
     , body = Http.emptyBody
     , request = InstanceRequest
+    , jsonBody = Nothing
     , decoder = JD.fail "Unspecified decoder"
     }
 
@@ -1189,19 +1191,32 @@ accountsReq req res =
             }
 
         PostFollow { id, reblogs } ->
+            let
+                jsonBody =
+                    if not reblogs then
+                        JE.null
+
+                    else
+                        JE.object
+                            [ ( "reblogs", JE.bool reblogs ) ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r, id, "follow" ] []
+                , jsonBody =
+                    if not reblogs then
+                        Nothing
+
+                    else
+                        Just jsonBody
                 , body =
                     if not reblogs then
                         -- Defaults to false
                         res.body
 
                     else
-                        Http.jsonBody <|
-                            JE.object
-                                [ ( "reblogs", JE.bool reblogs ) ]
+                        Http.jsonBody jsonBody
                 , decoder = decoders.relationship
             }
 
@@ -1245,28 +1260,32 @@ appsReq req res =
     in
     case req of
         PostApp { client_name, redirect_uris, scopes, website } ->
+            let
+                jsonBody =
+                    JE.object
+                        (List.concat
+                            [ [ ( "client_name", JE.string client_name )
+                              , ( "redirect_uris", JE.string redirect_uris )
+                              , ( "scopes"
+                                , JE.string <| String.join " " scopes
+                                )
+                              ]
+                            , case website of
+                                Nothing ->
+                                    []
+
+                                Just w ->
+                                    [ ( "website", JE.string w ) ]
+                            ]
+                        )
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            (List.concat
-                                [ [ ( "client_name", JE.string client_name )
-                                  , ( "redirect_uris", JE.string redirect_uris )
-                                  , ( "scopes"
-                                    , JE.string <| String.join " " scopes
-                                    )
-                                  ]
-                                , case website of
-                                    Nothing ->
-                                        []
-
-                                    Just w ->
-                                        [ ( "website", JE.string w ) ]
-                                ]
-                            )
+                    Http.jsonBody jsonBody
+                , jsonBody = Just jsonBody
                 , decoder = decoders.app
             }
 
@@ -1432,19 +1451,23 @@ filtersReq req res =
             }
 
         PostFilter { phrase, context, irreversible, whole_word, expires_in } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "phrase", JE.string phrase )
+                        , ( "context", JE.list ED.encodeFilterContext context )
+                        , ( "irreversible", JE.bool irreversible )
+                        , ( "whole_word", JE.bool whole_word )
+                        , ( "expires_in", encodeMaybe JE.int expires_in )
+                        ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "phrase", JE.string phrase )
-                            , ( "context", JE.list ED.encodeFilterContext context )
-                            , ( "irreversible", JE.bool irreversible )
-                            , ( "whole_word", JE.bool whole_word )
-                            , ( "expires_in", encodeMaybe JE.int expires_in )
-                            ]
+                    Http.jsonBody jsonBody
+                , jsonBody = Just jsonBody
                 , decoder = decoders.filter
             }
 
@@ -1456,19 +1479,23 @@ filtersReq req res =
             }
 
         PutFilter { id, phrase, context, irreversible, whole_word, expires_in } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "phrase", JE.string phrase )
+                        , ( "context", JE.list ED.encodeFilterContext context )
+                        , ( "irreversible", JE.bool irreversible )
+                        , ( "whole_word", JE.bool whole_word )
+                        , ( "expires_in", encodeMaybe JE.int expires_in )
+                        ]
+            in
             { res
                 | method = m.put
                 , url =
                     relative [ r, id ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "phrase", JE.string phrase )
-                            , ( "context", JE.list ED.encodeFilterContext context )
-                            , ( "irreversible", JE.bool irreversible )
-                            , ( "whole_word", JE.bool whole_word )
-                            , ( "expires_in", encodeMaybe JE.int expires_in )
-                            ]
+                    Http.jsonBody jsonBody
+                , jsonBody = Just jsonBody
                 , decoder = decoders.filter
             }
 
@@ -1586,26 +1613,35 @@ listsReq req res =
             }
 
         PostList { title } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "title", JE.string title ) ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "title", JE.string title ) ]
+                    Http.jsonBody jsonBody
+                , jsonBody = Just jsonBody
                 , decoder = decoders.listEntity
             }
 
         PutList { id, title } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "title", JE.string title ) ]
+            in
             { res
                 | method = m.put
                 , url =
                     relative [ r, id ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "title", JE.string title ) ]
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.listEntity
             }
 
@@ -1618,32 +1654,42 @@ listsReq req res =
             }
 
         PostListAccounts { id, account_ids } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "account_ids"
+                          , JE.list JE.string account_ids
+                          )
+                        ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r, id, "accounts" ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "account_ids"
-                              , JE.list JE.string account_ids
-                              )
-                            ]
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.ignore
             }
 
         DeleteListAccounts { id, account_ids } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "account_ids"
+                          , JE.list JE.string account_ids
+                          )
+                        ]
+            in
             { res
                 | method = m.delete
                 , url =
                     relative [ r, id, "accounts" ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "account_ids"
-                              , JE.list JE.string account_ids
-                              )
-                            ]
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.ignore
             }
 
@@ -1731,14 +1777,19 @@ mutesReq req res =
             }
 
         PostAccountMute { id, notifications } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "notifications", JE.bool notifications ) ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ apiReq.accounts, id, "mute" ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "notifications", JE.bool notifications ) ]
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.relationship
             }
 
@@ -1816,14 +1867,19 @@ notificationsReq req res =
             }
 
         PostDismissNotification { id } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "id", JE.string id ) ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r, "dismiss" ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "id", JE.string id ) ]
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.ignore
             }
 
@@ -1843,14 +1899,19 @@ pollsReq req res =
             }
 
         PostVotes { id, choices } ->
+            let
+                jsonBody =
+                    JE.object
+                        [ ( "choices", JE.list JE.int choices ) ]
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r, id, "votes" ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            [ ( "choices", JE.list JE.int choices ) ]
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.poll
             }
 
@@ -1863,33 +1924,38 @@ reportsReq req res =
     in
     case req of
         PostReports { account_id, status_ids, comment, forward } ->
+            let
+                jsonBody =
+                    JE.object
+                        (List.concat
+                            [ [ ( "account_id", JE.string account_id ) ]
+                            , if status_ids == [] then
+                                []
+
+                              else
+                                [ ( "status_ids", JE.list JE.string status_ids ) ]
+                            , case comment of
+                                Nothing ->
+                                    []
+
+                                Just c ->
+                                    [ ( "comment", JE.string c ) ]
+                            , if forward then
+                                [ ( "forward", JE.bool True ) ]
+
+                              else
+                                []
+                            ]
+                        )
+            in
             { res
                 | method = m.post
                 , url =
                     relative [ r ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            (List.concat
-                                [ [ ( "account_id", JE.string account_id ) ]
-                                , if status_ids == [] then
-                                    []
-
-                                  else
-                                    [ ( "status_ids", JE.list JE.string status_ids ) ]
-                                , case comment of
-                                    Nothing ->
-                                        []
-
-                                    Just c ->
-                                        [ ( "comment", JE.string c ) ]
-                                , if forward then
-                                    [ ( "forward", JE.bool True ) ]
-
-                                  else
-                                    []
-                                ]
-                            )
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.ignore
             }
 
@@ -1916,19 +1982,29 @@ scheduledStatusesReq req res =
             }
 
         PutScheduledStatus { id, scheduled_at } ->
+            let
+                jsonBody =
+                    case scheduled_at of
+                        Nothing ->
+                            Nothing
+
+                        Just sa ->
+                            Just <|
+                                JE.object
+                                    [ ( "scheduled_at", JE.string sa ) ]
+            in
             { res
                 | method = m.put
                 , url =
                     relative [ r, id ] []
                 , body =
-                    case scheduled_at of
+                    case jsonBody of
                         Nothing ->
                             Http.emptyBody
 
-                        Just sa ->
-                            Http.jsonBody <|
-                                JE.object
-                                    [ ( "scheduled_at", JE.string sa ) ]
+                        Just jb ->
+                            Http.jsonBody jb
+                , jsonBody = jsonBody
                 , decoder = decoders.scheduledStatus
             }
 
@@ -2009,67 +2085,72 @@ statusesReq req res =
         -- Caller needs to handle unique Idempotency-Key header
         PostStatus { status, in_reply_to_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language } ->
             -- If spoiler_text is included, then sensitive will be passed as true
+            let
+                jsonBody =
+                    JE.object
+                        (List.concat
+                            [ case status of
+                                Nothing ->
+                                    []
+
+                                Just s ->
+                                    [ ( "status", JE.string s ) ]
+                            , case in_reply_to_id of
+                                Nothing ->
+                                    []
+
+                                Just id ->
+                                    [ ( "in_reply_to_id", JE.string id ) ]
+                            , if media_ids == [] then
+                                []
+
+                              else
+                                [ ( "media_ids", JE.list JE.string media_ids ) ]
+                            , case poll of
+                                Nothing ->
+                                    []
+
+                                Just p ->
+                                    [ ( "poll"
+                                      , JE.object
+                                            [ ( "options", JE.list JE.string p.options )
+                                            , ( "expires_in", JE.int p.expires_in )
+                                            , ( "multiple", JE.bool p.multiple )
+                                            , ( "hide_totals", JE.bool p.hide_totals )
+                                            ]
+                                      )
+                                    ]
+                            , case spoiler_text of
+                                Nothing ->
+                                    []
+
+                                Just text ->
+                                    [ ( "sensitive", JE.bool True )
+                                    , ( "spoiler_text", JE.string text )
+                                    ]
+                            , [ ( "visibility", ED.encodeVisibility visibility ) ]
+                            , case scheduled_at of
+                                Nothing ->
+                                    []
+
+                                Just timestamp ->
+                                    [ ( "scheduled_at", JE.string timestamp ) ]
+                            , case language of
+                                Nothing ->
+                                    []
+
+                                Just lang ->
+                                    [ ( "language", JE.string lang ) ]
+                            ]
+j                        )
+            in
             { res
                 | method = m.post
                 , url = relative [ r ] []
                 , body =
-                    Http.jsonBody <|
-                        JE.object
-                            (List.concat
-                                [ case status of
-                                    Nothing ->
-                                        []
-
-                                    Just s ->
-                                        [ ( "status", JE.string s ) ]
-                                , case in_reply_to_id of
-                                    Nothing ->
-                                        []
-
-                                    Just id ->
-                                        [ ( "in_reply_to_id", JE.string id ) ]
-                                , if media_ids == [] then
-                                    []
-
-                                  else
-                                    [ ( "media_ids", JE.list JE.string media_ids ) ]
-                                , case poll of
-                                    Nothing ->
-                                        []
-
-                                    Just p ->
-                                        [ ( "poll"
-                                          , JE.object
-                                                [ ( "options", JE.list JE.string p.options )
-                                                , ( "expires_in", JE.int p.expires_in )
-                                                , ( "multiple", JE.bool p.multiple )
-                                                , ( "hide_totals", JE.bool p.hide_totals )
-                                                ]
-                                          )
-                                        ]
-                                , case spoiler_text of
-                                    Nothing ->
-                                        []
-
-                                    Just text ->
-                                        [ ( "sensitive", JE.bool True )
-                                        , ( "spoiler_text", JE.string text )
-                                        ]
-                                , [ ( "visibility", ED.encodeVisibility visibility ) ]
-                                , case scheduled_at of
-                                    Nothing ->
-                                        []
-
-                                    Just timestamp ->
-                                        [ ( "scheduled_at", JE.string timestamp ) ]
-                                , case language of
-                                    Nothing ->
-                                        []
-
-                                    Just lang ->
-                                        [ ( "language", JE.string lang ) ]
-                                ]
-                            )
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
                 , decoder = decoders.status
             }
 
