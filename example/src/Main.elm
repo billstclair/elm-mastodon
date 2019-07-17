@@ -13,9 +13,12 @@
 module Main exposing (emptyUrl, main, parseQuery, receiveCodeAndState)
 
 import Browser exposing (Document, UrlRequest)
+import Browser.Dom as Dom
+import Browser.Events as Events
 import Browser.Navigation as Navigation exposing (Key)
 import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
+import Dialog
 import Dict exposing (Dict)
 import Html
     exposing
@@ -39,9 +42,11 @@ import Html
         )
 import Html.Attributes
     exposing
-        ( checked
+        ( autofocus
+        , checked
         , disabled
         , href
+        , id
         , name
         , placeholder
         , selected
@@ -51,7 +56,7 @@ import Html.Attributes
         , type_
         , value
         )
-import Html.Events exposing (onCheck, onClick, onInput)
+import Html.Events exposing (onCheck, onClick, onInput, onMouseDown)
 import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
@@ -84,7 +89,8 @@ type Started
 
 
 type alias Model =
-    { server : String
+    { token : Maybe String
+    , server : String
     , loginServer : Maybe String
     , prettify : Bool
     , style : Style
@@ -95,7 +101,7 @@ type alias Model =
     , accountIds : String
 
     -- Non-persistent below here
-    , token : Maybe String
+    , clearAllDialogVisible : Bool
     , request : Maybe RawRequest
     , response : Maybe Value
     , savedModel : Maybe SavedModel
@@ -111,8 +117,11 @@ type alias Model =
 
 
 type Msg
-    = OnUrlRequest UrlRequest
+    = Noop
+    | OnUrlRequest UrlRequest
     | OnUrlChange Url
+    | ToggleClearAllDialog
+    | OnKeyPress String
     | SetServer String
     | ClearSentReceived
     | TogglePrettify
@@ -152,10 +161,21 @@ main =
         }
 
 
+keyDecoder : Decoder Msg
+keyDecoder =
+    JD.field "key" JD.string
+        |> JD.map OnKeyPress
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ PortFunnels.subscriptions Process model
+        , if model.clearAllDialogVisible then
+            Events.onKeyDown keyDecoder
+
+          else
+            Sub.none
         ]
 
 
@@ -260,6 +280,7 @@ init value url key =
     in
     { token = Nothing
     , server = ""
+    , loginServer = Nothing
     , prettify = True
     , style = LightStyle
     , selectedRequest = LoginSelected
@@ -269,6 +290,7 @@ init value url key =
     , accountIds = ""
 
     -- Non-persistent below here
+    , clearAllDialogVisible = False
     , request = Nothing
     , response = Nothing
     , savedModel = Nothing
@@ -276,7 +298,6 @@ init value url key =
     , url = url
     , hideClientId = hideClientId
     , tokens = Dict.empty
-    , loginServer = Nothing
     , account = Nothing
     , msg = msg
     , started = NotStarted
@@ -551,11 +572,35 @@ update msg model =
 updateInternal : Msg -> Model -> ( Model, Cmd Msg )
 updateInternal msg model =
     case msg of
+        Noop ->
+            model |> withNoCmd
+
         OnUrlRequest _ ->
             model |> withNoCmd
 
         OnUrlChange _ ->
             model |> withNoCmd
+
+        ToggleClearAllDialog ->
+            { model | clearAllDialogVisible = not model.clearAllDialogVisible }
+                |> withCmd
+                    (if model.clearAllDialogVisible then
+                        Cmd.none
+
+                     else
+                        Task.attempt (\_ -> Noop) <| Dom.focus cancelButtonId
+                    )
+
+        OnKeyPress key ->
+            { model
+                | clearAllDialogVisible =
+                    if key == "Escape" then
+                        False
+
+                    else
+                        model.clearAllDialogVisible
+            }
+                |> withNoCmd
 
         SetServer server ->
             let
@@ -775,7 +820,8 @@ updateInternal msg model =
             let
                 mdl =
                     { model
-                        | tokens = Dict.empty
+                        | clearAllDialogVisible = False
+                        , tokens = Dict.empty
                         , server = ""
                         , loginServer = Nothing
                         , account = Nothing
@@ -1174,7 +1220,8 @@ view model =
     in
     { title = "Mastodon API Explorer"
     , body =
-        [ div
+        [ clearAllDialog model
+        , div
             [ style "background-color" backgroundColor
             , style "padding" "1em 0 0 0"
             , style "margin" "0"
@@ -1346,6 +1393,14 @@ view model =
                                 text <|
                                     encodeWrap model.prettify value
                         ]
+                    , div []
+                        [ help model ]
+                    , br
+                    , p []
+                        [ button [ onClick ToggleClearAllDialog ]
+                            [ text "Clear All Persistent State" ]
+                        ]
+                    , br
                     , p [ onClick ToggleStyle ]
                         [ input
                             [ type_ "checkbox"
@@ -1354,14 +1409,6 @@ view model =
                             []
                         , b " Dark Mode"
                         ]
-                    , div []
-                        [ help model ]
-                    , br
-                    , p []
-                        [ button [ onClick ClearAll ]
-                            [ text "Clear All Persistent State" ]
-                        ]
-                    , br
                     , p []
                         [ text <| "Copyright " ++ special.copyright ++ " 2019, Bill St. Clair"
                         , br
@@ -1374,6 +1421,31 @@ view model =
             ]
         ]
     }
+
+
+cancelButtonId : String
+cancelButtonId =
+    "cancelButton"
+
+
+clearAllDialog : Model -> Html Msg
+clearAllDialog model =
+    Dialog.render
+        { styles = [ ( "width", "40%" ) ]
+        , title = "Confirm Clear All Persistent State"
+        , content = [ text "Do you really want to erase everything?" ]
+        , actionBar =
+            [ button
+                [ onClick ToggleClearAllDialog
+                , id cancelButtonId
+                ]
+                [ text "Cancel" ]
+            , text <| String.repeat 4 special.nbsp
+            , button [ onClick ClearAll ]
+                [ text "Erase" ]
+            ]
+        }
+        model.clearAllDialogVisible
 
 
 help : Model -> Html Msg
@@ -1423,9 +1495,9 @@ The "Prettify" checkbox controls whether the JSON output lines are wrapped to fi
 
 The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent" and "Received" sections, making this help easier to see.
 
-The "Dark Mode" checkbox toggles between light and dark mode.
+The "Clear All Persistent State" button near the bottom of the page does that, after you click "Erase" on a confirmation dialog.
 
-The "Clear All Persistent State" button at the bottom of the page does that, with no confirmation. Be careful. This is a sharp tool.
+The "Dark Mode" checkbox toggles between light and dark mode.
     """
 
 

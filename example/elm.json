@@ -9,6 +9,7 @@
         "direct": {
             "Janiczek/cmd-extra": "1.1.0",
             "NoRedInk/elm-json-decode-pipeline": "1.0.0",
+            "billstclair/elm-dialog": "1.0.1",
             "billstclair/elm-localstorage": "7.2.0",
             "billstclair/elm-oauth-middleware": "3.0.0",
             "billstclair/elm-port-funnel": "1.2.0",
