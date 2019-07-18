@@ -136,21 +136,23 @@ type Msg
     | ReceiveFetchAccount (Result ( String, Error ) ( String, String, Account ))
     | ReceiveAccount (Result Error Response)
     | Process Value
+    | SetLoginServer
     | Login
     | Logout
     | ClearAll
-    | SendVerifyCredentials
     | SetUsername String
     | SetAccountId String
     | SetLimit String
     | SetAccountIds String
+      -- See the `update` code for these messages for examples
+      -- of using the `Request` module.
+    | SendVerifyCredentials
     | SendGetAccountByUsername
     | SendGetAccount
     | SendGetFollowers
     | SendGetFollowing
     | SendGetRelationships
     | ReceiveResponse (Result Error Response)
-    | SetLoginServer
 
 
 main =
@@ -788,6 +790,28 @@ updateInternal msg model =
                 Ok res ->
                     res
 
+        SetLoginServer ->
+            if model.server == "" then
+                { model
+                    | msg = Nothing
+                    , loginServer = Nothing
+                    , request = Nothing
+                    , response = Nothing
+                    , metadata = Nothing
+                }
+                    |> withNoCmd
+
+            else
+                let
+                    mdl =
+                        { model
+                            | loginServer = Just model.server
+                            , token = Nothing
+                            , account = Nothing
+                        }
+                in
+                sendRequest InstanceRequest mdl
+
         Login ->
             let
                 url =
@@ -849,9 +873,6 @@ updateInternal msg model =
             { mdl | savedModel = Just <| modelToSavedModel mdl }
                 |> withCmd clear
 
-        SendVerifyCredentials ->
-            sendRequest (AccountsRequest Request.GetVerifyCredentials) model
-
         SetUsername username ->
             { model | username = username }
                 |> withNoCmd
@@ -867,6 +888,9 @@ updateInternal msg model =
         SetAccountIds accountIds ->
             { model | accountIds = accountIds }
                 |> withNoCmd
+
+        SendVerifyCredentials ->
+            sendRequest (AccountsRequest Request.GetVerifyCredentials) model
 
         SendGetAccountByUsername ->
             sendRequest
@@ -917,28 +941,6 @@ updateInternal msg model =
 
         ReceiveResponse result ->
             receiveResponse result model
-
-        SetLoginServer ->
-            if model.server == "" then
-                { model
-                    | msg = Nothing
-                    , loginServer = Nothing
-                    , request = Nothing
-                    , response = Nothing
-                    , metadata = Nothing
-                }
-                    |> withNoCmd
-
-            else
-                let
-                    mdl =
-                        { model
-                            | loginServer = Just model.server
-                            , token = Nothing
-                            , account = Nothing
-                        }
-                in
-                sendRequest InstanceRequest mdl
 
 
 getUsername : Model -> String
@@ -1440,7 +1442,7 @@ view model =
 
                             Just metadata ->
                                 p []
-                                    [ renderHeaders color metadata ]
+                                    [ renderHeaders model.prettify color metadata ]
                     , p []
                         [ b "Received:" ]
                     , pre []
@@ -1486,13 +1488,22 @@ view model =
     }
 
 
-renderHeaders : String -> Http.Metadata -> Html Msg
-renderHeaders color metadata =
+renderHeaders : Bool -> String -> Http.Metadata -> Html Msg
+renderHeaders prettify color metadata =
     let
         fold k v res =
+            let
+                vline =
+                    if not prettify then
+                        v
+
+                    else
+                        wrapJsonLine wrapColumns v
+                            |> String.join "\n"
+            in
             tr []
                 [ td [] [ pre [] [ text k ] ]
-                , td [] [ pre [] [ text v ] ]
+                , td [] [ pre [] [ text vline ] ]
                 ]
                 :: res
     in
@@ -1557,17 +1568,15 @@ Blocks help goes here.
             """
 **Login Help**
 
-Click a radio button to choose the user interface for that section of the API.
+Click a radio button to choose the user interface for that section of the API. The names match the variant names in [Mastodon.Request](https://github.com/billstclair/elm-mastodon/blob/master/src/Mastodon/Request.elm)'s `xxxReq` types.
 
 Type a server name, e.g. `mastodon.social`, in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` entity.
 
-The selector to the right of the "Server" input area shows the servers into which you have successfully logged in. Tokens are saved for each, so you don't need to visit the server authentication page again to login to that account. Selecting one of the servers here changes the "Server" input box, and looks up that server's `Instance` entity, but does NOT change the "Use API for" setting.
+The selector to the right of the "Server" input area shows the servers to which you have successfully logged in. Tokens are saved for each, so you don't need to visit the server authentication page again to login to that account. Selecting one of the servers here changes the "Server" input box, and looks up that server's `Instance` entity, but does NOT change the "Use API for" setting. You need to click "Login" or "Set Server" to do that.
 
-The "Login" button logs in to the displayed "Server". This will redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` entity will be fetched and displayed.
+The "Login" button logs in to the displayed "Server". This will use a saved token, if there is one, or redirect to the server's authorization page, where you will need to enter your userid/email and password, or, if there are cookies for that in your browser, just click to approve access. Your `Account` entity will be fetched and displayed.
 
-The "Set Server" button uses the "Server" for API requests without logging in. Only a few API request work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` entity will be fetched and displayed.
-
-The selector to the right of the "Server" type-in box shows all the servers that you have successfully logged in to. Choose one to copy its name into the "Server" box and fetch its `Instance` entity. Click the "Login" button to fetch your `Account` entity there. No authentication will be necessary, since the access token is persistent.
+The "Set Server" button uses the "Server" for API requests without logging in. Only a few API requests work without logging in, but this lets you do some exploration of a server without having an account there. The server's `Instance` entity will be fetched and displayed.
 
 The "Logout" button logs out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
@@ -1578,6 +1587,8 @@ The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent"
 The "Clear All Persistent State" button near the bottom of the page does that, after you click "Erase" on a confirmation dialog.
 
 The "Dark Mode" checkbox toggles between light and dark mode.
+
+If you look at the [code for this module](https://github.com/billstclair/elm-mastodon/blob/master/example/src/Main.elm), and search for `SendVerifyCredentials`, you'll see examples of using the `Mastodon.Request` module.
     """
 
 
@@ -1627,11 +1638,16 @@ wrapJsonLines width string =
         |> String.join "\n"
 
 
+wrapColumns : Int
+wrapColumns =
+    80
+
+
 encodeWrap : Bool -> Value -> String
 encodeWrap prettify value =
     JE.encode 2 value
         |> (if prettify then
-                wrapJsonLines 80
+                wrapJsonLines wrapColumns
 
             else
                 identity
