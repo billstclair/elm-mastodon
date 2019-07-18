@@ -100,6 +100,9 @@ type alias Model =
     , limit : String
     , accountIds : String
     , showMetadata : Bool
+    , q : String
+    , resolve : Bool
+    , following : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -129,6 +132,9 @@ type Msg
     | TogglePrettify
     | ToggleShowMetadata
     | ToggleStyle
+    | SetQ String
+    | ToggleResolve
+    | ToggleFollowing
     | SetSelectedRequest SelectedRequest Bool
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
@@ -152,6 +158,7 @@ type Msg
     | SendGetFollowers
     | SendGetFollowing
     | SendGetRelationships
+    | SendGetSearchAccounts
     | ReceiveResponse (Result Error Response)
 
 
@@ -294,6 +301,9 @@ init value url key =
     , limit = ""
     , accountIds = ""
     , showMetadata = False
+    , q = ""
+    , resolve = False
+    , following = False
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -651,6 +661,18 @@ updateInternal msg model =
             }
                 |> withNoCmd
 
+        SetQ q ->
+            { model | q = q }
+                |> withNoCmd
+
+        ToggleResolve ->
+            { model | resolve = not model.resolve }
+                |> withNoCmd
+
+        ToggleFollowing ->
+            { model | following = not model.following }
+                |> withNoCmd
+
         SetSelectedRequest selectedRequest selected ->
             { model
                 | selectedRequest =
@@ -939,6 +961,18 @@ updateInternal msg model =
                 )
                 model
 
+        SendGetSearchAccounts ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetSearchAccounts
+                        { q = model.q
+                        , limit = String.toInt model.limit
+                        , resolve = model.resolve
+                        , following = model.following
+                        }
+                )
+                model
+
         ReceiveResponse result ->
             receiveResponse result model
 
@@ -1209,7 +1243,7 @@ selectedRequestRadio selectedRequest model =
         ]
 
 
-selectedRequestHtml : SelectedRequest -> Model -> (() -> Html Msg) -> Html Msg
+selectedRequestHtml : SelectedRequest -> Model -> (Model -> Html Msg) -> Html Msg
 selectedRequestHtml selectedRequest model body =
     span []
         [ selectedRequestRadio selectedRequest model
@@ -1218,7 +1252,7 @@ selectedRequestHtml selectedRequest model body =
             text ""
 
           else
-            body ()
+            body model
         ]
 
 
@@ -1297,33 +1331,7 @@ view model =
                                             ]
                                 ]
                     , p []
-                        [ selectedRequestHtml LoginSelected
-                            model
-                            (\_ ->
-                                p []
-                                    [ pspace
-                                    , b "Server: "
-                                    , input
-                                        [ size 30
-                                        , onInput SetServer
-                                        , value model.server
-                                        , placeholder "mastodon.social"
-                                        ]
-                                        []
-                                    , text " "
-                                    , serverSelect model
-                                    , br
-                                    , button
-                                        [ onClick Login
-                                        , disabled <| model.server == ""
-                                        ]
-                                        [ text "Login" ]
-                                    , text " "
-                                    , button
-                                        [ onClick SetLoginServer ]
-                                        [ text "Set Server" ]
-                                    ]
-                            )
+                        [ selectedRequestHtml LoginSelected model loginSelectedUI
                         , selectedRequestHtml AccountsSelected
                             model
                             (\_ ->
@@ -1375,9 +1383,36 @@ view model =
                                         , value model.accountIds
                                         ]
                                         []
-                                    , br
+                                    , text " "
                                     , button [ onClick SendGetRelationships ]
                                         [ text "GetRelationships" ]
+                                    , br
+                                    , b "q: "
+                                    , input
+                                        [ size 40
+                                        , onInput SetQ
+                                        , value model.q
+                                        ]
+                                        []
+                                    , br
+                                    , span [ onClick ToggleResolve ]
+                                        [ input
+                                            [ type_ "checkbox"
+                                            , checked model.resolve
+                                            ]
+                                            []
+                                        ]
+                                    , b " resolve "
+                                    , span [ onClick ToggleFollowing ]
+                                        [ input
+                                            [ type_ "checkbox"
+                                            , checked model.following
+                                            ]
+                                            []
+                                        , b " following "
+                                        ]
+                                    , button [ onClick SendGetSearchAccounts ]
+                                        [ text "GetSearchAccounts" ]
                                     ]
                             )
                         , selectedRequestHtml BlocksSelected
@@ -1488,6 +1523,33 @@ view model =
     }
 
 
+loginSelectedUI : Model -> Html Msg
+loginSelectedUI model =
+    p []
+        [ pspace
+        , b "Server: "
+        , input
+            [ size 30
+            , onInput SetServer
+            , value model.server
+            , placeholder "mastodon.social"
+            ]
+            []
+        , text " "
+        , serverSelect model
+        , br
+        , button
+            [ onClick Login
+            , disabled <| model.server == ""
+            ]
+            [ text "Login" ]
+        , text " "
+        , button
+            [ onClick SetLoginServer ]
+            [ text "Set Server" ]
+        ]
+
+
 renderHeaders : Bool -> String -> Http.Metadata -> Html Msg
 renderHeaders prettify color metadata =
     let
@@ -1552,9 +1614,11 @@ The "GetAccountByUsername" button fetches the `Account` entity for the user with
 
 The "GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
 
-The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it should be the maximum number of entities to return.
+The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it is the maximum number of entities to return.
 
 The "GetRelationships" button returns a list of `Relationship` entities, one for each of the (comma-separated) "ids".
+
+The "GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" (a few lines up) is non-blank, it is the maximum number of entities to return.
             """
 
         else if model.selectedRequest == BlocksSelected then
@@ -1566,7 +1630,7 @@ Blocks help goes here.
 
         else
             """
-**Login Help**
+**General and Login Help**
 
 Click a radio button to choose the user interface for that section of the API. The names match the variant names in [Mastodon.Request](https://github.com/billstclair/elm-mastodon/blob/master/src/Mastodon/Request.elm)'s `xxxReq` types.
 
@@ -1672,6 +1736,9 @@ type alias SavedModel =
     , limit : String
     , accountIds : String
     , showMetadata : Bool
+    , q : String
+    , resolve : Bool
+    , following : Bool
     }
 
 
@@ -1688,6 +1755,9 @@ modelToSavedModel model =
     , limit = model.limit
     , accountIds = model.accountIds
     , showMetadata = model.showMetadata
+    , q = model.q
+    , resolve = model.resolve
+    , following = model.following
     }
 
 
@@ -1705,6 +1775,9 @@ savedModelToModel savedModel model =
         , limit = savedModel.limit
         , accountIds = savedModel.accountIds
         , showMetadata = savedModel.showMetadata
+        , q = savedModel.q
+        , resolve = savedModel.resolve
+        , following = savedModel.following
     }
 
 
@@ -1722,6 +1795,9 @@ encodeSavedModel savedModel =
         , ( "limit", JE.string savedModel.limit )
         , ( "accountIds", JE.string savedModel.accountIds )
         , ( "showMetadata", JE.bool savedModel.showMetadata )
+        , ( "q", JE.string savedModel.q )
+        , ( "resolve", JE.bool savedModel.resolve )
+        , ( "following", JE.bool savedModel.following )
         ]
 
 
@@ -1751,6 +1827,9 @@ savedModelDecoder =
         |> optional "limit" JD.string ""
         |> optional "accountIds" JD.string ""
         |> optional "showMetadata" JD.bool False
+        |> optional "q" JD.string ""
+        |> optional "resolve" JD.bool False
+        |> optional "following" JD.bool False
 
 
 put : String -> Maybe Value -> Cmd Msg
