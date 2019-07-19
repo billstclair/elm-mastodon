@@ -1192,6 +1192,7 @@ encodeStatus status =
         , ( "application", encodeApplication status.application )
         , ( "language", encodeMaybe JE.string status.language )
         , ( "pinned", JE.bool status.pinned )
+        , ( "group_id", encodeMaybe JE.string status.group_id )
         ]
 
 
@@ -1234,6 +1235,7 @@ statusDecoder =
         |> required "application" applicationDecoder
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
+        |> optional "group_id" (JD.nullable JD.string) Nothing
         |> custom JD.value
 
 

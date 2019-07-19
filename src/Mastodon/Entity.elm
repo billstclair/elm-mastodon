@@ -558,6 +558,7 @@ type alias Status =
     , application : Application
     , language : Maybe String
     , pinned : Bool
+    , group_id : Maybe String --GAB extension
     , v : Value
     }
 

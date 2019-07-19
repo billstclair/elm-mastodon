@@ -736,6 +736,7 @@ status1 =
     , application = application1
     , language = Just "language"
     , pinned = True
+    , group_id = Nothing
     , v = JE.null
     }
 
@@ -769,6 +770,7 @@ status2 =
     , application = application2
     , language = Nothing
     , pinned = False
+    , group_id = Just "group_id"
     , v = JE.null
     }
 
