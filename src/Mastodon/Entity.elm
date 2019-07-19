@@ -17,7 +17,7 @@ module Mastodon.Entity exposing
     , Card, Context, Error, Filter, Instance
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, ScheduledStatus, Conversation
+    , Status, ScheduledStatus, Conversation, Group
     , Emoji, Field, Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
@@ -55,7 +55,7 @@ got over the wire. Code that creates these can set it to
 @docs Card, Context, Error, Filter, Instance
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, ScheduledStatus, Conversation
+@docs Status, ScheduledStatus, Conversation, Group
 
 
 # Entity field types
@@ -631,6 +631,21 @@ type alias Conversation =
     }
 
 
+{-| Group entity.
+
+This is a Gab extension.
+
+-}
+type alias Group =
+    { id : String
+    , title : String
+    , description : String
+    , cover_image_url : String
+    , is_archived : Bool
+    , v : Value
+    }
+
+
 {-| One type to rule them all.
 
 This is mostly to make tests easier to define. Most code will use
@@ -669,8 +684,11 @@ type Entity
     | ScheduledStatusListEntity (List ScheduledStatus)
     | ConversationEntity Conversation
     | ConversationListEntity (List Conversation)
+    | GroupEntity Group
+    | GroupListEntity (List Group)
     | StringListEntity (List String)
     | TagListEntity (List Tag)
+    | ValueEntity Value
 
 
 {-| Authorization Parameters.

@@ -37,6 +37,7 @@ module Mastodon.EncodeDecode exposing
     , encodeResults, resultsDecoder
     , encodeScheduledStatus, scheduledStatusDecoder
     , encodeConversation, conversationDecoder
+    , encodeGroup, groupDecoder
     , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
     , encodeMaybe
@@ -81,6 +82,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodeResults, resultsDecoder
 @docs encodeScheduledStatus, scheduledStatusDecoder
 @docs encodeConversation, conversationDecoder
+@docs encodeGroup, groupDecoder
 @docs encodeTag, tagDecoder
 
 
@@ -117,6 +119,7 @@ import Mastodon.Entity as Entity
         , Filter
         , FilterContext(..)
         , Focus
+        , Group
         , History
         , ImageMetaFields
         , ImageMetaInfo
@@ -224,11 +227,20 @@ encodeEntity entity =
         ConversationEntity conversation ->
             encodeConversation conversation
 
+        GroupEntity conversation ->
+            encodeGroup conversation
+
+        GroupListEntity conversation ->
+            JE.list encodeGroup conversation
+
         TagListEntity tags ->
             JE.list encodeTag tags
 
         StringListEntity stringList ->
             JE.list JE.string stringList
+
+        ValueEntity value ->
+            value
 
         _ ->
             JE.string "TODO"
@@ -259,6 +271,8 @@ entityDecoder =
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
         , instanceDecoder |> JD.map InstanceEntity
+        , groupDecoder |> JD.map GroupEntity -- Must come before ListEntity
+        , JD.list groupDecoder |> JD.map GroupListEntity
         , listEntityDecoder |> JD.map ListEntityEntity
         , notificationDecoder |> JD.map NotificationEntity
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
@@ -420,11 +434,24 @@ entityValue entity =
             else
                 conversation.v
 
+        GroupEntity group ->
+            if group.v == JE.null then
+                encodeGroup group
+
+            else
+                group.v
+
+        GroupListEntity groups ->
+            JE.list entityValue (List.map GroupEntity groups)
+
         TagListEntity tags ->
             JE.list encodeTag tags
 
         StringListEntity stringList ->
             JE.list JE.string stringList
+
+        ValueEntity value ->
+            value
 
         _ ->
             JE.string "TODO"
@@ -1618,6 +1645,32 @@ conversationDecoder =
         |> required "accounts" (JD.list accountDecoder)
         |> optional "last_status" (JD.nullable statusDecoder) Nothing
         |> required "unread" JD.bool
+        |> custom JD.value
+
+
+{-| Encoder for `Group`.
+-}
+encodeGroup : Group -> Value
+encodeGroup group =
+    JE.object
+        [ ( "id", JE.string group.id )
+        , ( "title", JE.string group.title )
+        , ( "description", JE.string group.description )
+        , ( "cover_image_url", JE.string group.cover_image_url )
+        , ( "is_archived", JE.bool group.is_archived )
+        ]
+
+
+{-| Decoder for `Group`.
+-}
+groupDecoder : Decoder Group
+groupDecoder =
+    JD.succeed Group
+        |> required "id" JD.string
+        |> required "title" JD.string
+        |> required "description" JD.string
+        |> required "cover_image_url" JD.string
+        |> required "is_archived" JD.bool
         |> custom JD.value
 
 

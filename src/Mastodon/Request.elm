@@ -15,10 +15,10 @@ module Mastodon.Request exposing
     , serverRequest
     , AccountsReq(..), AppsReq(..), BlocksReq(..), DomainBlocksReq(..)
     , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowReq(..)
-    , FollowSuggestionsReq(..), ListsReq(..), MediaAttachmentsReq(..)
+    , FollowSuggestionsReq(..), GroupsReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
-    , Paging, SourceUpdate, PollDefinition
+    , Paging, SourceUpdate, PollDefinition, WhichGroups(..)
     , userAgentHeader, idempotencyKeyHeader
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
@@ -45,14 +45,14 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 @docs AccountsReq, AppsReq, BlocksReq, DomainBlocksReq
 @docs EndorsementsReq, FavouritesReq, FiltersReq, FollowReq
-@docs FollowSuggestionsReq, ListsReq, MediaAttachmentsReq
+@docs FollowSuggestionsReq, GroupsReq, ListsReq, MediaAttachmentsReq
 @docs MutesReq, NotificationsReq, PollsReq, ReportsReq
 @docs ScheduledStatusesReq, SearchReq, StatusesReq, TimelinesReq
 
 
 # Non-atomic data in requests
 
-@docs Paging, SourceUpdate, PollDefinition
+@docs Paging, SourceUpdate, PollDefinition, WhichGroups
 
 
 # Utility
@@ -113,6 +113,7 @@ type Request
     | FiltersRequest FiltersReq
     | FollowRequest FollowReq
     | FollowSuggestionsRequest FollowSuggestionsReq
+    | GroupsRequest GroupsReq
     | InstanceRequest
     | ListsRequest ListsReq
     | MediaAttachmentsRequest MediaAttachmentsReq
@@ -329,6 +330,34 @@ type FollowReq
 type FollowSuggestionsReq
     = GetFollowSuggestions
     | DeleteFollowSuggestions { account_id : String }
+
+
+{-| Which groups to return from `GetGroups { tab : WhichGroups }`
+-}
+type WhichGroups
+    = MemberGroups
+    | FeaturedGroups
+    | AdminGroups
+
+
+whichGroupsToString : WhichGroups -> String
+whichGroupsToString whichGroups =
+    case whichGroups of
+        MemberGroups ->
+            "member"
+
+        FeaturedGroups ->
+            "featured"
+
+        AdminGroups ->
+            "admin"
+
+
+{-| GET /api/v1/groups
+-}
+type GroupsReq
+    = GetGroups { tab : WhichGroups }
+    | GetGroup { id : String }
 
 
 {-| GET/POST/PUT/DELETE /api/v1/lists
@@ -640,6 +669,7 @@ apiReq =
     , favourites = "favourites"
     , filters = "filters"
     , follow_requests = "follow_requests"
+    , groups = "groups"
     , suggestions = "suggestions"
     , instance = "instance"
     , lists = "lists"
@@ -877,6 +907,9 @@ requestToRawRequest headers serverInfo request =
                 FollowSuggestionsRequest req ->
                     followSuggestionsReq req raw
 
+                GroupsRequest req ->
+                    groupsReq req raw
+
                 InstanceRequest ->
                     instanceReq raw
 
@@ -1036,8 +1069,12 @@ decoders =
     , conversationList =
         JD.list ED.conversationDecoder
             |> JD.map ConversationListEntity
+    , group = ED.groupDecoder |> JD.map GroupEntity
+    , groupList = JD.list ED.groupDecoder |> JD.map GroupListEntity
     , tagList =
         JD.list ED.tagDecoder |> JD.map TagListEntity
+    , value =
+        JD.value |> JD.map ValueEntity
     }
 
 
@@ -1560,6 +1597,30 @@ followSuggestionsReq req res =
                 , url =
                     relative [ r, account_id ] []
                 , decoder = decoders.ignore
+            }
+
+
+groupsReq : GroupsReq -> RawRequest -> RawRequest
+groupsReq req res =
+    let
+        r =
+            apiReq.groups
+    in
+    case req of
+        GetGroups { tab } ->
+            { res
+                | url =
+                    relative [ r ]
+                        [ Builder.string "tab" <| whichGroupsToString tab
+                        ]
+                , decoder = decoders.groupList
+            }
+
+        GetGroup { id } ->
+            { res
+                | url =
+                    relative [ r, id ] []
+                , decoder = decoders.group
             }
 
 

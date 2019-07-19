@@ -23,6 +23,7 @@ import Mastodon.Entity as Entity
         , Filter
         , FilterContext(..)
         , Focus
+        , Group
         , History
         , ImageMetaFields
         , ImageMetaInfo
@@ -265,6 +266,9 @@ stripEntity entity =
                     , v = JE.null
                 }
 
+        GroupEntity group ->
+            GroupEntity { group | v = JE.null }
+
         _ ->
             entity
 
@@ -337,6 +341,8 @@ entityData =
     , ScheduledStatusEntity scheduledStatus4
     , ConversationEntity conversation1
     , ConversationEntity conversation2
+    , GroupEntity group1
+    , GroupEntity group2
     ]
 
 
@@ -358,6 +364,28 @@ source2 =
     , language = Nothing
     , note = "note2"
     , fields = []
+    , v = JE.null
+    }
+
+
+group1 : Group
+group1 =
+    { id = "id"
+    , title = "title"
+    , description = "description"
+    , cover_image_url = "cover_image_url"
+    , is_archived = False
+    , v = JE.null
+    }
+
+
+group2 : Group
+group2 =
+    { id = "id2"
+    , title = "title2"
+    , description = "description2"
+    , cover_image_url = "cover_image_url2"
+    , is_archived = True
     , v = JE.null
     }
 

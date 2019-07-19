@@ -71,6 +71,7 @@ import Mastodon.Request as Request
         , RawRequest
         , Request(..)
         , Response
+        , WhichGroups
         )
 import PortFunnel.LocalStorage as LocalStorage
 import PortFunnel.WebSocket as WebSocket
@@ -103,11 +104,16 @@ type alias Model =
     , q : String
     , resolve : Bool
     , following : Bool
+    , groupId : String
+    , showReceived : Bool
+    , showEntity : Bool
+    , whichGroups : WhichGroups
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
     , request : Maybe RawRequest
     , response : Maybe Value
+    , entity : Maybe Entity
     , metadata : Maybe Http.Metadata
     , savedModel : Maybe SavedModel
     , key : Key
@@ -128,9 +134,12 @@ type Msg
     | ToggleClearAllDialog
     | OnKeyPress String
     | SetServer String
+    | SetWhichGroups String
     | ClearSentReceived
     | TogglePrettify
     | ToggleShowMetadata
+    | ToggleShowReceived
+    | ToggleShowEntity
     | ToggleStyle
     | SetQ String
     | ToggleResolve
@@ -150,6 +159,7 @@ type Msg
     | SetAccountId String
     | SetLimit String
     | SetAccountIds String
+    | SetGroupId String
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
     | SendVerifyCredentials
@@ -159,6 +169,8 @@ type Msg
     | SendGetFollowing
     | SendGetRelationships
     | SendGetSearchAccounts
+    | SendGetGroups
+    | SendGetGroup
     | ReceiveResponse (Result Error Response)
 
 
@@ -304,11 +316,16 @@ init value url key =
     , q = ""
     , resolve = False
     , following = False
+    , groupId = ""
+    , showReceived = True
+    , showEntity = False
+    , whichGroups = Request.MemberGroups
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
     , request = Nothing
     , response = Nothing
+    , entity = Nothing
     , metadata = Nothing
     , savedModel = Nothing
     , key = key
@@ -634,6 +651,22 @@ updateInternal msg model =
                         Cmd.none
                     )
 
+        SetWhichGroups s ->
+            let
+                whichGroups =
+                    case s of
+                        "Featured" ->
+                            Request.FeaturedGroups
+
+                        "Admin" ->
+                            Request.AdminGroups
+
+                        _ ->
+                            Request.MemberGroups
+            in
+            { model | whichGroups = whichGroups }
+                |> withNoCmd
+
         ClearSentReceived ->
             { model
                 | request = Nothing
@@ -648,6 +681,14 @@ updateInternal msg model =
 
         ToggleShowMetadata ->
             { model | showMetadata = not model.showMetadata }
+                |> withNoCmd
+
+        ToggleShowReceived ->
+            { model | showReceived = not model.showReceived }
+                |> withNoCmd
+
+        ToggleShowEntity ->
+            { model | showEntity = not model.showEntity }
                 |> withNoCmd
 
         ToggleStyle ->
@@ -724,6 +765,7 @@ updateInternal msg model =
                                     serverInfo
                                     (AccountsRequest Request.GetVerifyCredentials)
                         , response = Just account.v
+                        , entity = Just <| AccountEntity account
                     }
                         |> withCmd cmd
 
@@ -754,6 +796,7 @@ updateInternal msg model =
                         , account = Just account
                         , request = Just request
                         , response = Just account.v
+                        , entity = Just <| AccountEntity account
                     }
                         |> withNoCmd
 
@@ -771,6 +814,7 @@ updateInternal msg model =
                                 , request = Just response.rawRequest
                                 , metadata = Just response.metadata
                                 , response = Just instance.v
+                                , entity = Just response.entity
                             }
                                 |> withNoCmd
 
@@ -791,6 +835,7 @@ updateInternal msg model =
                                 , request = Just response.rawRequest
                                 , metadata = Just response.metadata
                                 , response = Just account.v
+                                , entity = Just response.entity
                                 , account = Just account
                             }
                                 |> withNoCmd
@@ -819,6 +864,7 @@ updateInternal msg model =
                     , loginServer = Nothing
                     , request = Nothing
                     , response = Nothing
+                    , entity = Nothing
                     , metadata = Nothing
                 }
                     |> withNoCmd
@@ -871,6 +917,7 @@ updateInternal msg model =
                         , token = Nothing
                         , request = Nothing
                         , response = Nothing
+                        , entity = Nothing
                         , metadata = Nothing
                         , msg = Nothing
                     }
@@ -888,6 +935,7 @@ updateInternal msg model =
                         , token = Nothing
                         , request = Nothing
                         , response = Nothing
+                        , entity = Nothing
                         , metadata = Nothing
                         , msg = Nothing
                     }
@@ -909,6 +957,10 @@ updateInternal msg model =
 
         SetAccountIds accountIds ->
             { model | accountIds = accountIds }
+                |> withNoCmd
+
+        SetGroupId groupId ->
+            { model | groupId = groupId }
                 |> withNoCmd
 
         SendVerifyCredentials ->
@@ -973,6 +1025,16 @@ updateInternal msg model =
                 )
                 model
 
+        SendGetGroups ->
+            sendRequest
+                (GroupsRequest <| Request.GetGroups { tab = model.whichGroups })
+                model
+
+        SendGetGroup ->
+            sendRequest
+                (GroupsRequest <| Request.GetGroup { id = model.groupId })
+                model
+
         ReceiveResponse result ->
             receiveResponse result model
 
@@ -1021,6 +1083,7 @@ receiveResponse result model =
                 | msg = Just <| Debug.toString err
                 , request = Nothing
                 , response = Nothing
+                , entity = Nothing
                 , metadata = Nothing
             }
                 |> withNoCmd
@@ -1034,6 +1097,7 @@ receiveResponse result model =
                 | msg = Nothing
                 , metadata = Just response.metadata
                 , response = Just <| ED.entityValue response.entity
+                , entity = Just response.entity
             }
                 |> withNoCmd
 
@@ -1071,6 +1135,7 @@ sendRequest request model =
             { model
                 | request = Just rawRequest
                 , response = Nothing
+                , entity = Nothing
                 , metadata = Nothing
             }
                 |> withCmd
@@ -1117,6 +1182,31 @@ serverSelect model =
             [ text "-- select a server --" ]
             :: (List.map (serverOption currentServer) <| Dict.keys model.tokens)
         )
+
+
+whichGroupsSelect : Model -> Html Msg
+whichGroupsSelect model =
+    let
+        whichGroups =
+            model.whichGroups
+    in
+    select [ onInput SetWhichGroups ] <|
+        [ option
+            [ value "Member"
+            , selected <| Request.MemberGroups == whichGroups
+            ]
+            [ text "Member" ]
+        , option
+            [ value "Featured"
+            , selected <| Request.FeaturedGroups == whichGroups
+            ]
+            [ text "Featured" ]
+        , option
+            [ value "Admin"
+            , selected <| Request.AdminGroups == whichGroups
+            ]
+            [ text "Admin" ]
+        ]
 
 
 b : String -> Html msg
@@ -1175,6 +1265,7 @@ type SelectedRequest
     = LoginSelected
     | AccountsSelected
     | BlocksSelected
+    | GroupsSelected
 
 
 encodeSelectedRequest : SelectedRequest -> Value
@@ -1193,6 +1284,9 @@ selectedRequestToString selectedRequest =
 
         BlocksSelected ->
             "BlocksRequest"
+
+        GroupsSelected ->
+            "GroupsRequest"
 
 
 selectedRequestDecoder : Decoder SelectedRequest
@@ -1213,6 +1307,9 @@ selectedRequestFromString s =
 
         "BlocksRequest" ->
             BlocksSelected
+
+        "GroupsRequest" ->
+            GroupsSelected
 
         _ ->
             LoginSelected
@@ -1332,97 +1429,9 @@ view model =
                                 ]
                     , p []
                         [ selectedRequestHtml LoginSelected model loginSelectedUI
-                        , selectedRequestHtml AccountsSelected
-                            model
-                            (\_ ->
-                                p []
-                                    [ pspace
-                                    , button [ onClick SendVerifyCredentials ]
-                                        [ text "GetVerifyCredentials" ]
-                                    , br
-                                    , b "username: "
-                                    , input
-                                        [ size 30
-                                        , onInput SetUsername
-                                        , value model.username
-                                        ]
-                                        []
-                                    , text " "
-                                    , button [ onClick SendGetAccountByUsername ]
-                                        [ text "GetAccountByUsername" ]
-                                    , br
-                                    , b "id: "
-                                    , input
-                                        [ size 20
-                                        , onInput SetAccountId
-                                        , value model.accountId
-                                        ]
-                                        []
-                                    , text " "
-                                    , button [ onClick SendGetAccount ]
-                                        [ text "GetAccount" ]
-                                    , br
-                                    , b "limit: "
-                                    , input
-                                        [ size 10
-                                        , onInput SetLimit
-                                        , value model.limit
-                                        ]
-                                        []
-                                    , text " "
-                                    , button [ onClick SendGetFollowers ]
-                                        [ text "GetFollowers" ]
-                                    , text " "
-                                    , button [ onClick SendGetFollowing ]
-                                        [ text "GetFollowing" ]
-                                    , br
-                                    , b "ids (1,2,...): "
-                                    , input
-                                        [ size 40
-                                        , onInput SetAccountIds
-                                        , value model.accountIds
-                                        ]
-                                        []
-                                    , text " "
-                                    , button [ onClick SendGetRelationships ]
-                                        [ text "GetRelationships" ]
-                                    , br
-                                    , b "q: "
-                                    , input
-                                        [ size 40
-                                        , onInput SetQ
-                                        , value model.q
-                                        ]
-                                        []
-                                    , br
-                                    , span [ onClick ToggleResolve ]
-                                        [ input
-                                            [ type_ "checkbox"
-                                            , checked model.resolve
-                                            ]
-                                            []
-                                        ]
-                                    , b " resolve "
-                                    , span [ onClick ToggleFollowing ]
-                                        [ input
-                                            [ type_ "checkbox"
-                                            , checked model.following
-                                            ]
-                                            []
-                                        , b " following "
-                                        ]
-                                    , button [ onClick SendGetSearchAccounts ]
-                                        [ text "GetSearchAccounts" ]
-                                    ]
-                            )
-                        , selectedRequestHtml BlocksSelected
-                            model
-                            (\_ ->
-                                p []
-                                    [ pspace
-                                    , text "Blocks requests go here."
-                                    ]
-                            )
+                        , selectedRequestHtml AccountsSelected model accountsSelectedUI
+                        , selectedRequestHtml BlocksSelected model blocksSelectedUI
+                        , selectedRequestHtml GroupsSelected model groupsSelectedUI
                         ]
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
@@ -1478,17 +1487,58 @@ view model =
                             Just metadata ->
                                 p []
                                     [ renderHeaders model.prettify color metadata ]
-                    , p []
-                        [ b "Received:" ]
-                    , pre []
-                        [ case model.response of
-                            Nothing ->
-                                text ""
+                    , p [] <|
+                        if model.showReceived then
+                            [ b "Received:"
+                            , button [ onClick ToggleShowReceived ]
+                                [ text "Hide" ]
+                            ]
 
-                            Just value ->
-                                text <|
-                                    encodeWrap model.prettify value
-                        ]
+                        else
+                            [ b "Received "
+                            , button [ onClick ToggleShowReceived ]
+                                [ text "Show" ]
+                            ]
+                    , if not model.showReceived then
+                        text ""
+
+                      else
+                        pre []
+                            [ case model.response of
+                                Nothing ->
+                                    text ""
+
+                                Just value ->
+                                    text <|
+                                        encodeWrap model.prettify value
+                            ]
+                    , p [] <|
+                        if model.showEntity then
+                            [ b "Decoded:"
+                            , button [ onClick ToggleShowEntity ]
+                                [ text "Hide" ]
+                            ]
+
+                        else
+                            [ b "Decoded "
+                            , button [ onClick ToggleShowEntity ]
+                                [ text "Show" ]
+                            ]
+                    , if not model.showEntity then
+                        text ""
+
+                      else
+                        pre []
+                            [ case model.entity of
+                                Nothing ->
+                                    text ""
+
+                                Just entity ->
+                                    entity
+                                        |> ED.encodeEntity
+                                        |> encodeWrap model.prettify
+                                        |> text
+                            ]
                     , div []
                         [ help model ]
                     , br
@@ -1521,6 +1571,119 @@ view model =
             ]
         ]
     }
+
+
+blocksSelectedUI : Model -> Html Msg
+blocksSelectedUI model =
+    p []
+        [ pspace
+        , text "Blocks requests go here."
+        ]
+
+
+groupsSelectedUI : Model -> Html Msg
+groupsSelectedUI model =
+    p []
+        [ pspace
+        , whichGroupsSelect model
+        , text " "
+        , button [ onClick SendGetGroups ]
+            [ text "GetGroups" ]
+        , br
+        , b "id: "
+        , input
+            [ size 20
+            , onInput SetGroupId
+            , value model.groupId
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetGroup ]
+            [ text "GetGroup" ]
+        ]
+
+
+accountsSelectedUI : Model -> Html Msg
+accountsSelectedUI model =
+    p []
+        [ pspace
+        , button [ onClick SendVerifyCredentials ]
+            [ text "GetVerifyCredentials" ]
+        , br
+        , b "username: "
+        , input
+            [ size 30
+            , onInput SetUsername
+            , value model.username
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetAccountByUsername ]
+            [ text "GetAccountByUsername" ]
+        , br
+        , b "id: "
+        , input
+            [ size 20
+            , onInput SetAccountId
+            , value model.accountId
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetAccount ]
+            [ text "GetAccount" ]
+        , br
+        , b "limit: "
+        , input
+            [ size 10
+            , onInput SetLimit
+            , value model.limit
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetFollowers ]
+            [ text "GetFollowers" ]
+        , text " "
+        , button [ onClick SendGetFollowing ]
+            [ text "GetFollowing" ]
+        , br
+        , b "ids (1,2,...): "
+        , input
+            [ size 40
+            , onInput SetAccountIds
+            , value model.accountIds
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetRelationships ]
+            [ text "GetRelationships" ]
+        , br
+        , b "q: "
+        , input
+            [ size 40
+            , onInput SetQ
+            , value model.q
+            ]
+            []
+        , br
+        , span [ onClick ToggleResolve ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.resolve
+                ]
+                []
+            ]
+        , b " resolve "
+        , span [ onClick ToggleFollowing ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.following
+                ]
+                []
+            , b " following "
+            ]
+        , button [ onClick SendGetSearchAccounts ]
+            [ text "GetSearchAccounts" ]
+        ]
 
 
 loginSelectedUI : Model -> Html Msg
@@ -1628,6 +1791,13 @@ The "GetSearchAccounts" button returns a list of `Account` entities that match "
 Blocks help goes here.
             """
 
+        else if model.selectedRequest == GroupsSelected then
+            """
+**GroupsRequest Help**
+
+Groups help goes here.
+            """
+
         else
             """
 **General and Login Help**
@@ -1646,7 +1816,13 @@ The "Logout" button logs out of the "Use API for" server. This will remove it fr
 
 The "Prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON.
 
-The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent" and "Received" sections, making this help easier to see.
+The "Headers" section, if enabled, shows the headers received from the server for the last request.
+
+The "Received" section, if enabled, shows the JSON received from the server for the last request.
+
+The "Decoded" section, if enabled, shows the decoded JSON received from the server for the last request. If it differs from "Received", there is either a decoder bug, or one or more fields are not yet supported.
+
+The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent", "Received", and "Decoded" sections, making this help easier to see.
 
 The "Clear All Persistent State" button near the bottom of the page does that, after you click "Erase" on a confirmation dialog.
 
@@ -1739,6 +1915,10 @@ type alias SavedModel =
     , q : String
     , resolve : Bool
     , following : Bool
+    , groupId : String
+    , showReceived : Bool
+    , showEntity : Bool
+    , whichGroups : WhichGroups
     }
 
 
@@ -1758,6 +1938,10 @@ modelToSavedModel model =
     , q = model.q
     , resolve = model.resolve
     , following = model.following
+    , groupId = model.groupId
+    , showReceived = model.showReceived
+    , showEntity = model.showEntity
+    , whichGroups = model.whichGroups
     }
 
 
@@ -1778,7 +1962,45 @@ savedModelToModel savedModel model =
         , q = savedModel.q
         , resolve = savedModel.resolve
         , following = savedModel.following
+        , groupId = savedModel.groupId
+        , showReceived = savedModel.showReceived
+        , showEntity = savedModel.showEntity
+        , whichGroups = savedModel.whichGroups
     }
+
+
+encodeWhichGroups : WhichGroups -> Value
+encodeWhichGroups whichGroups =
+    JE.string <|
+        case whichGroups of
+            Request.MemberGroups ->
+                "MemberGroups"
+
+            Request.FeaturedGroups ->
+                "FeaturedGroups"
+
+            Request.AdminGroups ->
+                "AdminGroups"
+
+
+whichGroupsDecoder : Decoder WhichGroups
+whichGroupsDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                case s of
+                    "MemberGroups" ->
+                        JD.succeed Request.MemberGroups
+
+                    "FeaturedGroups" ->
+                        JD.succeed Request.FeaturedGroups
+
+                    "AdminGroups" ->
+                        JD.succeed Request.AdminGroups
+
+                    _ ->
+                        JD.fail <| "Unknown WhichGroups value: " ++ s
+            )
 
 
 encodeSavedModel : SavedModel -> Value
@@ -1798,6 +2020,10 @@ encodeSavedModel savedModel =
         , ( "q", JE.string savedModel.q )
         , ( "resolve", JE.bool savedModel.resolve )
         , ( "following", JE.bool savedModel.following )
+        , ( "groupId", JE.string savedModel.groupId )
+        , ( "showReceived", JE.bool savedModel.showReceived )
+        , ( "showEntity", JE.bool savedModel.showEntity )
+        , ( "whichGroups", encodeWhichGroups savedModel.whichGroups )
         ]
 
 
@@ -1830,6 +2056,10 @@ savedModelDecoder =
         |> optional "q" JD.string ""
         |> optional "resolve" JD.bool False
         |> optional "following" JD.bool False
+        |> optional "groupId" JD.string ""
+        |> optional "showReceived" JD.bool True
+        |> optional "showEntity" JD.bool False
+        |> optional "whichGroups" whichGroupsDecoder Request.MemberGroups
 
 
 put : String -> Maybe Value -> Cmd Msg
