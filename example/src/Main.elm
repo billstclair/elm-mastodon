@@ -1665,6 +1665,14 @@ accountsSelectedUI model =
             ]
             []
         , br
+        , b "limit: "
+        , input
+            [ size 10
+            , onInput SetLimit
+            , value model.limit
+            ]
+            []
+        , text " "
         , span [ onClick ToggleResolve ]
             [ input
                 [ type_ "checkbox"
@@ -1781,7 +1789,7 @@ The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Acc
 
 The "GetRelationships" button returns a list of `Relationship` entities, one for each of the (comma-separated) "ids".
 
-The "GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" (a few lines up) is non-blank, it is the maximum number of entities to return.
+The "GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" is non-blank, it is the maximum number of entities to return.
             """
 
         else if model.selectedRequest == BlocksSelected then
@@ -1795,7 +1803,9 @@ Blocks help goes here.
             """
 **GroupsRequest Help**
 
-Groups help goes here.
+Click "GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
+
+Click "GetGroup" to get information about the group with the given "id".
             """
 
         else
