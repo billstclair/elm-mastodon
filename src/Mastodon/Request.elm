@@ -19,7 +19,7 @@ module Mastodon.Request exposing
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
     , Paging, SourceUpdate, PollDefinition, WhichGroups(..)
-    , userAgentHeader, idempotencyKeyHeader
+    , userAgentHeader, idempotencyKeyHeader, emptyPaging
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
     )
@@ -57,7 +57,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Utility
 
-@docs userAgentHeader, idempotencyKeyHeader
+@docs userAgentHeader, idempotencyKeyHeader, emptyPaging
 
 
 # Low-level request creation
@@ -147,6 +147,17 @@ type alias Paging =
     , since_id : Maybe String
     , min_id : Maybe String
     , limit : Maybe Int
+    }
+
+
+{-| The default `Paging` instance, with no restrictions.
+-}
+emptyPaging : Paging
+emptyPaging =
+    { max_id = Nothing
+    , since_id = Nothing
+    , min_id = Nothing
+    , limit = Nothing
     }
 
 
@@ -697,7 +708,7 @@ type Error
     | Timeout
     | NetworkError
     | BadStatus Http.Metadata String
-    | BadBody Http.Metadata String
+    | BadBody Http.Metadata String String
 
 
 {-| Represent an HTTP request.
@@ -801,8 +812,8 @@ processResponse rawRequest response =
 
         Http.GoodStatus_ metadata body ->
             case JD.decodeString rawRequest.decoder body of
-                Err _ ->
-                    Err <| BadBody metadata ("JSON decoding error on: " ++ body)
+                Err err ->
+                    Err <| BadBody metadata (Debug.toString err) body
 
                 Ok entity ->
                     Ok

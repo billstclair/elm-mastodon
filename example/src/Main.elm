@@ -69,10 +69,12 @@ import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request as Request
     exposing
         ( Error(..)
+        , Paging
         , RawRequest
         , Request(..)
         , Response
         , WhichGroups
+        , emptyPaging
         )
 import PortFunnel.LocalStorage as LocalStorage
 import PortFunnel.WebSocket as WebSocket
@@ -109,7 +111,12 @@ type alias Model =
     , showReceived : Bool
     , showEntity : Bool
     , whichGroups : WhichGroups
-    , reblogs : Bool
+    , followReblogs : Bool
+    , onlyMedia : Bool
+    , pinned : Bool
+    , excludeReplies : Bool
+    , excludeReblogs : Bool
+    , paging : Maybe Paging
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -147,7 +154,7 @@ type Msg
     | SetQ String
     | ToggleResolve
     | ToggleFollowing
-    | ToggleReblogs
+    | ToggleFollowReblogs
     | SetSelectedRequest SelectedRequest Bool
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
@@ -163,6 +170,10 @@ type Msg
     | SetUsername String
     | SetAccountId String
     | SetLimit String
+    | ToggleOnlyMedia
+    | TogglePinned
+    | ToggleExcludeReplies
+    | ToggleExcludeReblogs
     | SetAccountIds String
     | SetGroupId String
       -- See the `update` code for these messages for examples
@@ -172,6 +183,7 @@ type Msg
     | SendGetAccount
     | SendGetFollowers
     | SendGetFollowing
+    | SendGetStatuses
     | SendGetRelationships
     | SendGetSearchAccounts
     | SendPostFollowOrUnfollow
@@ -326,7 +338,12 @@ init value url key =
     , showReceived = True
     , showEntity = False
     , whichGroups = Request.MemberGroups
-    , reblogs = True
+    , followReblogs = True
+    , onlyMedia = False
+    , pinned = False
+    , excludeReplies = False
+    , excludeReblogs = False
+    , paging = Nothing
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -722,8 +739,8 @@ updateInternal msg model =
             { model | following = not model.following }
                 |> withNoCmd
 
-        ToggleReblogs ->
-            { model | reblogs = not model.reblogs }
+        ToggleFollowReblogs ->
+            { model | followReblogs = not model.followReblogs }
                 |> withNoCmd
 
         SetSelectedRequest selectedRequest selected ->
@@ -1035,6 +1052,22 @@ updateInternal msg model =
             { model | limit = limit }
                 |> withNoCmd
 
+        ToggleOnlyMedia ->
+            { model | onlyMedia = not model.onlyMedia }
+                |> withNoCmd
+
+        TogglePinned ->
+            { model | pinned = not model.pinned }
+                |> withNoCmd
+
+        ToggleExcludeReplies ->
+            { model | excludeReplies = not model.excludeReplies }
+                |> withNoCmd
+
+        ToggleExcludeReblogs ->
+            { model | excludeReblogs = not model.excludeReblogs }
+                |> withNoCmd
+
         SetAccountIds accountIds ->
             { model | accountIds = accountIds }
                 |> withNoCmd
@@ -1082,6 +1115,29 @@ updateInternal msg model =
                 )
                 model
 
+        SendGetStatuses ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.GetStatuses
+                        { id = model.accountId
+                        , only_media = model.onlyMedia
+                        , pinned = model.pinned
+                        , exclude_replies = model.excludeReplies
+                        , paging =
+                            case String.toInt model.limit of
+                                Nothing ->
+                                    Nothing
+
+                                Just limit ->
+                                    Just
+                                        { emptyPaging
+                                            | limit = Just limit
+                                        }
+                        , exclude_reblogs = model.excludeReblogs
+                        }
+                )
+                model
+
         SendGetRelationships ->
             sendRequest
                 (AccountsRequest <|
@@ -1114,7 +1170,7 @@ updateInternal msg model =
                     else
                         Request.PostFollow
                             { id = model.accountId
-                            , reblogs = model.reblogs
+                            , reblogs = model.followReblogs
                             }
                 )
                 model
@@ -1204,7 +1260,6 @@ receiveResponse result model =
         Err err ->
             { model
                 | msg = Just <| Debug.toString err
-                , request = Nothing
                 , response = Nothing
                 , entity = Nothing
                 , metadata = Nothing
@@ -1571,7 +1626,7 @@ view model =
                                 , checked model.prettify
                                 ]
                                 []
-                            , b " Prettify"
+                            , b "Prettify"
                             , text " (easier to read, may no longer be valid JSON)"
                             ]
                         , text " "
@@ -1689,7 +1744,7 @@ view model =
                             , checked <| model.style == DarkStyle
                             ]
                             []
-                        , b " Dark Mode"
+                        , b "Dark Mode"
                         ]
                     , p []
                         [ text <| "Copyright " ++ special.copyright ++ " 2019, Bill St. Clair"
@@ -1782,6 +1837,45 @@ accountsSelectedUI model =
         , button [ onClick SendGetFollowing ]
             [ text "GetFollowing" ]
         , br
+        , span [ onClick ToggleOnlyMedia ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.onlyMedia
+                ]
+                []
+            , b "only media"
+            ]
+        , text " "
+        , span [ onClick TogglePinned ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.pinned
+                ]
+                []
+            , b "pinned"
+            ]
+        , text " "
+        , span [ onClick ToggleExcludeReplies ]
+            [ input
+                [ type_ "checkbox"
+                , checked <| not model.excludeReplies
+                ]
+                []
+            , b "replies"
+            ]
+        , text " "
+        , span [ onClick ToggleExcludeReblogs ]
+            [ input
+                [ type_ "checkbox"
+                , checked <| not model.excludeReblogs
+                ]
+                []
+            , b "reblogs"
+            ]
+        , text " "
+        , button [ onClick SendGetStatuses ]
+            [ text "SendGetStatuses" ]
+        , br
         , b "ids (1,2,...): "
         , input
             [ size 40
@@ -1838,10 +1932,10 @@ accountsSelectedUI model =
             ]
             []
         , text " "
-        , span [ onClick ToggleReblogs ]
+        , span [ onClick ToggleFollowReblogs ]
             [ input
                 [ type_ "checkbox"
-                , checked model.reblogs
+                , checked model.followReblogs
                 , disabled model.isAccountFollowed
                 ]
                 []
@@ -2095,7 +2189,7 @@ type alias SavedModel =
     , showReceived : Bool
     , showEntity : Bool
     , whichGroups : WhichGroups
-    , reblogs : Bool
+    , followReblogs : Bool
     }
 
 
@@ -2119,7 +2213,7 @@ modelToSavedModel model =
     , showReceived = model.showReceived
     , showEntity = model.showEntity
     , whichGroups = model.whichGroups
-    , reblogs = model.reblogs
+    , followReblogs = model.followReblogs
     }
 
 
@@ -2144,7 +2238,7 @@ savedModelToModel savedModel model =
         , showReceived = savedModel.showReceived
         , showEntity = savedModel.showEntity
         , whichGroups = savedModel.whichGroups
-        , reblogs = savedModel.reblogs
+        , followReblogs = savedModel.followReblogs
     }
 
 
@@ -2203,7 +2297,7 @@ encodeSavedModel savedModel =
         , ( "showReceived", JE.bool savedModel.showReceived )
         , ( "showEntity", JE.bool savedModel.showEntity )
         , ( "whichGroups", encodeWhichGroups savedModel.whichGroups )
-        , ( "reblogs", JE.bool savedModel.reblogs )
+        , ( "followReblogs", JE.bool savedModel.followReblogs )
         ]
 
 
@@ -2240,7 +2334,7 @@ savedModelDecoder =
         |> optional "showReceived" JD.bool True
         |> optional "showEntity" JD.bool False
         |> optional "whichGroups" whichGroupsDecoder Request.MemberGroups
-        |> optional "reblogs" JD.bool True
+        |> optional "followReblogs" JD.bool True
 
 
 put : String -> Maybe Value -> Cmd Msg

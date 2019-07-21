@@ -711,16 +711,16 @@ encodeAttachmentType : AttachmentType -> Value
 encodeAttachmentType attachmentType =
     case attachmentType of
         UnknownAttachment ->
-            JE.string "UnknownAttachment"
+            JE.string "unknown"
 
         ImageAttachment ->
-            JE.string "ImageAttachment"
+            JE.string "image"
 
         GifvAttachment ->
-            JE.string "GifvAttachment"
+            JE.string "gifv"
 
         VideoAttachment ->
-            JE.string "VideoAttachment"
+            JE.string "video"
 
 
 attachmentTypeDecoder : Decoder AttachmentType
@@ -729,16 +729,16 @@ attachmentTypeDecoder =
         |> JD.andThen
             (\s ->
                 case s of
-                    "UnknownAttachment" ->
+                    "unknown" ->
                         JD.succeed UnknownAttachment
 
-                    "ImageAttachment" ->
+                    "image" ->
                         JD.succeed ImageAttachment
 
-                    "GifvAttachment" ->
+                    "gifv" ->
                         JD.succeed GifvAttachment
 
-                    "VideoAttachment" ->
+                    "video" ->
                         JD.succeed VideoAttachment
 
                     _ ->
@@ -867,7 +867,7 @@ encodeAttachment : Attachment -> Value
 encodeAttachment attachment =
     JE.object
         [ ( "id", JE.string attachment.id )
-        , ( "type_", encodeAttachmentType attachment.type_ )
+        , ( "type", encodeAttachmentType attachment.type_ )
         , ( "url", JE.string attachment.url )
         , ( "remote_url", encodeMaybe JE.string attachment.remote_url )
         , ( "preview_url", JE.string attachment.preview_url )
@@ -881,12 +881,12 @@ encodeAttachment attachment =
 -}
 attachmentDecoder : Decoder Attachment
 attachmentDecoder =
-    JD.field "type_" attachmentTypeDecoder
+    JD.field "type" attachmentTypeDecoder
         |> JD.andThen
             (\type_ ->
                 JD.succeed Attachment
                     |> required "id" JD.string
-                    |> required "type_" (JD.succeed type_)
+                    |> required "type" (JD.succeed type_)
                     |> required "url" JD.string
                     |> optional "remote_url" (JD.nullable JD.string) Nothing
                     |> required "preview_url" JD.string
@@ -949,7 +949,7 @@ encodeCard card =
         , ( "title", JE.string card.title )
         , ( "description", JE.string card.description )
         , ( "image", encodeMaybe JE.string card.image )
-        , ( "type_", encodeCardType card.type_ )
+        , ( "type", encodeCardType card.type_ )
         , ( "author_name", encodeMaybe JE.string card.author_name )
         , ( "author_url", encodeMaybe JE.string card.author_url )
         , ( "provider_name", encodeMaybe JE.string card.provider_name )
@@ -969,7 +969,7 @@ cardDecoder =
         |> required "title" JD.string
         |> required "description" JD.string
         |> optional "image" (JD.nullable JD.string) Nothing
-        |> required "type_" cardTypeDecoder
+        |> required "type" cardTypeDecoder
         |> optional "author_name" (JD.nullable JD.string) Nothing
         |> optional "author_url" (JD.nullable JD.string) Nothing
         |> optional "provider_name" (JD.nullable JD.string) Nothing
@@ -1011,16 +1011,16 @@ encodeVisibility visibility =
     JE.string <|
         case visibility of
             PublicVisibility ->
-                "PublicVisibility"
+                "public"
 
             UnlistedVisibility ->
-                "UnlistedVisibility"
+                "unlisted"
 
             PrivateVisibility ->
-                "PrivateVisibility"
+                "private"
 
             DirectVisibility ->
-                "DirectVisibility"
+                "direct"
 
 
 {-| Decode a `Visibility`.
@@ -1031,16 +1031,16 @@ visibilityDecoder =
         |> JD.andThen
             (\v ->
                 case v of
-                    "PublicVisibility" ->
+                    "public" ->
                         JD.succeed PublicVisibility
 
-                    "UnlistedVisibility" ->
+                    "unlisted" ->
                         JD.succeed UnlistedVisibility
 
-                    "PrivateVisibility" ->
+                    "private" ->
                         JD.succeed PrivateVisibility
 
-                    "DirectVisibility" ->
+                    "direct" ->
                         JD.succeed DirectVisibility
 
                     _ ->
@@ -1085,7 +1085,7 @@ tagDecoder =
     JD.succeed Tag
         |> required "name" JD.string
         |> required "url" JD.string
-        |> required "history" (JD.list historyDecoder)
+        |> optional "history" (JD.list historyDecoder) []
 
 
 encodeHistory : History -> Value
@@ -1469,7 +1469,7 @@ encodeNotification : Notification -> Value
 encodeNotification notification =
     JE.object
         [ ( "id", JE.string notification.id )
-        , ( "type_", encodeNotificationType notification.type_ )
+        , ( "type", encodeNotificationType notification.type_ )
         , ( "created_at", JE.string notification.created_at )
         , ( "account", encodeAccount notification.account )
         , ( "status", encodeMaybe encodeStatus notification.status )
@@ -1482,7 +1482,7 @@ notificationDecoder : Decoder Notification
 notificationDecoder =
     JD.succeed Notification
         |> required "id" JD.string
-        |> required "type_" notificationTypeDecoder
+        |> required "type" notificationTypeDecoder
         |> required "created_at" JD.string
         |> required "account" accountDecoder
         |> optional "status" (JD.nullable statusDecoder) Nothing
