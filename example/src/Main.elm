@@ -1589,8 +1589,15 @@ view model =
                                     [ text request.method
                                     , text " "
                                     , text request.url
+                                    , case request.jsonBody of
+                                        Nothing ->
+                                            text ""
 
-                                    -- Need a jsonBody property
+                                        Just value ->
+                                            pre []
+                                                [ text <|
+                                                    encodeWrap model.prettify value
+                                                ]
                                     ]
                         ]
                     , p [] <|
