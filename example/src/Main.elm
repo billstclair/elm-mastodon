@@ -61,6 +61,7 @@ import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
+import List.Extra as LE
 import Markdown
 import Mastodon.EncodeDecode as ED
 import Mastodon.Entity as Entity exposing (Account, App, Authorization, Entity(..))
@@ -108,6 +109,7 @@ type alias Model =
     , showReceived : Bool
     , showEntity : Bool
     , whichGroups : WhichGroups
+    , reblogs : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -121,6 +123,7 @@ type alias Model =
     , hideClientId : Bool
     , tokens : Dict String String
     , account : Maybe Account
+    , isAccountFollowed : Bool
     , msg : Maybe String
     , started : Started
     , funnelState : State
@@ -144,12 +147,14 @@ type Msg
     | SetQ String
     | ToggleResolve
     | ToggleFollowing
+    | ToggleReblogs
     | SetSelectedRequest SelectedRequest Bool
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
     | ReceiveInstance (Result Error Response)
     | ReceiveFetchAccount (Result ( String, Error ) ( String, String, Account ))
-    | ReceiveAccount (Result Error Response)
+    | ReceiveGetVerifyCredentials (Result Error Response)
+    | ReceiveAccountIdRelationships Bool (Result Error Response)
     | Process Value
     | SetLoginServer
     | Login
@@ -169,6 +174,7 @@ type Msg
     | SendGetFollowing
     | SendGetRelationships
     | SendGetSearchAccounts
+    | SendPostFollowOrUnfollow
     | SendGetGroups
     | SendGetGroup
     | ReceiveResponse (Result Error Response)
@@ -320,6 +326,7 @@ init value url key =
     , showReceived = True
     , showEntity = False
     , whichGroups = Request.MemberGroups
+    , reblogs = True
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -333,6 +340,7 @@ init value url key =
     , hideClientId = hideClientId
     , tokens = Dict.empty
     , account = Nothing
+    , isAccountFollowed = False
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -421,7 +429,7 @@ getVerifyCredentials model =
                         |> Tuple.second
 
                 Just token ->
-                    Request.serverRequest (\_ -> ReceiveAccount)
+                    Request.serverRequest (\_ -> ReceiveGetVerifyCredentials)
                         []
                         { server = server
                         , token = Just token
@@ -714,6 +722,10 @@ updateInternal msg model =
             { model | following = not model.following }
                 |> withNoCmd
 
+        ToggleReblogs ->
+            { model | reblogs = not model.reblogs }
+                |> withNoCmd
+
         SetSelectedRequest selectedRequest selected ->
             { model
                 | selectedRequest =
@@ -752,22 +764,25 @@ updateInternal msg model =
                             { server = server
                             , token = Just authorization.token
                             }
+
+                        mdl2 =
+                            { mdl
+                                | msg = Nothing
+                                , token = Just authorization.token
+                                , loginServer = Just server
+                                , account = Just account
+                                , request =
+                                    -- Fake the request
+                                    Just <|
+                                        Request.requestToRawRequest []
+                                            serverInfo
+                                            (AccountsRequest Request.GetVerifyCredentials)
+                                , response = Just account.v
+                                , entity = Just <| AccountEntity account
+                            }
                     in
-                    { mdl
-                        | msg = Nothing
-                        , token = Just authorization.token
-                        , loginServer = Just server
-                        , account = Just account
-                        , request =
-                            -- Fake the request
-                            Just <|
-                                Request.requestToRawRequest []
-                                    serverInfo
-                                    (AccountsRequest Request.GetVerifyCredentials)
-                        , response = Just account.v
-                        , entity = Just <| AccountEntity account
-                    }
-                        |> withCmd cmd
+                    mdl2
+                        |> withCmds [ cmd, getAccountIdRelationships False mdl ]
 
         ReceiveFetchAccount result ->
             case result of
@@ -787,18 +802,21 @@ updateInternal msg model =
                             Request.requestToRawRequest []
                                 serverInfo
                                 (AccountsRequest Request.GetVerifyCredentials)
+
+                        mdl =
+                            { model
+                                | msg = Nothing
+                                , server = loginServer
+                                , loginServer = Just loginServer
+                                , token = Just token
+                                , account = Just account
+                                , request = Just request
+                                , response = Just account.v
+                                , entity = Just <| AccountEntity account
+                            }
                     in
-                    { model
-                        | msg = Nothing
-                        , server = loginServer
-                        , loginServer = Just loginServer
-                        , token = Just token
-                        , account = Just account
-                        , request = Just request
-                        , response = Just account.v
-                        , entity = Just <| AccountEntity account
-                    }
-                        |> withNoCmd
+                    mdl
+                        |> withCmd (getAccountIdRelationships False mdl)
 
         ReceiveInstance result ->
             case result of
@@ -821,7 +839,7 @@ updateInternal msg model =
                         _ ->
                             model |> withNoCmd
 
-        ReceiveAccount result ->
+        ReceiveGetVerifyCredentials result ->
             case result of
                 Err error ->
                     { model | msg = Just <| Debug.toString error }
@@ -830,15 +848,73 @@ updateInternal msg model =
                 Ok response ->
                     case response.entity of
                         AccountEntity account ->
-                            { model
-                                | msg = Nothing
-                                , request = Just response.rawRequest
-                                , metadata = Just response.metadata
-                                , response = Just account.v
-                                , entity = Just response.entity
-                                , account = Just account
-                            }
-                                |> withNoCmd
+                            let
+                                mdl =
+                                    { model
+                                        | msg = Nothing
+                                        , request = Just response.rawRequest
+                                        , metadata = Just response.metadata
+                                        , response = Just account.v
+                                        , entity = Just response.entity
+                                        , account = Just account
+                                    }
+                            in
+                            mdl
+                                |> withCmd (getAccountIdRelationships False mdl)
+
+                        _ ->
+                            model |> withNoCmd
+
+        ReceiveAccountIdRelationships showResult result ->
+            case result of
+                Err _ ->
+                    ( if showResult then
+                        { model
+                            | metadata = Nothing
+                            , request = Nothing
+                            , response = Nothing
+                            , entity = Nothing
+                        }
+
+                      else
+                        model
+                    , Cmd.none
+                    )
+
+                Ok response ->
+                    case response.entity of
+                        RelationshipListEntity relationships ->
+                            case
+                                LE.find (\r -> r.id == model.accountId)
+                                    relationships
+                            of
+                                Nothing ->
+                                    model |> withNoCmd
+
+                                Just relationship ->
+                                    -- Maybe we should handle blocked_by
+                                    let
+                                        mdl =
+                                            if not showResult then
+                                                model
+
+                                            else
+                                                { model
+                                                    | metadata =
+                                                        Just response.metadata
+                                                    , request =
+                                                        Just response.rawRequest
+                                                    , response =
+                                                        Just relationship.v
+                                                    , entity =
+                                                        Just response.entity
+                                                }
+                                    in
+                                    { mdl
+                                        | isAccountFollowed =
+                                            relationship.following
+                                    }
+                                        |> withNoCmd
 
                         _ ->
                             model |> withNoCmd
@@ -948,8 +1024,12 @@ updateInternal msg model =
                 |> withNoCmd
 
         SetAccountId accountId ->
-            { model | accountId = accountId }
-                |> withNoCmd
+            let
+                mdl =
+                    { model | accountId = accountId }
+            in
+            mdl
+                |> withCmd (getAccountIdRelationships True mdl)
 
         SetLimit limit ->
             { model | limit = limit }
@@ -1025,6 +1105,20 @@ updateInternal msg model =
                 )
                 model
 
+        SendPostFollowOrUnfollow ->
+            sendRequest
+                (AccountsRequest <|
+                    if model.isAccountFollowed then
+                        Request.PostUnfollow { id = model.accountId }
+
+                    else
+                        Request.PostFollow
+                            { id = model.accountId
+                            , reblogs = model.reblogs
+                            }
+                )
+                model
+
         SendGetGroups ->
             sendRequest
                 (GroupsRequest <| Request.GetGroups { tab = model.whichGroups })
@@ -1037,6 +1131,35 @@ updateInternal msg model =
 
         ReceiveResponse result ->
             receiveResponse result model
+
+
+getAccountIdRelationships : Bool -> Model -> Cmd Msg
+getAccountIdRelationships showResult model =
+    case model.account of
+        Nothing ->
+            Cmd.none
+
+        Just account ->
+            case model.loginServer of
+                Nothing ->
+                    Cmd.none
+
+                Just server ->
+                    case model.accountId of
+                        "" ->
+                            Cmd.none
+
+                        accountId ->
+                            Request.serverRequest ReceiveAccountIdRelationships
+                                []
+                                { server = server
+                                , token = model.token
+                                }
+                                showResult
+                                (AccountsRequest <|
+                                    Request.GetRelationships
+                                        { ids = [ accountId ] }
+                                )
 
 
 getUsername : Model -> String
@@ -1112,6 +1235,12 @@ applyResponseSideEffects response model =
 
                 _ ->
                     model
+
+        AccountsRequest (Request.PostFollow _) ->
+            { model | isAccountFollowed = True }
+
+        AccountsRequest (Request.PostUnfollow _) ->
+            { model | isAccountFollowed = False }
 
         _ ->
             model
@@ -1691,6 +1820,34 @@ accountsSelectedUI model =
             ]
         , button [ onClick SendGetSearchAccounts ]
             [ text "GetSearchAccounts" ]
+        , br
+        , text "-- writes below here --"
+        , br
+        , b "id: "
+        , input
+            [ size 20
+            , onInput SetAccountId
+            , value model.accountId
+            ]
+            []
+        , text " "
+        , span [ onClick ToggleReblogs ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.reblogs
+                , disabled model.isAccountFollowed
+                ]
+                []
+            , b " reblogs "
+            ]
+        , button [ onClick SendPostFollowOrUnfollow ]
+            [ text <|
+                if model.isAccountFollowed then
+                    "PostUnfollow"
+
+                else
+                    "PostFollow"
+            ]
         ]
 
 
@@ -1790,6 +1947,8 @@ The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Acc
 The "GetRelationships" button returns a list of `Relationship` entities, one for each of the (comma-separated) "ids".
 
 The "GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" is non-blank, it is the maximum number of entities to return.
+
+The "Postfollow / PostUnfollow" button either follows or unfollows the account with the given "id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "id" causes A `GetSearchAccounts` request to be sent.
             """
 
         else if model.selectedRequest == BlocksSelected then
@@ -1830,7 +1989,7 @@ The "Headers" section, if enabled, shows the headers received from the server fo
 
 The "Received" section, if enabled, shows the JSON received from the server for the last request.
 
-The "Decoded" section, if enabled, shows the decoded JSON received from the server for the last request. If it differs from "Received", there is either a decoder bug, or one or more fields are not yet supported.
+The "Decoded" section, if enabled, shows the decoded JSON received from the server for the last request. If it differs from "Received", there is either a decoder bug, one or more fields are not yet supported, or the received JSON uses defaults for one or more fields.
 
 The "Clear" button on the same line as the "Prettify" checkbox clears the "Sent", "Received", and "Decoded" sections, making this help easier to see.
 
@@ -1929,6 +2088,7 @@ type alias SavedModel =
     , showReceived : Bool
     , showEntity : Bool
     , whichGroups : WhichGroups
+    , reblogs : Bool
     }
 
 
@@ -1952,6 +2112,7 @@ modelToSavedModel model =
     , showReceived = model.showReceived
     , showEntity = model.showEntity
     , whichGroups = model.whichGroups
+    , reblogs = model.reblogs
     }
 
 
@@ -1976,6 +2137,7 @@ savedModelToModel savedModel model =
         , showReceived = savedModel.showReceived
         , showEntity = savedModel.showEntity
         , whichGroups = savedModel.whichGroups
+        , reblogs = savedModel.reblogs
     }
 
 
@@ -2034,6 +2196,7 @@ encodeSavedModel savedModel =
         , ( "showReceived", JE.bool savedModel.showReceived )
         , ( "showEntity", JE.bool savedModel.showEntity )
         , ( "whichGroups", encodeWhichGroups savedModel.whichGroups )
+        , ( "reblogs", JE.bool savedModel.reblogs )
         ]
 
 
@@ -2070,6 +2233,7 @@ savedModelDecoder =
         |> optional "showReceived" JD.bool True
         |> optional "showEntity" JD.bool False
         |> optional "whichGroups" whichGroupsDecoder Request.MemberGroups
+        |> optional "reblogs" JD.bool True
 
 
 put : String -> Maybe Value -> Cmd Msg
