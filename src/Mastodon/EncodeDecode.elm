@@ -514,9 +514,16 @@ encodeAccount account =
 
                 Just source ->
                     [ ( "source", encodeSource source ) ]
-            , if account.is_pro || account.is_verified then
+            , if
+                account.is_pro
+                    || account.is_verified
+                    || account.is_donor
+                    || account.is_investor
+              then
                 [ ( "is_pro", JE.bool account.is_pro )
                 , ( "is_verified", JE.bool account.is_verified )
+                , ( "is_donor", JE.bool account.is_donor )
+                , ( "is_investor", JE.bool account.is_investor )
                 ]
 
               else
@@ -560,6 +567,8 @@ accountDecoder =
         |> optional "source" (JD.nullable sourceDecoder) Nothing
         |> optional "is_pro" optionalBoolDecoder False
         |> optional "is_verified" optionalBoolDecoder False
+        |> optional "is_donor" optionalBoolDecoder False
+        |> optional "is_investor" optionalBoolDecoder False
         |> custom JD.value
 
 

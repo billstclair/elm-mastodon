@@ -2039,7 +2039,7 @@ help model =
 
 The "GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
 
-The "GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "id" with that user's account ID.
+The "GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "id" with that user's account ID. This is a Gab-only feature.
 
 The "GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
 
@@ -2062,6 +2062,8 @@ Blocks help goes here.
         else if model.selectedRequest == GroupsSelected then
             """
 **GroupsRequest Help**
+
+Groups are a Gab-only feature.
 
 Click "GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
 

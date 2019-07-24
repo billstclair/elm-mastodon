@@ -186,9 +186,11 @@ type alias SourceUpdate =
 
 `GetRelationships` results in a `RelationshipListEntity`.
 
+`GetAccountByUsername` (`GET account_by_username`) is not documented, and may be Gab-only.
+
 -}
 type AccountsReq
-    = GetAccountByUsername { username : String } --not documented
+    = GetAccountByUsername { username : String }
     | GetAccount { id : String }
     | GetVerifyCredentials
     | PatchUpdateCredentials
@@ -365,6 +367,9 @@ whichGroupsToString whichGroups =
 
 
 {-| GET /api/v1/groups
+
+The groups API is Gab-only.
+
 -}
 type GroupsReq
     = GetGroups { tab : WhichGroups }

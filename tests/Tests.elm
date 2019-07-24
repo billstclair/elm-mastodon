@@ -1054,6 +1054,8 @@ account1 =
     , source = Just source1
     , is_pro = True
     , is_verified = True
+    , is_donor = True
+    , is_investor = True
     , v = JE.null
     }
 
@@ -1137,5 +1139,7 @@ account2 =
     , source = Nothing
     , is_pro = False
     , is_verified = False
+    , is_donor = False
+    , is_investor = False
     , v = JE.null
     }

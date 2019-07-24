@@ -165,6 +165,10 @@ type alias Account =
     -- Gab extensions
     , is_pro : Bool
     , is_verified : Bool
+    , is_donor : Bool
+    , is_investor : Bool
+
+    -- Standard input `Value`.
     , v : Value
     }
 
