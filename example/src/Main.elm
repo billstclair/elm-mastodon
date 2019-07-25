@@ -178,7 +178,7 @@ type Msg
     | SetGroupId String
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
-    | SendVerifyCredentials
+    | SendGetVerifyCredentials
     | SendGetAccountByUsername
     | SendGetAccount
     | SendGetFollowers
@@ -1076,7 +1076,7 @@ updateInternal msg model =
             { model | groupId = groupId }
                 |> withNoCmd
 
-        SendVerifyCredentials ->
+        SendGetVerifyCredentials ->
             sendRequest (AccountsRequest Request.GetVerifyCredentials) model
 
         SendGetAccountByUsername ->
@@ -1798,7 +1798,7 @@ accountsSelectedUI : Model -> Html Msg
 accountsSelectedUI model =
     p []
         [ pspace
-        , button [ onClick SendVerifyCredentials ]
+        , button [ onClick SendGetVerifyCredentials ]
             [ text "GetVerifyCredentials" ]
         , br
         , b "username: "
@@ -2100,7 +2100,7 @@ The "Clear All Persistent State" button near the bottom of the page does that, a
 
 The "Dark Mode" checkbox toggles between light and dark mode.
 
-If you look at the [code for this module](https://github.com/billstclair/elm-mastodon/blob/master/example/src/Main.elm), and search for `SendVerifyCredentials`, you'll see examples of using the `Mastodon.Request` module.
+If you look at the [code for this module](https://github.com/billstclair/elm-mastodon/blob/master/example/src/Main.elm), and search for `SendGetVerifyCredentials`, you'll see examples of using the `Mastodon.Request` module.
     """
 
 

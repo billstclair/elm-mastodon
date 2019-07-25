@@ -18,7 +18,7 @@ module Mastodon.Request exposing
     , FollowSuggestionsReq(..), GroupsReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
-    , Paging, SourceUpdate, PollDefinition, WhichGroups(..)
+    , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..)
     , userAgentHeader, idempotencyKeyHeader, emptyPaging
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
@@ -52,7 +52,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Non-atomic data in requests
 
-@docs Paging, SourceUpdate, PollDefinition, WhichGroups
+@docs Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups
 
 
 # Utility
@@ -80,6 +80,7 @@ import Mastodon.Entity as Entity
     exposing
         ( Entity(..)
         , FilterContext(..)
+        , HtmlString
         , UnixTimestamp
         )
 import Task exposing (Task)
@@ -170,6 +171,14 @@ type alias SourceUpdate =
     }
 
 
+{-| Updated account `Field` information.
+-}
+type alias FieldUpdate =
+    { name : String
+    , value : HtmlString
+    }
+
+
 {-| GET/POST/PATCH /api/v1/accounts
 
 (and `GET /api/v1/account_by_username`)
@@ -200,7 +209,7 @@ type AccountsReq
         , header : Maybe File
         , locked : Bool
         , source : Maybe SourceUpdate
-        , fields_attributes : Maybe (List Entity.Field)
+        , fields_attributes : Maybe (List FieldUpdate)
         }
     | GetFollowers { id : String, limit : Maybe Int }
     | GetFollowing { id : String, limit : Maybe Int }
@@ -1104,6 +1113,56 @@ decoders =
 ---
 
 
+fieldsAttributesCount : Int
+fieldsAttributesCount =
+    4
+
+
+encodeFieldsAttributes : List FieldUpdate -> List Http.Part
+encodeFieldsAttributes fields =
+    let
+        len =
+            List.length fields
+
+        fields4 =
+            if len > fieldsAttributesCount then
+                -- Maybe this should just be allowed to error
+                List.take fieldsAttributesCount fields
+
+            else
+                -- Maybe this will work without the padding,
+                -- but it's what the UI sends.
+                List.concat
+                    [ fields
+                    , List.repeat (fieldsAttributesCount - len) <|
+                        { name = "", value = "" }
+                    ]
+
+        loop : Int -> List FieldUpdate -> List Http.Part -> List Http.Part
+        loop idx flds res =
+            case flds of
+                [] ->
+                    res
+
+                update :: tail ->
+                    let
+                        idxs =
+                            String.fromInt idx
+
+                        fai =
+                            "fields_attributes[" ++ idxs ++ "]"
+                    in
+                    loop (idx + 1) tail <|
+                        List.concat
+                            [ res
+                            , [ Http.stringPart (fai ++ "[name]") update.name
+                              , Http.stringPart (fai ++ "[value]") update.value
+                              ]
+                            ]
+    in
+    loop 0 fields4 []
+
+
 accountsReq : AccountsReq -> RawRequest -> RawRequest
 accountsReq req res =
     let
@@ -1129,6 +1188,26 @@ accountsReq req res =
                 , decoder = decoders.account
             }
 
+        {- utf8: ✓
+           _method: put
+           authenticity_token: XY...
+           account[display_name]: Bill St. Clair
+           account[note]: I write #lisp for money and #Elm for fun. I play the #trombone in a concert band and sing in a community choir. I dance to infectious backbeats, ride a #bicycle, and wear a #kilt while doing it, every day.
+
+           No, I won't answer that question.
+           account[header]: (binary)
+           account[avatar]: (binary)
+           account[locked]: 0
+           account[bot]: 0
+           account[fields_attributes][0][name]: Home page
+           account[fields_attributes][0][value]: https://billstclair.com
+           account[fields_attributes][1][name]: Elm Games
+           account[fields_attributes][1][value]: https://GibGoyGames.com
+           account[fields_attributes][2][name]: Keybase
+           account[fields_attributes][2][value]: https://keybase.io/billstclair
+           account[fields_attributes][3][name]:
+           account[fields_attributes][3][value]:
+        -}
         PatchUpdateCredentials { display_name, note, avatar, header, locked, source, fields_attributes } ->
             { res
                 | method = m.patch
@@ -1202,11 +1281,7 @@ accountsReq req res =
                                     []
 
                                 Just attributes ->
-                                    [ Http.stringPart "fields_attributes" <|
-                                        (JE.list ED.encodeField attributes
-                                            |> JE.encode 0
-                                        )
-                                    ]
+                                    encodeFieldsAttributes attributes
                             ]
                 , decoder = decoders.account
             }
