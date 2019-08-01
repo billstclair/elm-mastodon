@@ -131,6 +131,7 @@ import Mastodon.Entity as Entity
         , NotificationType(..)
         , Poll
         , PollOption
+        , Privacy(..)
         , PushSubscription
         , Relationship
         , Results
@@ -646,12 +647,46 @@ fieldDecoder =
         |> optional "verified_at" (JD.nullable JD.string) Nothing
 
 
+encodePrivacy : Privacy -> Value
+encodePrivacy privacy =
+    JE.string <|
+        case privacy of
+            PublicPrivacy ->
+                "public"
+
+            UnlistedPrivacy ->
+                "unlisted"
+
+            PrivatePrivacy ->
+                "private"
+
+
+privacyDecoder : Decoder Privacy
+privacyDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                case s of
+                    "public" ->
+                        JD.succeed PublicPrivacy
+
+                    "unlisted" ->
+                        JD.succeed UnlistedPrivacy
+
+                    "private" ->
+                        JD.succeed PrivatePrivacy
+
+                    _ ->
+                        JD.fail <| "Unknown privacy: " ++ s
+            )
+
+
 {-| Encode a `Source`.
 -}
 encodeSource : Source -> Value
 encodeSource source =
     JE.object
-        [ ( "privacy", encodeMaybe JE.string source.privacy )
+        [ ( "privacy", encodePrivacy source.privacy )
         , ( "sensitive", JE.bool source.sensitive )
         , ( "language", encodeMaybe JE.string source.language )
         , ( "note", JE.string source.note )
@@ -664,7 +699,13 @@ encodeSource source =
 sourceDecoder : Decoder Source
 sourceDecoder =
     JD.succeed Source
-        |> optional "privacy" (JD.nullable JD.string) Nothing
+        |> optional "privacy"
+            (JD.oneOf
+                [ JD.null PublicPrivacy
+                , privacyDecoder
+                ]
+            )
+            PublicPrivacy
         |> optional "sensitive" JD.bool False
         |> optional "language" (JD.nullable JD.string) Nothing
         |> required "note" JD.string

@@ -34,6 +34,7 @@ import Mastodon.Entity as Entity
         , NotificationType(..)
         , Poll
         , PollOption
+        , Privacy(..)
         , PushSubscription
         , Relationship
         , Results
@@ -301,6 +302,7 @@ entityData =
     , AppEntity app2
     , SourceEntity source1
     , SourceEntity source2
+    , SourceEntity source3
     , TokenEntity
         { access_token = "access_token"
         , token_type = "token_type"
@@ -348,7 +350,7 @@ entityData =
 
 source1 : Source
 source1 =
-    { privacy = Just "privacy"
+    { privacy = PublicPrivacy
     , sensitive = True
     , language = Just "language"
     , note = "note"
@@ -359,10 +361,21 @@ source1 =
 
 source2 : Source
 source2 =
-    { privacy = Nothing
+    { privacy = UnlistedPrivacy
     , sensitive = False
     , language = Nothing
     , note = "note2"
+    , fields = []
+    , v = JE.null
+    }
+
+
+source3 : Source
+source3 =
+    { privacy = PrivatePrivacy
+    , sensitive = False
+    , language = Nothing
+    , note = "note3"
     , fields = []
     , v = JE.null
     }

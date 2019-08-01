@@ -20,6 +20,8 @@ import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
 import Dialog
 import Dict exposing (Dict)
+import File exposing (File)
+import File.Select
 import Html
     exposing
         ( Attribute
@@ -37,6 +39,7 @@ import Html
         , table
         , td
         , text
+        , textarea
         , th
         , tr
         )
@@ -44,11 +47,13 @@ import Html.Attributes
     exposing
         ( autofocus
         , checked
+        , cols
         , disabled
         , href
         , id
         , name
         , placeholder
+        , rows
         , selected
         , size
         , style
@@ -64,7 +69,14 @@ import Json.Encode as JE exposing (Value)
 import List.Extra as LE
 import Markdown
 import Mastodon.EncodeDecode as ED
-import Mastodon.Entity as Entity exposing (Account, App, Authorization, Entity(..))
+import Mastodon.Entity as Entity
+    exposing
+        ( Account
+        , App
+        , Authorization
+        , Entity(..)
+        , Privacy(..)
+        )
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request as Request
     exposing
@@ -130,6 +142,13 @@ type alias Model =
     , hideClientId : Bool
     , tokens : Dict String String
     , account : Maybe Account
+    , displayName : String
+    , note : String
+    , avatarFile : Maybe File
+    , headerFile : Maybe File
+    , privacy : Privacy
+    , sensitive : Bool
+    , language : String
     , isAccountFollowed : Bool
     , msg : Maybe String
     , started : Started
@@ -175,6 +194,15 @@ type Msg
     | ToggleExcludeReplies
     | ToggleExcludeReblogs
     | SetAccountIds String
+    | SetDisplayName String
+    | SetNote String
+    | GetAvatarFile Bool
+    | ReceiveAvatarFile File
+    | GetHeaderFile Bool
+    | ReceiveHeaderFile File
+    | SetPrivacy Privacy
+    | SetSensitive Bool
+    | SetLanguage String
     | SetGroupId String
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
@@ -187,6 +215,7 @@ type Msg
     | SendGetRelationships
     | SendGetSearchAccounts
     | SendPostFollowOrUnfollow
+    | SendPatchUpdateCredentials
     | SendGetGroups
     | SendGetGroup
     | ReceiveResponse (Result Error Response)
@@ -357,6 +386,13 @@ init value url key =
     , hideClientId = hideClientId
     , tokens = Dict.empty
     , account = Nothing
+    , displayName = ""
+    , note = ""
+    , avatarFile = Nothing
+    , headerFile = Nothing
+    , privacy = PublicPrivacy
+    , sensitive = False
+    , language = ""
     , isAccountFollowed = False
     , msg = msg
     , started = NotStarted
@@ -589,6 +625,52 @@ socketHandler response state mdl =
             model |> withNoCmd
 
 
+updatePatchCredentialsInputs : Model -> Model
+updatePatchCredentialsInputs model =
+    case model.account of
+        Nothing ->
+            { model
+                | displayName = ""
+                , note = ""
+                , privacy = PublicPrivacy
+                , sensitive = False
+                , language = ""
+            }
+
+        Just account ->
+            let
+                ( ( privacy, sensitive, language ), ( note, fields ) ) =
+                    case account.source of
+                        Nothing ->
+                            ( ( PublicPrivacy, False, "" )
+                            , ( "", [] )
+                            )
+
+                        Just source ->
+                            ( ( source.privacy
+                              , source.sensitive
+                              , Maybe.withDefault "" source.language
+                              )
+                            , ( source.note, source.fields )
+                            )
+            in
+            { model
+                | displayName = account.display_name
+                , note = note
+                , privacy = privacy
+                , sensitive = sensitive
+                , language = language
+            }
+
+
+imageMimeTypes : List String
+imageMimeTypes =
+    [ "image/jpeg"
+    , "image/gif"
+    , "image/png"
+    ]
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
@@ -797,6 +879,7 @@ updateInternal msg model =
                                 , response = Just account.v
                                 , entity = Just <| AccountEntity account
                             }
+                                |> updatePatchCredentialsInputs
                     in
                     mdl2
                         |> withCmds [ cmd, getAccountIdRelationships False mdl ]
@@ -831,6 +914,7 @@ updateInternal msg model =
                                 , response = Just account.v
                                 , entity = Just <| AccountEntity account
                             }
+                                |> updatePatchCredentialsInputs
                     in
                     mdl
                         |> withCmd (getAccountIdRelationships False mdl)
@@ -875,6 +959,7 @@ updateInternal msg model =
                                         , entity = Just response.entity
                                         , account = Just account
                                     }
+                                        |> updatePatchCredentialsInputs
                             in
                             mdl
                                 |> withCmd (getAccountIdRelationships False mdl)
@@ -970,6 +1055,7 @@ updateInternal msg model =
                             , token = Nothing
                             , account = Nothing
                         }
+                            |> updatePatchCredentialsInputs
                 in
                 sendRequest InstanceRequest mdl
 
@@ -1014,6 +1100,7 @@ updateInternal msg model =
                         , metadata = Nothing
                         , msg = Nothing
                     }
+                        |> updatePatchCredentialsInputs
                         |> withCmd (putToken server Nothing)
 
         ClearAll ->
@@ -1032,6 +1119,7 @@ updateInternal msg model =
                         , metadata = Nothing
                         , msg = Nothing
                     }
+                        |> updatePatchCredentialsInputs
             in
             { mdl | savedModel = Just <| modelToSavedModel mdl }
                 |> withCmd clear
@@ -1070,6 +1158,52 @@ updateInternal msg model =
 
         SetAccountIds accountIds ->
             { model | accountIds = accountIds }
+                |> withNoCmd
+
+        SetDisplayName displayName ->
+            { model | displayName = displayName }
+                |> withNoCmd
+
+        SetNote note ->
+            { model | note = note }
+                |> withNoCmd
+
+        GetAvatarFile clearAvatar ->
+            if clearAvatar then
+                { model | avatarFile = Nothing }
+                    |> withNoCmd
+
+            else
+                model
+                    |> withCmd (File.Select.file imageMimeTypes ReceiveAvatarFile)
+
+        ReceiveAvatarFile file ->
+            { model | avatarFile = Just file }
+                |> withNoCmd
+
+        GetHeaderFile clearHeader ->
+            if clearHeader then
+                { model | headerFile = Nothing }
+                    |> withNoCmd
+
+            else
+                model
+                    |> withCmd (File.Select.file imageMimeTypes ReceiveHeaderFile)
+
+        ReceiveHeaderFile file ->
+            { model | headerFile = Just file }
+                |> withNoCmd
+
+        SetPrivacy privacy ->
+            { model | privacy = privacy }
+                |> withNoCmd
+
+        SetSensitive sensitive ->
+            { model | sensitive = sensitive }
+                |> withNoCmd
+
+        SetLanguage language ->
+            { model | language = language }
                 |> withNoCmd
 
         SetGroupId groupId ->
@@ -1174,6 +1308,10 @@ updateInternal msg model =
                             }
                 )
                 model
+
+        SendPatchUpdateCredentials ->
+            -- TODO
+            model |> withNoCmd
 
         SendGetGroups ->
             sendRequest
@@ -1283,6 +1421,14 @@ receiveResponse result model =
 applyResponseSideEffects : Response -> Model -> Model
 applyResponseSideEffects response model =
     case response.request of
+        AccountsRequest Request.GetVerifyCredentials ->
+            case response.entity of
+                AccountEntity account ->
+                    updatePatchCredentialsInputs model
+
+                _ ->
+                    model
+
         AccountsRequest (Request.GetAccountByUsername _) ->
             case response.entity of
                 AccountEntity { id } ->
@@ -1499,9 +1645,10 @@ selectedRequestFromString s =
             LoginSelected
 
 
-selectedRequestRadioName : String
-selectedRequestRadioName =
-    "selectedRequest"
+radioNames =
+    { selectedRequest = "selectedRequest"
+    , privacy = "privacy"
+    }
 
 
 selectedRequestRadio : SelectedRequest -> Model -> Html Msg
@@ -1513,7 +1660,7 @@ selectedRequestRadio selectedRequest model =
     span [ onClick <| SetSelectedRequest selectedRequest True ]
         [ input
             [ type_ "radio"
-            , name selectedRequestRadioName
+            , name radioNames.selectedRequest
             , value string
             , checked <| model.selectedRequest == selectedRequest
             , onCheck (SetSelectedRequest selectedRequest)
@@ -1534,6 +1681,26 @@ selectedRequestHtml selectedRequest model body =
 
           else
             body model
+        ]
+
+
+privacyRadio : Privacy -> String -> Privacy -> Html Msg
+privacyRadio privacy label currentPrivacy =
+    span []
+        [ input
+            [ type_ "radio"
+            , name radioNames.privacy
+            , checked <| currentPrivacy == privacy
+            , onCheck <|
+                \checked ->
+                    if checked then
+                        SetPrivacy privacy
+
+                    else
+                        Noop
+            ]
+            []
+        , text label
         ]
 
 
@@ -1794,6 +1961,36 @@ groupsSelectedUI model =
         ]
 
 
+renderChooseFile : String -> Maybe File -> (Bool -> Msg) -> Html Msg
+renderChooseFile label maybeFile getter =
+    span []
+        [ b label
+        , case maybeFile of
+            Nothing ->
+                text "No file selected "
+
+            Just file ->
+                let
+                    name =
+                        File.name file
+
+                    size =
+                        File.size file
+                in
+                span []
+                    [ text <| String.fromInt size
+                    , text " "
+                    , text name
+                    , text " "
+                    , button [ onClick <| getter True ]
+                        [ text "Clear" ]
+                    , text " "
+                    ]
+        , button [ onClick <| getter False ]
+            [ text "Choose File" ]
+        ]
+
+
 accountsSelectedUI : Model -> Html Msg
 accountsSelectedUI model =
     p []
@@ -1874,7 +2071,7 @@ accountsSelectedUI model =
             ]
         , text " "
         , button [ onClick SendGetStatuses ]
-            [ text "SendGetStatuses" ]
+            [ text "GetStatuses" ]
         , br
         , b "ids (1,2,...): "
         , input
@@ -1949,6 +2146,51 @@ accountsSelectedUI model =
                 else
                     "PostFollow"
             ]
+        , br
+        , b "Display name: "
+        , input
+            [ size 40
+            , onInput SetDisplayName
+            , value model.displayName
+            ]
+            []
+        , br
+        , b "Note: "
+        , textarea
+            [ rows 4
+            , cols 50
+            , onInput SetNote
+            ]
+            [ text model.note ]
+        , br
+        , renderChooseFile "Avatar: " model.avatarFile GetAvatarFile
+        , br
+        , renderChooseFile "Header: " model.headerFile GetHeaderFile
+        , br
+        , b "Privacy: "
+        , privacyRadio PublicPrivacy "public " model.privacy
+        , privacyRadio UnlistedPrivacy "unlisted " model.privacy
+        , privacyRadio PrivatePrivacy "private " model.privacy
+        , br
+        , b "Sensitive: "
+        , input
+            [ type_ "checkbox"
+            , checked model.sensitive
+            , onCheck SetSensitive
+            ]
+            []
+        , b " Language: "
+        , input
+            [ size 2
+            , onInput SetLanguage
+            , value model.language
+            ]
+            []
+        , br
+        , button [ onClick SendPatchUpdateCredentials ]
+            [ text "PatchUpdateCredentials" ]
+
+        -- avatar (File), header (File), privacy (Privacy), sensitive (Bool), language (Maybe String)
         ]
 
 

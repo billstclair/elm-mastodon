@@ -197,11 +197,13 @@ type alias FieldUpdate =
 
 `GetAccountByUsername` (`GET account_by_username`) is not documented, and may be Gab-only.
 
+The `fields_attributes` list in `PatchUpdateCredentials` will be silently shortened to four elements if it's longer than that. If it's shorter than four elements, then the fields past those specified will be cleared.
+
 -}
 type AccountsReq
-    = GetAccountByUsername { username : String }
+    = GetVerifyCredentials
+    | GetAccountByUsername { username : String }
     | GetAccount { id : String }
-    | GetVerifyCredentials
     | PatchUpdateCredentials
         { display_name : Maybe String
         , note : Maybe String
@@ -1170,6 +1172,12 @@ accountsReq req res =
             apiReq.accounts
     in
     case req of
+        GetVerifyCredentials ->
+            { res
+                | url = relative [ r, "verify_credentials" ] []
+                , decoder = decoders.account
+            }
+
         GetAccountByUsername { username } ->
             { res
                 | url = relative [ "account_by_username", username ] []
@@ -1179,12 +1187,6 @@ accountsReq req res =
         GetAccount { id } ->
             { res
                 | url = relative [ r, id ] []
-                , decoder = decoders.account
-            }
-
-        GetVerifyCredentials ->
-            { res
-                | url = relative [ r, "verify_credentials" ] []
                 , decoder = decoders.account
             }
 

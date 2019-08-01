@@ -18,7 +18,7 @@ module Mastodon.Entity exposing
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
     , Status, ScheduledStatus, Conversation, Group
-    , Emoji, Field, Attachment, AttachmentType(..)
+    , Emoji, Field, Privacy(..), Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
     , CardType(..), FilterContext(..), URLs, Stats, NotificationType(..)
@@ -60,7 +60,7 @@ got over the wire. Code that creates these can set it to
 
 # Entity field types
 
-@docs Emoji, Field, Attachment, AttachmentType
+@docs Emoji, Field, Privacy, Attachment, AttachmentType
 @docs Meta, ImageMetaFields, VideoMetaFields
 @docs ImageMetaInfo, VideoMetaInfo, Focus
 @docs CardType, FilterContext, URLs, Stats, NotificationType
@@ -188,6 +188,14 @@ type alias Field =
     }
 
 
+{-| Values for `Source.privacy`
+-}
+type Privacy
+    = PublicPrivacy -- "public"
+    | UnlistedPrivacy -- "unlisted"
+    | PrivatePrivacy -- "private" (Followers-only)
+
+
 {-| Source entity.
 
 Pleroma servers have an additional field here, not yet supported:
@@ -196,7 +204,7 @@ Pleroma servers have an additional field here, not yet supported:
 
 -}
 type alias Source =
-    { privacy : Maybe String
+    { privacy : Privacy
     , sensitive : Bool
     , language : Maybe ISO6391
     , note : String
