@@ -146,6 +146,7 @@ type alias Model =
     , note : String
     , avatarFile : Maybe File
     , headerFile : Maybe File
+    , locked : Bool
     , privacy : Privacy
     , sensitive : Bool
     , language : String
@@ -390,6 +391,7 @@ init value url key =
     , note = ""
     , avatarFile = Nothing
     , headerFile = Nothing
+    , locked = False
     , privacy = PublicPrivacy
     , sensitive = False
     , language = ""
@@ -632,6 +634,7 @@ updatePatchCredentialsInputs model =
             { model
                 | displayName = ""
                 , note = ""
+                , locked = False
                 , privacy = PublicPrivacy
                 , sensitive = False
                 , language = ""
@@ -653,10 +656,14 @@ updatePatchCredentialsInputs model =
                               )
                             , ( source.note, source.fields )
                             )
+
+                locked =
+                    account.locked
             in
             { model
                 | displayName = account.display_name
                 , note = note
+                , locked = locked
                 , privacy = privacy
                 , sensitive = sensitive
                 , language = language
@@ -1310,8 +1317,7 @@ updateInternal msg model =
                 model
 
         SendPatchUpdateCredentials ->
-            -- TODO
-            model |> withNoCmd
+            sendPatchUpdateCredentials model
 
         SendGetGroups ->
             sendRequest
@@ -1325,6 +1331,90 @@ updateInternal msg model =
 
         ReceiveResponse result ->
             receiveResponse result model
+
+
+sendPatchUpdateCredentials : Model -> ( Model, Cmd Msg )
+sendPatchUpdateCredentials model =
+    case model.account of
+        Nothing ->
+            model |> withNoCmd
+
+        Just account ->
+            let
+                { displayName, note, avatarFile, headerFile } =
+                    model
+
+                { locked, privacy, sensitive, language } =
+                    model
+
+                maybeSourceUpdate =
+                    case account.source of
+                        -- May need to compare with model fields.
+                        -- If so, need to source from them as well.
+                        Nothing ->
+                            Nothing
+
+                        Just source ->
+                            let
+                                sourceUpdate =
+                                    { privacy =
+                                        ifNotEqual privacy source.privacy
+                                    , sensitive =
+                                        ifNotEqual sensitive source.sensitive
+                                    , language =
+                                        let
+                                            lang =
+                                                if language == "" then
+                                                    Nothing
+
+                                                else
+                                                    Just language
+                                        in
+                                        ifNotEqual lang source.language
+                                    }
+                            in
+                            if
+                                (sourceUpdate.privacy == Nothing)
+                                    && (sourceUpdate.sensitive == Nothing)
+                                    && (sourceUpdate.language == Nothing)
+                            then
+                                Nothing
+
+                            else
+                                Just sourceUpdate
+
+                request =
+                    AccountsRequest <|
+                        Request.PatchUpdateCredentials
+                            { display_name =
+                                ifNotEqual displayName model.displayName
+                            , note =
+                                ifNotEqual note model.note
+                            , avatar =
+                                model.avatarFile
+                            , header =
+                                model.headerFile
+                            , locked =
+                                ifNotEqual locked model.locked
+                            , source =
+                                maybeSourceUpdate
+                            , fields_attributes =
+                                -- TODO
+                                Nothing
+                            }
+            in
+            -- This sends the request even if nothing is updated.
+            -- Maybe it shouldn't.
+            sendRequest request model
+
+
+ifNotEqual : a -> a -> Maybe a
+ifNotEqual new old =
+    if new == old then
+        Nothing
+
+    else
+        Just new
 
 
 getAccountIdRelationships : Bool -> Model -> Cmd Msg
@@ -2155,7 +2245,8 @@ accountsSelectedUI model =
             ]
             []
         , br
-        , b "Note: "
+        , b "Note:"
+        , br
         , textarea
             [ rows 4
             , cols 50

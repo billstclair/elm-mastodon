@@ -81,6 +81,7 @@ import Mastodon.Entity as Entity
         ( Entity(..)
         , FilterContext(..)
         , HtmlString
+        , Privacy(..)
         , UnixTimestamp
         )
 import Task exposing (Task)
@@ -165,9 +166,9 @@ emptyPaging =
 {-| Updated account `Source` information
 -}
 type alias SourceUpdate =
-    { privacy : Maybe String
-    , sensitive : Bool
-    , language : Maybe Entity.ISO6391
+    { privacy : Maybe Privacy
+    , sensitive : Maybe Bool
+    , language : Maybe (Maybe Entity.ISO6391)
     }
 
 
@@ -209,7 +210,7 @@ type AccountsReq
         , note : Maybe String
         , avatar : Maybe File
         , header : Maybe File
-        , locked : Bool
+        , locked : Maybe Bool
         , source : Maybe SourceUpdate
         , fields_attributes : Maybe (List FieldUpdate)
         }
@@ -1241,13 +1242,18 @@ accountsReq req res =
 
                                 Just head ->
                                     [ Http.filePart "header" head ]
-                            , [ Http.stringPart "locked" <|
-                                    if locked then
-                                        "true"
+                            , case locked of
+                                Nothing ->
+                                    []
 
-                                    else
-                                        "false"
-                              ]
+                                Just lkd ->
+                                    [ Http.stringPart "locked" <|
+                                        if lkd then
+                                            "true"
+
+                                        else
+                                            "false"
+                                    ]
                             , case source of
                                 Nothing ->
                                     []
@@ -1259,23 +1265,33 @@ accountsReq req res =
                                                 []
 
                                             Just privacy ->
-                                                [ Http.stringPart "source[privacy]"
-                                                    privacy
+                                                [ Http.stringPart "source[privacy]" <|
+                                                    ED.privacyToString privacy
                                                 ]
-                                        , [ Http.stringPart "source[sensitive]" <|
-                                                if src.sensitive then
-                                                    "true"
+                                        , case src.sensitive of
+                                            Nothing ->
+                                                []
 
-                                                else
-                                                    "false"
-                                          ]
+                                            Just sens ->
+                                                [ Http.stringPart "source[sensitive]" <|
+                                                    if sens then
+                                                        "true"
+
+                                                    else
+                                                        "false"
+                                                ]
                                         , case src.language of
                                             Nothing ->
                                                 []
 
                                             Just language ->
-                                                [ Http.stringPart "source[language]"
-                                                    language
+                                                [ Http.stringPart "source[language]" <|
+                                                    case language of
+                                                        Nothing ->
+                                                            ""
+
+                                                        Just lang ->
+                                                            lang
                                                 ]
                                         ]
                             , case fields_attributes of

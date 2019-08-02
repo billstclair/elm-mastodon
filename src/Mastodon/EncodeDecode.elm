@@ -40,7 +40,7 @@ module Mastodon.EncodeDecode exposing
     , encodeGroup, groupDecoder
     , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
-    , encodeMaybe
+    , encodeMaybe, privacyToString
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -93,7 +93,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 
 # Utilities
 
-@docs encodeMaybe
+@docs encodeMaybe, privacyToString
 
 -}
 
@@ -647,18 +647,25 @@ fieldDecoder =
         |> optional "verified_at" (JD.nullable JD.string) Nothing
 
 
+{-| Convert `Privacy` to a `String`.
+-}
+privacyToString : Privacy -> String
+privacyToString privacy =
+    case privacy of
+        PublicPrivacy ->
+            "public"
+
+        UnlistedPrivacy ->
+            "unlisted"
+
+        PrivatePrivacy ->
+            "private"
+
+
 encodePrivacy : Privacy -> Value
 encodePrivacy privacy =
-    JE.string <|
-        case privacy of
-            PublicPrivacy ->
-                "public"
-
-            UnlistedPrivacy ->
-                "unlisted"
-
-            PrivatePrivacy ->
-                "private"
+    privacyToString privacy
+        |> JE.string
 
 
 privacyDecoder : Decoder Privacy
