@@ -265,7 +265,7 @@ type alias Attachment =
     , preview_url : UrlString
     , text_url : Maybe UrlString
     , meta : Maybe Meta
-    , description : String
+    , description : Maybe String
     }
 
 
@@ -308,7 +308,7 @@ type alias VideoMetaFields =
 type alias ImageMetaInfo =
     { width : Maybe Int
     , height : Maybe Int
-    , size : Maybe Int
+    , size : Maybe String
     , aspect : Maybe Float
     }
 
@@ -567,7 +567,7 @@ type alias Status =
     , tags : List Tag
     , card : Maybe Card
     , poll : Maybe Poll
-    , application : Application
+    , application : Maybe Application
     , language : Maybe String
     , pinned : Bool
     , group_id : Maybe String --GAB extension

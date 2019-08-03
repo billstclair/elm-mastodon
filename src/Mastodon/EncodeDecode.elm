@@ -851,7 +851,7 @@ encodeImageMetaInfo { width, height, size, aspect } =
     JE.object
         [ ( "width", encodeMaybe JE.int width )
         , ( "height", encodeMaybe JE.int height )
-        , ( "size", encodeMaybe JE.int size )
+        , ( "size", encodeMaybe JE.string size )
         , ( "aspect", encodeMaybe JE.float aspect )
         ]
 
@@ -861,7 +861,7 @@ imageMetaInfoDecoder =
     JD.succeed ImageMetaInfo
         |> optional "width" (JD.nullable JD.int) Nothing
         |> optional "height" (JD.nullable JD.int) Nothing
-        |> optional "size" (JD.nullable JD.int) Nothing
+        |> optional "size" (JD.nullable JD.string) Nothing
         |> optional "aspect" (JD.nullable JD.float) Nothing
 
 
@@ -930,7 +930,7 @@ encodeAttachment attachment =
         , ( "preview_url", JE.string attachment.preview_url )
         , ( "text_url", encodeMaybe JE.string attachment.text_url )
         , ( "meta", encodeMaybe encodeMeta attachment.meta )
-        , ( "description", JE.string attachment.description )
+        , ( "description", encodeMaybe JE.string attachment.description )
         ]
 
 
@@ -949,7 +949,7 @@ attachmentDecoder =
                     |> required "preview_url" JD.string
                     |> optional "text_url" (JD.nullable JD.string) Nothing
                     |> optional "meta" (metaDecoder type_) Nothing
-                    |> required "description" JD.string
+                    |> optional "description" (JD.nullable JD.string) Nothing
             )
 
 
@@ -1246,7 +1246,7 @@ encodeStatus status =
         , ( "tags", JE.list encodeTag status.tags )
         , ( "card", encodeMaybe encodeCard status.card )
         , ( "poll", encodeMaybe encodePoll status.poll )
-        , ( "application", encodeApplication status.application )
+        , ( "application", encodeMaybe encodeApplication status.application )
         , ( "language", encodeMaybe JE.string status.language )
         , ( "pinned", JE.bool status.pinned )
         , ( "group_id", encodeMaybe JE.string status.group_id )
@@ -1289,7 +1289,7 @@ statusDecoder =
         |> required "tags" (JD.list tagDecoder)
         |> optional "card" (JD.nullable cardDecoder) Nothing
         |> optional "poll" (JD.nullable pollDecoder) Nothing
-        |> required "application" applicationDecoder
+        |> optional "application" (JD.nullable applicationDecoder) Nothing
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
         |> optional "group_id" (JD.nullable JD.string) Nothing
