@@ -75,12 +75,14 @@ import Mastodon.Entity as Entity
         , App
         , Authorization
         , Entity(..)
+        , Field
         , Privacy(..)
         )
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request as Request
     exposing
         ( Error(..)
+        , FieldUpdate
         , Paging
         , RawRequest
         , Request(..)
@@ -144,6 +146,7 @@ type alias Model =
     , account : Maybe Account
     , displayName : String
     , note : String
+    , fields : List Field
     , avatarFile : Maybe File
     , headerFile : Maybe File
     , locked : Bool
@@ -197,11 +200,13 @@ type Msg
     | SetAccountIds String
     | SetDisplayName String
     | SetNote String
+    | SetField Int Bool String
     | GetAvatarFile Bool
     | ReceiveAvatarFile File
     | GetHeaderFile Bool
     | ReceiveHeaderFile File
     | SetPrivacy Privacy
+    | SetLocked Bool
     | SetSensitive Bool
     | SetLanguage String
     | SetGroupId String
@@ -389,6 +394,7 @@ init value url key =
     , account = Nothing
     , displayName = ""
     , note = ""
+    , fields = []
     , avatarFile = Nothing
     , headerFile = Nothing
     , locked = False
@@ -663,11 +669,28 @@ updatePatchCredentialsInputs model =
             { model
                 | displayName = account.display_name
                 , note = note
+                , fields = extendFields fields
                 , locked = locked
                 , privacy = privacy
                 , sensitive = sensitive
                 , language = language
             }
+
+
+extendFields : List Field -> List Field
+extendFields fields =
+    List.concat
+        [ fields
+        , List.repeat (4 - List.length fields) emptyField
+        ]
+
+
+emptyField : Field
+emptyField =
+    { name = ""
+    , value = ""
+    , verified_at = Nothing
+    }
 
 
 imageMimeTypes : List String
@@ -1175,6 +1198,26 @@ updateInternal msg model =
             { model | note = note }
                 |> withNoCmd
 
+        SetField index updateValue string ->
+            let
+                mdl =
+                    case LE.getAt index model.fields of
+                        Nothing ->
+                            model
+
+                        Just field ->
+                            let
+                                fld =
+                                    if updateValue then
+                                        { field | value = string }
+
+                                    else
+                                        { field | name = string }
+                            in
+                            { model | fields = LE.setAt index fld model.fields }
+            in
+            mdl |> withNoCmd
+
         GetAvatarFile clearAvatar ->
             if clearAvatar then
                 { model | avatarFile = Nothing }
@@ -1203,6 +1246,10 @@ updateInternal msg model =
 
         SetPrivacy privacy ->
             { model | privacy = privacy }
+                |> withNoCmd
+
+        SetLocked locked ->
+            { model | locked = locked }
                 |> withNoCmd
 
         SetSensitive sensitive ->
@@ -1347,12 +1394,12 @@ sendPatchUpdateCredentials model =
                 { locked, privacy, sensitive, language } =
                     model
 
-                maybeSourceUpdate =
+                ( maybeSourceUpdate, sourceNote, fields ) =
                     case account.source of
                         -- May need to compare with model fields.
                         -- If so, need to source from them as well.
                         Nothing ->
-                            Nothing
+                            ( Nothing, "", [] )
 
                         Just source ->
                             let
@@ -1378,34 +1425,49 @@ sendPatchUpdateCredentials model =
                                     && (sourceUpdate.sensitive == Nothing)
                                     && (sourceUpdate.language == Nothing)
                             then
-                                Nothing
+                                ( Nothing, source.note, source.fields )
 
                             else
-                                Just sourceUpdate
+                                ( Just sourceUpdate, source.note, source.fields )
 
                 request =
                     AccountsRequest <|
                         Request.PatchUpdateCredentials
                             { display_name =
-                                ifNotEqual displayName model.displayName
+                                ifNotEqual displayName account.display_name
                             , note =
-                                ifNotEqual note model.note
+                                ifNotEqual note sourceNote
                             , avatar =
                                 model.avatarFile
                             , header =
                                 model.headerFile
                             , locked =
-                                ifNotEqual locked model.locked
+                                ifNotEqual locked account.locked
                             , source =
                                 maybeSourceUpdate
                             , fields_attributes =
-                                -- TODO
-                                Nothing
+                                let
+                                    flds =
+                                        extendFields fields
+                                in
+                                if Debug.log "fields" flds == Debug.log "model.fields" model.fields then
+                                    Nothing
+
+                                else
+                                    Just <|
+                                        List.map fieldToUpdate model.fields
                             }
             in
             -- This sends the request even if nothing is updated.
             -- Maybe it shouldn't.
             sendRequest request model
+
+
+fieldToUpdate : Field -> FieldUpdate
+fieldToUpdate { name, value } =
+    { name = name
+    , value = value
+    }
 
 
 ifNotEqual : a -> a -> Maybe a
@@ -1532,6 +1594,19 @@ applyResponseSideEffects response model =
 
         AccountsRequest (Request.PostUnfollow _) ->
             { model | isAccountFollowed = False }
+
+        AccountsRequest (Request.PatchUpdateCredentials _) ->
+            case response.entity of
+                AccountEntity account ->
+                    { model
+                        | account = Just account
+                        , avatarFile = Nothing
+                        , headerFile = Nothing
+                    }
+                        |> updatePatchCredentialsInputs
+
+                _ ->
+                    model
 
         _ ->
             model
@@ -2081,6 +2156,16 @@ renderChooseFile label maybeFile getter =
         ]
 
 
+accountIsVerified : Model -> Bool
+accountIsVerified model =
+    case model.account of
+        Nothing ->
+            False
+
+        Just account ->
+            account.is_verified
+
+
 accountsSelectedUI : Model -> Html Msg
 accountsSelectedUI model =
     p []
@@ -2237,6 +2322,14 @@ accountsSelectedUI model =
                     "PostFollow"
             ]
         , br
+        , if not <| accountIsVerified model then
+            text ""
+
+          else
+            span []
+                [ text "[account is verified. Changing display name will error]"
+                , br
+                ]
         , b "Display name: "
         , input
             [ size 40
@@ -2251,8 +2344,9 @@ accountsSelectedUI model =
             [ rows 4
             , cols 50
             , onInput SetNote
+            , value model.note
             ]
-            [ text model.note ]
+            []
         , br
         , renderChooseFile "Avatar: " model.avatarFile GetAvatarFile
         , br
@@ -2263,7 +2357,14 @@ accountsSelectedUI model =
         , privacyRadio UnlistedPrivacy "unlisted " model.privacy
         , privacyRadio PrivatePrivacy "private " model.privacy
         , br
-        , b "Sensitive: "
+        , b "Locked: "
+        , input
+            [ type_ "checkbox"
+            , checked model.locked
+            , onCheck SetLocked
+            ]
+            []
+        , b " Sensitive: "
         , input
             [ type_ "checkbox"
             , checked model.sensitive
@@ -2278,11 +2379,40 @@ accountsSelectedUI model =
             ]
             []
         , br
+        , b "Profile metadata:"
+        , br
+        , List.map2 fieldEditorUI
+            model.fields
+            (List.range 0 <| List.length model.fields)
+            |> List.intersperse [ br ]
+            |> List.concat
+            |> span []
+        , br
         , button [ onClick SendPatchUpdateCredentials ]
             [ text "PatchUpdateCredentials" ]
 
         -- avatar (File), header (File), privacy (Privacy), sensitive (Bool), language (Maybe String)
         ]
+
+
+fieldEditorUI : Field -> Int -> List (Html Msg)
+fieldEditorUI field idx =
+    [ input
+        [ size 20
+        , onInput <| SetField idx False
+        , value field.name
+        , placeholder "name"
+        ]
+        []
+    , text " "
+    , input
+        [ size 30
+        , onInput <| SetField idx True
+        , value field.value
+        , placeholder "value"
+        ]
+        []
+    ]
 
 
 loginSelectedUI : Model -> Html Msg
@@ -2383,6 +2513,8 @@ The "GetRelationships" button returns a list of `Relationship` entities, one for
 The "GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" is non-blank, it is the maximum number of entities to return.
 
 The "Postfollow / PostUnfollow" button either follows or unfollows the account with the given "id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "id" causes A `GetRelationships` request to be sent.
+
+The "PatchUpdateCredentials" button changes account profile information from "Display name", "Note", "Avatar", "Header", "Privacy", "Locked", "Sensitive", "Language", and "Profile MetaData". Only the changed fields are sent to the server. The displayed field values are updated whenever a request returns the logged-in user's `Account` entity, e.g. at login or when you press the "GetVerifyCredentials" button.
             """
 
         else if model.selectedRequest == BlocksSelected then

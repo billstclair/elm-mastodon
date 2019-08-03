@@ -1108,11 +1108,12 @@ decoders =
 
 
 ---
---- Modify the incoming RawRequest to perform the requested operation.
+--- For each `FooReq` type, the `fooReq` function below
+--- modifies the incoming RawRequest to perform the requested operation.
 --- This means at least setting the `method`, `url`, and `decoder`.
 --- For POST, PUT, and PATCH requests, this also sets the `body`,
 --- usually to a JSON string.
---- The `url` value is just the part after "https://<server>/api/v1/"
+--- The `url` value is the part after "https://<server>/api/v1/"
 ---
 
 
