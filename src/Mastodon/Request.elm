@@ -239,6 +239,16 @@ type AccountsReq
 
 `PostApp` results in an `AppEntity`.
 
+These are not associated with your account on Mastodon servers, but
+they need to be deleted when you're done with them on Pleroma servers
+(if you use one to get a token, and you wouldn't bother to make it
+except for that). I don't know yet how to delete them, except in the
+Pleroma server's web API (the "Security" tab at
+`https://<pleroma-server.com>/user-settings`).
+
+You will rarely use `PostApp` directly, instead allowing the functions
+in the `Mastodon.Login` module to do that for you.
+
 -}
 type AppsReq
     = PostApp
@@ -334,13 +344,13 @@ type FiltersReq
 
 {-| GET/POST /api/v1/follow\_requests
 
-`GetFollowRequest` results in an `AccountEntity`.
+`GetFollowRequests` results in an `AccountListEntity`.
 
 `PostAuthorizeFollow` and `PostRejectFollow` result in `NoEntity`.
 
 -}
 type FollowReq
-    = GetFollowRequest { limit : Maybe Int }
+    = GetFollowRequests { limit : Maybe Int }
     | PostAuthorizeFollow { id : String }
     | PostRejectFollow { id : String }
 
@@ -1662,7 +1672,7 @@ followReq req res =
             apiReq.follow_requests
     in
     case req of
-        GetFollowRequest { limit } ->
+        GetFollowRequests { limit } ->
             { res
                 | url =
                     relative [ r ] <|
