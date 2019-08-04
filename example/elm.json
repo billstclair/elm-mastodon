@@ -24,6 +24,7 @@
             "elm-community/list-extra": "8.2.0",
             "elm-community/string-extra": "4.0.1",
             "elm-explorations/markdown": "1.0.0",
+            "klazuka/elm-json-tree-view": "2.1.0",
             "truqu/elm-base64": "2.0.4",
             "truqu/elm-oauth2": "5.0.0"
         },

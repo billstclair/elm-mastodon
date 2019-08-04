@@ -66,6 +66,7 @@ import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
+import JsonTree
 import List.Extra as LE
 import Markdown
 import Mastodon.EncodeDecode as ED
@@ -157,6 +158,10 @@ type alias Model =
     , request : Maybe RawRequest
     , response : Maybe Value
     , entity : Maybe Entity
+    , responseTree : Result JD.Error JsonTree.Node
+    , responseState : JsonTree.State
+    , entityTree : Result JD.Error JsonTree.Node
+    , entityState : JsonTree.State
     , metadata : Maybe Http.Metadata
     , savedModel : Maybe SavedModel
     , key : Key
@@ -421,6 +426,10 @@ init value url key =
     , request = Nothing
     , response = Nothing
     , entity = Nothing
+    , responseTree = emptyJsonTree
+    , responseState = JsonTree.defaultState
+    , entityTree = emptyJsonTree
+    , entityState = JsonTree.defaultState
     , metadata = Nothing
     , savedModel = Nothing
     , key = key
@@ -669,8 +678,45 @@ socketHandler response state mdl =
             model |> withNoCmd
 
 
+emptyJsonTree : Result JD.Error JsonTree.Node
+emptyJsonTree =
+    JsonTree.parseString "[]"
+
+
+updateJsonTrees : Model -> Model
+updateJsonTrees model =
+    let
+        responseTree =
+            case model.response of
+                Nothing ->
+                    emptyJsonTree
+
+                Just v ->
+                    JsonTree.parseValue v
+
+        entityTree =
+            case model.entity of
+                Nothing ->
+                    emptyJsonTree
+
+                Just entity ->
+                    ED.encodeEntity entity
+                        |> JsonTree.parseValue
+    in
+    { model
+        | responseTree = responseTree
+        , responseState = JsonTree.defaultState
+        , entityTree = entityTree
+        , entityState = JsonTree.defaultState
+    }
+
+
 updatePatchCredentialsInputs : Model -> Model
-updatePatchCredentialsInputs model =
+updatePatchCredentialsInputs mdl =
+    let
+        model =
+            updateJsonTrees mdl
+    in
     case model.account of
         Nothing ->
             { model
@@ -1034,6 +1080,7 @@ updateInternal msg model =
                                 , response = Just instance.v
                                 , entity = Just response.entity
                             }
+                                |> updateJsonTrees
                                 |> withNoCmd
 
                         _ ->
@@ -1110,6 +1157,7 @@ updateInternal msg model =
                                                     , entity =
                                                         Just response.entity
                                                 }
+                                                    |> updateJsonTrees
                                     in
                                     { mdl
                                         | isAccountFollowed =
@@ -1730,6 +1778,7 @@ receiveResponse result model =
                 , response = Just <| ED.entityValue response.entity
                 , entity = Just response.entity
             }
+                |> updateJsonTrees
                 |> withNoCmd
 
 
