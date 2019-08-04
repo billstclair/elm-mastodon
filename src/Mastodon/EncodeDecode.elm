@@ -228,6 +228,9 @@ encodeEntity entity =
         ConversationEntity conversation ->
             encodeConversation conversation
 
+        ConversationListEntity conversations ->
+            JE.list encodeConversation conversations
+
         GroupEntity conversation ->
             encodeGroup conversation
 
@@ -434,6 +437,9 @@ entityValue entity =
 
             else
                 conversation.v
+
+        ConversationListEntity conversations ->
+            JE.list entityValue (List.map ConversationEntity conversations)
 
         GroupEntity group ->
             if group.v == JE.null then
@@ -887,7 +893,7 @@ encodeVideoMetaInfo { width, height, frame_rate, duration, bitrate } =
     JE.object
         [ ( "width", encodeMaybe JE.int width )
         , ( "height", encodeMaybe JE.int height )
-        , ( "frame_rate", encodeMaybe JE.int frame_rate )
+        , ( "frame_rate", encodeMaybe JE.string frame_rate )
         , ( "duration", encodeMaybe JE.float duration )
         , ( "bitrate", encodeMaybe JE.int bitrate )
         ]
@@ -898,7 +904,7 @@ videoMetaInfoDecoder =
     JD.succeed VideoMetaInfo
         |> optional "width" (JD.nullable JD.int) Nothing
         |> optional "height" (JD.nullable JD.int) Nothing
-        |> optional "frame_rate" (JD.nullable JD.int) Nothing
+        |> optional "frame_rate" (JD.nullable JD.string) Nothing
         |> optional "duration" (JD.nullable JD.float) Nothing
         |> optional "bitrate" (JD.nullable JD.int) Nothing
 

@@ -656,6 +656,10 @@ type TimelinesReq
         { list_id : String
         , paging : Maybe Paging
         }
+    | GetGroupTimeline
+        { group_id : String
+        , paging : Maybe Paging
+        }
 
 
 {-| A response from an API request.
@@ -2431,6 +2435,14 @@ timelinesReq req res =
             { res
                 | url =
                     relative [ r, "list", list_id ] <|
+                        pagingParameters paging
+                , decoder = decoders.statusList
+            }
+
+        GetGroupTimeline { group_id, paging } ->
+            { res
+                | url =
+                    relative [ r, "group", group_id ] <|
                         pagingParameters paging
                 , decoder = decoders.statusList
             }

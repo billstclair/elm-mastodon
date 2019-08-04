@@ -318,7 +318,7 @@ type alias ImageMetaInfo =
 type alias VideoMetaInfo =
     { width : Maybe Int
     , height : Maybe Int
-    , frame_rate : Maybe Int
+    , frame_rate : Maybe String
     , duration : Maybe Float
     , bitrate : Maybe Int
     }

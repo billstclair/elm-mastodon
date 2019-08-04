@@ -131,6 +131,9 @@ type alias Model =
     , excludeReplies : Bool
     , excludeReblogs : Bool
     , paging : Maybe Paging
+    , local : Bool
+    , hashtag : String
+    , listId : String
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -210,6 +213,9 @@ type Msg
     | SetSensitive Bool
     | SetLanguage String
     | SetGroupId String
+    | ToggleLocal
+    | SetHashtag String
+    | SetListId String
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
     | SendGetVerifyCredentials
@@ -224,6 +230,12 @@ type Msg
     | SendPatchUpdateCredentials
     | SendGetGroups
     | SendGetGroup
+    | SendGetHomeTimeline
+    | SendGetConversations
+    | SendGetPublicTimeline
+    | SendGetTagTimeline
+    | SendGetListTimeline
+    | SendGetGroupTimeline
     | ReceiveResponse (Result Error Response)
 
 
@@ -379,6 +391,9 @@ init value url key =
     , excludeReplies = False
     , excludeReblogs = False
     , paging = Nothing
+    , local = False
+    , hashtag = ""
+    , listId = ""
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -1264,6 +1279,18 @@ updateInternal msg model =
             { model | groupId = groupId }
                 |> withNoCmd
 
+        ToggleLocal ->
+            { model | local = not model.local }
+                |> withNoCmd
+
+        SetHashtag hashtag ->
+            { model | hashtag = hashtag }
+                |> withNoCmd
+
+        SetListId listId ->
+            { model | listId = listId }
+                |> withNoCmd
+
         SendGetVerifyCredentials ->
             sendRequest (AccountsRequest Request.GetVerifyCredentials) model
 
@@ -1374,6 +1401,63 @@ updateInternal msg model =
         SendGetGroup ->
             sendRequest
                 (GroupsRequest <| Request.GetGroup { id = model.groupId })
+                model
+
+        SendGetHomeTimeline ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetHomeTimeline { paging = model.paging }
+                )
+                model
+
+        SendGetConversations ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetConversations { paging = model.paging }
+                )
+                model
+
+        SendGetPublicTimeline ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetPublicTimeline
+                        { local = model.local
+                        , only_media = model.onlyMedia
+                        , paging = model.paging
+                        }
+                )
+                model
+
+        SendGetTagTimeline ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetTagTimeline
+                        { hashtag = model.hashtag
+                        , local = model.local
+                        , only_media = model.onlyMedia
+                        , paging = model.paging
+                        }
+                )
+                model
+
+        SendGetListTimeline ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetListTimeline
+                        { list_id = model.listId
+                        , paging = model.paging
+                        }
+                )
+                model
+
+        SendGetGroupTimeline ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetGroupTimeline
+                        { group_id = model.groupId
+                        , paging = model.paging
+                        }
+                )
                 model
 
         ReceiveResponse result ->
@@ -1761,6 +1845,7 @@ type SelectedRequest
     | AccountsSelected
     | BlocksSelected
     | GroupsSelected
+    | TimelinesSelected
 
 
 encodeSelectedRequest : SelectedRequest -> Value
@@ -1782,6 +1867,9 @@ selectedRequestToString selectedRequest =
 
         GroupsSelected ->
             "GroupsRequest"
+
+        TimelinesSelected ->
+            "TimelinesRequest"
 
 
 selectedRequestDecoder : Decoder SelectedRequest
@@ -1805,6 +1893,9 @@ selectedRequestFromString s =
 
         "GroupsRequest" ->
             GroupsSelected
+
+        "TimelinesRequest" ->
+            TimelinesSelected
 
         _ ->
             LoginSelected
@@ -1948,6 +2039,7 @@ view model =
                         , selectedRequestHtml AccountsSelected model accountsSelectedUI
                         , selectedRequestHtml BlocksSelected model blocksSelectedUI
                         , selectedRequestHtml GroupsSelected model groupsSelectedUI
+                        , selectedRequestHtml TimelinesSelected model timelinesSelectedUI
                         ]
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
@@ -2126,6 +2218,72 @@ groupsSelectedUI model =
         ]
 
 
+timelinesSelectedUI : Model -> Html Msg
+timelinesSelectedUI model =
+    p []
+        [ pspace
+
+        -- Paging UI goes first, but not yet
+        , button [ onClick SendGetHomeTimeline ]
+            [ text "GetHomeTimeline" ]
+        , text " "
+        , button [ onClick SendGetConversations ]
+            [ text "GetConversations" ]
+        , br
+        , span [ onClick ToggleLocal ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.local
+                ]
+                []
+            , b "local "
+            ]
+        , span [ onClick ToggleOnlyMedia ]
+            [ input
+                [ type_ "checkbox"
+                , checked model.onlyMedia
+                ]
+                []
+            , b "media only "
+            ]
+        , button [ onClick SendGetPublicTimeline ]
+            [ text "GetPublicTimeline" ]
+        , br
+        , b "hashtag: "
+        , input
+            [ size 30
+            , onInput SetHashtag
+            , value model.hashtag
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetTagTimeline ]
+            [ text "GetTagTimeline" ]
+        , br
+        , b "list id: "
+        , input
+            [ size 20
+            , onInput SetListId
+            , value model.listId
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetListTimeline ]
+            [ text "GetListTimeline" ]
+        , br
+        , b "group id: "
+        , input
+            [ size 20
+            , onInput SetGroupId
+            , value model.groupId
+            ]
+            []
+        , text " "
+        , button [ onClick SendGetGroupTimeline ]
+            [ text "GetGroupTimeline" ]
+        ]
+
+
 renderChooseFile : String -> Maybe File -> (Bool -> Msg) -> Html Msg
 renderChooseFile label maybeFile getter =
     span []
@@ -2215,7 +2373,7 @@ accountsSelectedUI model =
                 , checked model.onlyMedia
                 ]
                 []
-            , b "only media"
+            , b "media only"
             ]
         , text " "
         , span [ onClick TogglePinned ]
@@ -2330,7 +2488,7 @@ accountsSelectedUI model =
                 [ text "[account is verified. Changing display name will error]"
                 , br
                 ]
-        , b "Display name: "
+        , b "display name: "
         , input
             [ size 40
             , onInput SetDisplayName
@@ -2338,7 +2496,7 @@ accountsSelectedUI model =
             ]
             []
         , br
-        , b "Note:"
+        , b "note:"
         , br
         , textarea
             [ rows 4
@@ -2348,30 +2506,31 @@ accountsSelectedUI model =
             ]
             []
         , br
-        , renderChooseFile "Avatar: " model.avatarFile GetAvatarFile
+        , renderChooseFile "avatar: " model.avatarFile GetAvatarFile
         , br
-        , renderChooseFile "Header: " model.headerFile GetHeaderFile
+        , renderChooseFile "header: " model.headerFile GetHeaderFile
         , br
-        , b "Privacy: "
+        , b "privacy: "
         , privacyRadio PublicPrivacy "public " model.privacy
         , privacyRadio UnlistedPrivacy "unlisted " model.privacy
         , privacyRadio PrivatePrivacy "private " model.privacy
         , br
-        , b "Locked: "
         , input
             [ type_ "checkbox"
             , checked model.locked
             , onCheck SetLocked
             ]
             []
-        , b " Sensitive: "
+        , b "locked "
         , input
             [ type_ "checkbox"
             , checked model.sensitive
             , onCheck SetSensitive
             ]
             []
-        , b " Language: "
+        , b "sensitive "
+        , br
+        , b "Language: "
         , input
             [ size 2
             , onInput SetLanguage
@@ -2419,7 +2578,7 @@ loginSelectedUI : Model -> Html Msg
 loginSelectedUI model =
     p []
         [ pspace
-        , b "Server: "
+        , b "server: "
         , input
             [ size 30
             , onInput SetServer
@@ -2533,6 +2692,23 @@ Groups are a Gab-only feature.
 Click "GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
 
 Click "GetGroup" to get information about the group with the given "id".
+            """
+
+        else if model.selectedRequest == TimelinesSelected then
+            """
+**TimelinesRequest Help**
+
+The "GetHomeTimeline" button returns the statuses for those you follow.
+
+The "GetConversations" button returns a list of conversations. I don't know what a conversation is, possibly the PM feature.
+
+The "GetPublicTimeline" button returns the public timeline, with local posts only if "local" is checked, and with "media" posts only if "media only" is checked.
+
+The "GetTagTimeline" button returns posts containing the given "hashtag", with local posts only if "local" is checked, and with "media" posts only if "media only" is checked.
+
+The "GetListTimeline" button returns posts for the list with the given "list id".
+
+The "GetGroupTimeline" button returns posts for the given "group id".
             """
 
         else
@@ -2659,6 +2835,14 @@ type alias SavedModel =
     , showEntity : Bool
     , whichGroups : WhichGroups
     , followReblogs : Bool
+    , onlyMedia : Bool
+    , pinned : Bool
+    , excludeReplies : Bool
+    , excludeReblogs : Bool
+    , paging : Maybe Paging
+    , local : Bool
+    , hashtag : String
+    , listId : String
     }
 
 
@@ -2683,6 +2867,14 @@ modelToSavedModel model =
     , showEntity = model.showEntity
     , whichGroups = model.whichGroups
     , followReblogs = model.followReblogs
+    , onlyMedia = model.onlyMedia
+    , pinned = model.pinned
+    , excludeReplies = model.excludeReplies
+    , excludeReblogs = model.excludeReblogs
+    , paging = model.paging
+    , local = model.local
+    , hashtag = model.hashtag
+    , listId = model.listId
     }
 
 
@@ -2708,6 +2900,14 @@ savedModelToModel savedModel model =
         , showEntity = savedModel.showEntity
         , whichGroups = savedModel.whichGroups
         , followReblogs = savedModel.followReblogs
+        , onlyMedia = savedModel.onlyMedia
+        , pinned = savedModel.pinned
+        , excludeReplies = savedModel.excludeReplies
+        , excludeReblogs = savedModel.excludeReblogs
+        , paging = savedModel.paging
+        , local = savedModel.local
+        , hashtag = savedModel.hashtag
+        , listId = savedModel.listId
     }
 
 
@@ -2745,6 +2945,29 @@ whichGroupsDecoder =
             )
 
 
+{-| Encode `Paging` into `Value`
+-}
+encodePaging : Paging -> Value
+encodePaging { max_id, since_id, min_id, limit } =
+    JE.object
+        [ ( "max_id", ED.encodeMaybe JE.string max_id )
+        , ( "since_id", ED.encodeMaybe JE.string since_id )
+        , ( "min_id", ED.encodeMaybe JE.string min_id )
+        , ( "limit", ED.encodeMaybe JE.int limit )
+        ]
+
+
+{-| Decode `Paging`
+-}
+pagingDecoder : Decoder Paging
+pagingDecoder =
+    JD.succeed Paging
+        |> optional "max_id" (JD.nullable JD.string) Nothing
+        |> optional "since_id" (JD.nullable JD.string) Nothing
+        |> optional "min_id" (JD.nullable JD.string) Nothing
+        |> optional "limit" (JD.nullable JD.int) Nothing
+
+
 encodeSavedModel : SavedModel -> Value
 encodeSavedModel savedModel =
     JE.object
@@ -2767,6 +2990,14 @@ encodeSavedModel savedModel =
         , ( "showEntity", JE.bool savedModel.showEntity )
         , ( "whichGroups", encodeWhichGroups savedModel.whichGroups )
         , ( "followReblogs", JE.bool savedModel.followReblogs )
+        , ( "onlyMedia", JE.bool savedModel.onlyMedia )
+        , ( "pinned", JE.bool savedModel.pinned )
+        , ( "excludeReplies", JE.bool savedModel.excludeReplies )
+        , ( "excludeReblogs", JE.bool savedModel.excludeReblogs )
+        , ( "paging", ED.encodeMaybe encodePaging savedModel.paging )
+        , ( "local", JE.bool savedModel.local )
+        , ( "hashtag", JE.string savedModel.hashtag )
+        , ( "listId", JE.string savedModel.listId )
         ]
 
 
@@ -2804,6 +3035,14 @@ savedModelDecoder =
         |> optional "showEntity" JD.bool False
         |> optional "whichGroups" whichGroupsDecoder Request.MemberGroups
         |> optional "followReblogs" JD.bool True
+        |> optional "onlyMedia" JD.bool False
+        |> optional "pinned" JD.bool False
+        |> optional "excludeReplies" JD.bool False
+        |> optional "excludeReblogs" JD.bool False
+        |> optional "paging" (JD.nullable pagingDecoder) Nothing
+        |> optional "local" JD.bool False
+        |> optional "hashtag" JD.string ""
+        |> optional "listId" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
