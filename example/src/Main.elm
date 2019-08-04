@@ -106,6 +106,23 @@ type Started
     | Started
 
 
+type alias PagingInput =
+    { max_id : String
+    , since_id : String
+    , min_id : String
+    , limit : String
+    }
+
+
+emptyPagingInput : PagingInput
+emptyPagingInput =
+    { max_id = ""
+    , since_id = ""
+    , min_id = ""
+    , limit = ""
+    }
+
+
 type alias Model =
     { token : Maybe String
     , server : String
@@ -115,7 +132,6 @@ type alias Model =
     , selectedRequest : SelectedRequest
     , username : String
     , accountId : String
-    , limit : String
     , accountIds : String
     , showMetadata : Bool
     , q : String
@@ -130,7 +146,7 @@ type alias Model =
     , pinned : Bool
     , excludeReplies : Bool
     , excludeReblogs : Bool
-    , paging : Maybe Paging
+    , pagingInput : PagingInput
     , local : Bool
     , hashtag : String
     , listId : String
@@ -209,8 +225,8 @@ type Msg
     | GetHeaderFile Bool
     | ReceiveHeaderFile File
     | SetPrivacy Privacy
-    | SetLocked Bool
-    | SetSensitive Bool
+    | ToggleLocked
+    | ToggleSensitive
     | SetLanguage String
     | SetGroupId String
     | ToggleLocal
@@ -375,7 +391,6 @@ init value url key =
     , selectedRequest = LoginSelected
     , username = ""
     , accountId = ""
-    , limit = ""
     , accountIds = ""
     , showMetadata = False
     , q = ""
@@ -390,7 +405,7 @@ init value url key =
     , pinned = False
     , excludeReplies = False
     , excludeReblogs = False
-    , paging = Nothing
+    , pagingInput = emptyPagingInput
     , local = False
     , hashtag = ""
     , listId = ""
@@ -714,6 +729,39 @@ imageMimeTypes =
     , "image/gif"
     , "image/png"
     ]
+
+
+pagingInputToPaging : PagingInput -> Maybe Paging
+pagingInputToPaging pagingInput =
+    let
+        { max_id, since_id, min_id, limit } =
+            pagingInput
+
+        ilimit =
+            Maybe.withDefault -1 <| String.toInt limit
+
+        nothingIfBlank x =
+            if x == "" then
+                Nothing
+
+            else
+                Just x
+    in
+    if max_id == "" && since_id == "" && min_id == "" && ilimit < 0 then
+        Nothing
+
+    else
+        Just
+            { max_id = nothingIfBlank max_id
+            , since_id = nothingIfBlank since_id
+            , min_id = nothingIfBlank min_id
+            , limit =
+                if ilimit < 0 then
+                    Nothing
+
+                else
+                    Just ilimit
+            }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -1182,7 +1230,11 @@ updateInternal msg model =
                 |> withCmd (getAccountIdRelationships True mdl)
 
         SetLimit limit ->
-            { model | limit = limit }
+            let
+                pagingInput =
+                    model.pagingInput
+            in
+            { model | pagingInput = { pagingInput | limit = limit } }
                 |> withNoCmd
 
         ToggleOnlyMedia ->
@@ -1263,12 +1315,12 @@ updateInternal msg model =
             { model | privacy = privacy }
                 |> withNoCmd
 
-        SetLocked locked ->
-            { model | locked = locked }
+        ToggleLocked ->
+            { model | locked = not model.locked }
                 |> withNoCmd
 
-        SetSensitive sensitive ->
-            { model | sensitive = sensitive }
+        ToggleSensitive ->
+            { model | sensitive = not model.sensitive }
                 |> withNoCmd
 
         SetLanguage language ->
@@ -1315,7 +1367,7 @@ updateInternal msg model =
                 (AccountsRequest <|
                     Request.GetFollowers
                         { id = getAccountId model
-                        , limit = String.toInt model.limit
+                        , limit = String.toInt model.pagingInput.limit
                         }
                 )
                 model
@@ -1325,7 +1377,7 @@ updateInternal msg model =
                 (AccountsRequest <|
                     Request.GetFollowing
                         { id = getAccountId model
-                        , limit = String.toInt model.limit
+                        , limit = String.toInt model.pagingInput.limit
                         }
                 )
                 model
@@ -1338,16 +1390,7 @@ updateInternal msg model =
                         , only_media = model.onlyMedia
                         , pinned = model.pinned
                         , exclude_replies = model.excludeReplies
-                        , paging =
-                            case String.toInt model.limit of
-                                Nothing ->
-                                    Nothing
-
-                                Just limit ->
-                                    Just
-                                        { emptyPaging
-                                            | limit = Just limit
-                                        }
+                        , paging = pagingInputToPaging model.pagingInput
                         , exclude_reblogs = model.excludeReblogs
                         }
                 )
@@ -1369,7 +1412,7 @@ updateInternal msg model =
                 (AccountsRequest <|
                     Request.GetSearchAccounts
                         { q = model.q
-                        , limit = String.toInt model.limit
+                        , limit = String.toInt model.pagingInput.limit
                         , resolve = model.resolve
                         , following = model.following
                         }
@@ -1406,14 +1449,16 @@ updateInternal msg model =
         SendGetHomeTimeline ->
             sendRequest
                 (TimelinesRequest <|
-                    Request.GetHomeTimeline { paging = model.paging }
+                    Request.GetHomeTimeline
+                        { paging = pagingInputToPaging model.pagingInput }
                 )
                 model
 
         SendGetConversations ->
             sendRequest
                 (TimelinesRequest <|
-                    Request.GetConversations { paging = model.paging }
+                    Request.GetConversations
+                        { paging = pagingInputToPaging model.pagingInput }
                 )
                 model
 
@@ -1423,7 +1468,7 @@ updateInternal msg model =
                     Request.GetPublicTimeline
                         { local = model.local
                         , only_media = model.onlyMedia
-                        , paging = model.paging
+                        , paging = pagingInputToPaging model.pagingInput
                         }
                 )
                 model
@@ -1435,7 +1480,7 @@ updateInternal msg model =
                         { hashtag = model.hashtag
                         , local = model.local
                         , only_media = model.onlyMedia
-                        , paging = model.paging
+                        , paging = pagingInputToPaging model.pagingInput
                         }
                 )
                 model
@@ -1445,7 +1490,7 @@ updateInternal msg model =
                 (TimelinesRequest <|
                     Request.GetListTimeline
                         { list_id = model.listId
-                        , paging = model.paging
+                        , paging = pagingInputToPaging model.pagingInput
                         }
                 )
                 model
@@ -1455,7 +1500,7 @@ updateInternal msg model =
                 (TimelinesRequest <|
                     Request.GetGroupTimeline
                         { group_id = model.groupId
-                        , paging = model.paging
+                        , paging = pagingInputToPaging model.pagingInput
                         }
                 )
                 model
@@ -2196,6 +2241,50 @@ blocksSelectedUI model =
         ]
 
 
+maybeLabeledTextInput : Maybe String -> Int -> (String -> Msg) -> String -> Html Msg
+maybeLabeledTextInput label inputSize wrapper string =
+    let
+        inputBox =
+            input
+                [ size inputSize
+                , onInput wrapper
+                , value string
+                ]
+                []
+    in
+    case label of
+        Nothing ->
+            inputBox
+
+        Just lab ->
+            span []
+                [ b lab
+                , inputBox
+                ]
+
+
+textInput : String -> Int -> (String -> Msg) -> String -> Html Msg
+textInput label =
+    maybeLabeledTextInput (Just label)
+
+
+unlabeledTextInput : Int -> (String -> Msg) -> String -> Html Msg
+unlabeledTextInput =
+    maybeLabeledTextInput Nothing
+
+
+checkBox : Msg -> Bool -> String -> Html Msg
+checkBox msg isChecked label =
+    span [ onClick msg ]
+        [ input
+            [ type_ "checkbox"
+            , checked isChecked
+            ]
+            []
+        , b label
+        ]
+
+
 groupsSelectedUI : Model -> Html Msg
 groupsSelectedUI model =
     p []
@@ -2205,13 +2294,7 @@ groupsSelectedUI model =
         , button [ onClick SendGetGroups ]
             [ text "GetGroups" ]
         , br
-        , b "id: "
-        , input
-            [ size 20
-            , onInput SetGroupId
-            , value model.groupId
-            ]
-            []
+        , textInput "id: " 20 SetGroupId model.groupId
         , text " "
         , button [ onClick SendGetGroup ]
             [ text "GetGroup" ]
@@ -2230,54 +2313,22 @@ timelinesSelectedUI model =
         , button [ onClick SendGetConversations ]
             [ text "GetConversations" ]
         , br
-        , span [ onClick ToggleLocal ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.local
-                ]
-                []
-            , b "local "
-            ]
-        , span [ onClick ToggleOnlyMedia ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.onlyMedia
-                ]
-                []
-            , b "media only "
-            ]
+        , checkBox ToggleLocal model.local "local "
+        , checkBox ToggleOnlyMedia model.onlyMedia "media only "
         , button [ onClick SendGetPublicTimeline ]
             [ text "GetPublicTimeline" ]
         , br
-        , b "hashtag: "
-        , input
-            [ size 30
-            , onInput SetHashtag
-            , value model.hashtag
-            ]
-            []
+        , textInput "hashtag: " 30 SetHashtag model.hashtag
         , text " "
         , button [ onClick SendGetTagTimeline ]
             [ text "GetTagTimeline" ]
         , br
-        , b "list id: "
-        , input
-            [ size 20
-            , onInput SetListId
-            , value model.listId
-            ]
-            []
+        , textInput "list id: " 20 SetListId model.listId
         , text " "
         , button [ onClick SendGetListTimeline ]
             [ text "GetListTimeline" ]
         , br
-        , b "group id: "
-        , input
-            [ size 20
-            , onInput SetGroupId
-            , value model.groupId
-            ]
-            []
+        , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
         , button [ onClick SendGetGroupTimeline ]
             [ text "GetGroupTimeline" ]
@@ -2331,35 +2382,17 @@ accountsSelectedUI model =
         , button [ onClick SendGetVerifyCredentials ]
             [ text "GetVerifyCredentials" ]
         , br
-        , b "username: "
-        , input
-            [ size 30
-            , onInput SetUsername
-            , value model.username
-            ]
-            []
+        , textInput "username: " 30 SetUsername model.username
         , text " "
         , button [ onClick SendGetAccountByUsername ]
             [ text "GetAccountByUsername" ]
         , br
-        , b "id: "
-        , input
-            [ size 20
-            , onInput SetAccountId
-            , value model.accountId
-            ]
-            []
+        , textInput "id: " 20 SetAccountId model.accountId
         , text " "
         , button [ onClick SendGetAccount ]
             [ text "GetAccount" ]
         , br
-        , b "limit: "
-        , input
-            [ size 10
-            , onInput SetLimit
-            , value model.limit
-            ]
-            []
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
         , text " "
         , button [ onClick SendGetFollowers ]
             [ text "GetFollowers" ]
@@ -2367,110 +2400,36 @@ accountsSelectedUI model =
         , button [ onClick SendGetFollowing ]
             [ text "GetFollowing" ]
         , br
-        , span [ onClick ToggleOnlyMedia ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.onlyMedia
-                ]
-                []
-            , b "media only"
-            ]
+        , checkBox ToggleOnlyMedia model.onlyMedia "media only"
         , text " "
-        , span [ onClick TogglePinned ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.pinned
-                ]
-                []
-            , b "pinned"
-            ]
+        , checkBox TogglePinned model.pinned "pinned"
         , text " "
-        , span [ onClick ToggleExcludeReplies ]
-            [ input
-                [ type_ "checkbox"
-                , checked <| not model.excludeReplies
-                ]
-                []
-            , b "replies"
-            ]
+        , checkBox ToggleExcludeReplies (not model.excludeReplies) "replies"
         , text " "
-        , span [ onClick ToggleExcludeReblogs ]
-            [ input
-                [ type_ "checkbox"
-                , checked <| not model.excludeReblogs
-                ]
-                []
-            , b "reblogs"
-            ]
+        , checkBox ToggleExcludeReblogs (not model.excludeReblogs) "reblogs"
         , text " "
         , button [ onClick SendGetStatuses ]
             [ text "GetStatuses" ]
         , br
-        , b "ids (1,2,...): "
-        , input
-            [ size 40
-            , onInput SetAccountIds
-            , value model.accountIds
-            ]
-            []
+        , textInput "ids (1,2,...): " 40 SetAccountIds model.accountIds
         , text " "
         , button [ onClick SendGetRelationships ]
             [ text "GetRelationships" ]
         , br
-        , b "q: "
-        , input
-            [ size 40
-            , onInput SetQ
-            , value model.q
-            ]
-            []
+        , textInput "q: " 40 SetQ model.q
         , br
-        , b "limit: "
-        , input
-            [ size 10
-            , onInput SetLimit
-            , value model.limit
-            ]
-            []
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
         , text " "
-        , span [ onClick ToggleResolve ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.resolve
-                ]
-                []
-            ]
-        , b " resolve "
-        , span [ onClick ToggleFollowing ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.following
-                ]
-                []
-            , b " following "
-            ]
+        , checkBox ToggleResolve model.resolve " resolve "
+        , checkBox ToggleFollowing model.following " following "
         , button [ onClick SendGetSearchAccounts ]
             [ text "GetSearchAccounts" ]
         , br
         , text "-- writes below here --"
         , br
-        , b "id: "
-        , input
-            [ size 20
-            , onInput SetAccountId
-            , value model.accountId
-            ]
-            []
+        , textInput "id: " 20 SetAccountId model.accountId
         , text " "
-        , span [ onClick ToggleFollowReblogs ]
-            [ input
-                [ type_ "checkbox"
-                , checked model.followReblogs
-                , disabled model.isAccountFollowed
-                ]
-                []
-            , b " reblogs "
-            ]
+        , checkBox ToggleFollowReblogs model.followReblogs "reblogs "
         , button [ onClick SendPostFollowOrUnfollow ]
             [ text <|
                 if model.isAccountFollowed then
@@ -2488,13 +2447,7 @@ accountsSelectedUI model =
                 [ text "[account is verified. Changing display name will error]"
                 , br
                 ]
-        , b "display name: "
-        , input
-            [ size 40
-            , onInput SetDisplayName
-            , value model.displayName
-            ]
-            []
+        , textInput "display name: " 40 SetDisplayName model.displayName
         , br
         , b "note:"
         , br
@@ -2515,28 +2468,10 @@ accountsSelectedUI model =
         , privacyRadio UnlistedPrivacy "unlisted " model.privacy
         , privacyRadio PrivatePrivacy "private " model.privacy
         , br
-        , input
-            [ type_ "checkbox"
-            , checked model.locked
-            , onCheck SetLocked
-            ]
-            []
-        , b "locked "
-        , input
-            [ type_ "checkbox"
-            , checked model.sensitive
-            , onCheck SetSensitive
-            ]
-            []
-        , b "sensitive "
+        , checkBox ToggleLocked model.locked "blocked"
+        , checkBox ToggleSensitive model.sensitive "sensitive "
         , br
-        , b "Language: "
-        , input
-            [ size 2
-            , onInput SetLanguage
-            , value model.language
-            ]
-            []
+        , textInput "Language: " 2 SetLanguage model.language
         , br
         , b "Profile metadata:"
         , br
@@ -2702,9 +2637,9 @@ The "GetHomeTimeline" button returns the statuses for those you follow.
 
 The "GetConversations" button returns a list of conversations. I don't know what a conversation is, possibly the PM feature.
 
-The "GetPublicTimeline" button returns the public timeline, with local posts only if "local" is checked, and with "media" posts only if "media only" is checked.
+The "GetPublicTimeline" button returns the public timeline, with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
 
-The "GetTagTimeline" button returns posts containing the given "hashtag", with local posts only if "local" is checked, and with "media" posts only if "media only" is checked.
+The "GetTagTimeline" button returns posts containing the given "hashtag", with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
 
 The "GetListTimeline" button returns posts for the list with the given "list id".
 
@@ -2824,7 +2759,6 @@ type alias SavedModel =
     , selectedRequest : SelectedRequest
     , username : String
     , accountId : String
-    , limit : String
     , accountIds : String
     , showMetadata : Bool
     , q : String
@@ -2839,7 +2773,7 @@ type alias SavedModel =
     , pinned : Bool
     , excludeReplies : Bool
     , excludeReblogs : Bool
-    , paging : Maybe Paging
+    , pagingInput : PagingInput
     , local : Bool
     , hashtag : String
     , listId : String
@@ -2856,7 +2790,6 @@ modelToSavedModel model =
     , selectedRequest = model.selectedRequest
     , username = model.username
     , accountId = model.accountId
-    , limit = model.limit
     , accountIds = model.accountIds
     , showMetadata = model.showMetadata
     , q = model.q
@@ -2871,7 +2804,7 @@ modelToSavedModel model =
     , pinned = model.pinned
     , excludeReplies = model.excludeReplies
     , excludeReblogs = model.excludeReblogs
-    , paging = model.paging
+    , pagingInput = model.pagingInput
     , local = model.local
     , hashtag = model.hashtag
     , listId = model.listId
@@ -2889,7 +2822,6 @@ savedModelToModel savedModel model =
         , selectedRequest = savedModel.selectedRequest
         , username = savedModel.username
         , accountId = savedModel.accountId
-        , limit = savedModel.limit
         , accountIds = savedModel.accountIds
         , showMetadata = savedModel.showMetadata
         , q = savedModel.q
@@ -2904,7 +2836,7 @@ savedModelToModel savedModel model =
         , pinned = savedModel.pinned
         , excludeReplies = savedModel.excludeReplies
         , excludeReblogs = savedModel.excludeReblogs
-        , paging = savedModel.paging
+        , pagingInput = savedModel.pagingInput
         , local = savedModel.local
         , hashtag = savedModel.hashtag
         , listId = savedModel.listId
@@ -2947,25 +2879,25 @@ whichGroupsDecoder =
 
 {-| Encode `Paging` into `Value`
 -}
-encodePaging : Paging -> Value
-encodePaging { max_id, since_id, min_id, limit } =
+encodePagingInput : PagingInput -> Value
+encodePagingInput { max_id, since_id, min_id, limit } =
     JE.object
-        [ ( "max_id", ED.encodeMaybe JE.string max_id )
-        , ( "since_id", ED.encodeMaybe JE.string since_id )
-        , ( "min_id", ED.encodeMaybe JE.string min_id )
-        , ( "limit", ED.encodeMaybe JE.int limit )
+        [ ( "max_id", JE.string max_id )
+        , ( "since_id", JE.string since_id )
+        , ( "min_id", JE.string min_id )
+        , ( "limit", JE.string limit )
         ]
 
 
-{-| Decode `Paging`
+{-| Decode `PagingInput`
 -}
-pagingDecoder : Decoder Paging
-pagingDecoder =
-    JD.succeed Paging
-        |> optional "max_id" (JD.nullable JD.string) Nothing
-        |> optional "since_id" (JD.nullable JD.string) Nothing
-        |> optional "min_id" (JD.nullable JD.string) Nothing
-        |> optional "limit" (JD.nullable JD.int) Nothing
+pagingInputDecoder : Decoder PagingInput
+pagingInputDecoder =
+    JD.succeed PagingInput
+        |> required "max_id" JD.string
+        |> required "since_id" JD.string
+        |> required "min_id" JD.string
+        |> required "limit" JD.string
 
 
 encodeSavedModel : SavedModel -> Value
@@ -2979,7 +2911,6 @@ encodeSavedModel savedModel =
         , ( "selectedRequest", encodeSelectedRequest savedModel.selectedRequest )
         , ( "username", JE.string savedModel.username )
         , ( "accountId", JE.string savedModel.accountId )
-        , ( "limit", JE.string savedModel.limit )
         , ( "accountIds", JE.string savedModel.accountIds )
         , ( "showMetadata", JE.bool savedModel.showMetadata )
         , ( "q", JE.string savedModel.q )
@@ -2994,7 +2925,7 @@ encodeSavedModel savedModel =
         , ( "pinned", JE.bool savedModel.pinned )
         , ( "excludeReplies", JE.bool savedModel.excludeReplies )
         , ( "excludeReblogs", JE.bool savedModel.excludeReblogs )
-        , ( "paging", ED.encodeMaybe encodePaging savedModel.paging )
+        , ( "pagingInput", encodePagingInput savedModel.pagingInput )
         , ( "local", JE.bool savedModel.local )
         , ( "hashtag", JE.string savedModel.hashtag )
         , ( "listId", JE.string savedModel.listId )
@@ -3024,7 +2955,6 @@ savedModelDecoder =
         |> optional "selectedRequest" selectedRequestDecoder LoginSelected
         |> optional "username" JD.string ""
         |> optional "accountId" JD.string ""
-        |> optional "limit" JD.string ""
         |> optional "accountIds" JD.string ""
         |> optional "showMetadata" JD.bool False
         |> optional "q" JD.string ""
@@ -3039,7 +2969,7 @@ savedModelDecoder =
         |> optional "pinned" JD.bool False
         |> optional "excludeReplies" JD.bool False
         |> optional "excludeReblogs" JD.bool False
-        |> optional "paging" (JD.nullable pagingDecoder) Nothing
+        |> optional "pagingInput" pagingInputDecoder emptyPagingInput
         |> optional "local" JD.bool False
         |> optional "hashtag" JD.string ""
         |> optional "listId" JD.string ""
