@@ -150,6 +150,7 @@ type alias Model =
     , local : Bool
     , hashtag : String
     , listId : String
+    , smartPaging : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -211,7 +212,11 @@ type Msg
     | ClearAll
     | SetUsername String
     | SetAccountId String
+    | SetMaxId String
+    | SetSinceId String
+    | SetMinId String
     | SetLimit String
+    | ToggleSmartPaging
     | ToggleOnlyMedia
     | TogglePinned
     | ToggleExcludeReplies
@@ -409,6 +414,7 @@ init value url key =
     , local = False
     , hashtag = ""
     , listId = ""
+    , smartPaging = False
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -1229,12 +1235,40 @@ updateInternal msg model =
             mdl
                 |> withCmd (getAccountIdRelationships True mdl)
 
+        SetMaxId maxId ->
+            let
+                pagingInput =
+                    model.pagingInput
+            in
+            { model | pagingInput = { pagingInput | max_id = maxId } }
+                |> withNoCmd
+
+        SetSinceId sinceId ->
+            let
+                pagingInput =
+                    model.pagingInput
+            in
+            { model | pagingInput = { pagingInput | since_id = sinceId } }
+                |> withNoCmd
+
+        SetMinId minId ->
+            let
+                pagingInput =
+                    model.pagingInput
+            in
+            { model | pagingInput = { pagingInput | min_id = minId } }
+                |> withNoCmd
+
         SetLimit limit ->
             let
                 pagingInput =
                     model.pagingInput
             in
             { model | pagingInput = { pagingInput | limit = limit } }
+                |> withNoCmd
+
+        ToggleSmartPaging ->
+            { model | smartPaging = not model.smartPaging }
                 |> withNoCmd
 
         ToggleOnlyMedia ->
@@ -1737,8 +1771,97 @@ applyResponseSideEffects response model =
                 _ ->
                     model
 
+        AccountsRequest (Request.GetStatuses { paging }) ->
+            statusSmartPaging response.entity paging model
+
+        TimelinesRequest req ->
+            case req of
+                Request.GetHomeTimeline { paging } ->
+                    statusSmartPaging response.entity paging model
+
+                Request.GetConversations { paging } ->
+                    case response.entity of
+                        ConversationListEntity conversations ->
+                            smartPaging conversations .id paging model
+
+                        _ ->
+                            model
+
+                Request.GetPublicTimeline { paging } ->
+                    statusSmartPaging response.entity paging model
+
+                Request.GetTagTimeline { paging } ->
+                    statusSmartPaging response.entity paging model
+
+                Request.GetListTimeline { paging } ->
+                    statusSmartPaging response.entity paging model
+
+                Request.GetGroupTimeline { paging } ->
+                    statusSmartPaging response.entity paging model
+
         _ ->
             model
+
+
+statusSmartPaging : Entity -> Maybe Paging -> Model -> Model
+statusSmartPaging entity paging model =
+    case entity of
+        StatusListEntity statuses ->
+            smartPaging statuses .id paging model
+
+        _ ->
+            model
+
+
+smartPaging : List a -> (a -> String) -> Maybe Paging -> Model -> Model
+smartPaging entities getid paging model =
+    let
+        ( limit, ( max_id, min_id, since_id ) ) =
+            Debug.log "paging" <|
+                case paging of
+                    Nothing ->
+                        -- use the API default here?
+                        ( 1, ( "", "", "" ) )
+
+                    Just pag ->
+                        ( Maybe.withDefault 1 pag.limit
+                        , ( Maybe.withDefault "" pag.max_id
+                          , Maybe.withDefault "" pag.min_id
+                          , Maybe.withDefault "" pag.since_id
+                          )
+                        )
+
+        pagingInput =
+            model.pagingInput
+    in
+    if not model.smartPaging then
+        model
+
+    else if since_id /= "" then
+        model
+
+    else if min_id /= "" then
+        if max_id /= "" then
+            model
+
+        else
+            case List.head entities of
+                Nothing ->
+                    model
+
+                Just e ->
+                    { model | pagingInput = { pagingInput | min_id = getid e } }
+
+    else if limit <= List.length entities then
+        case LE.last entities of
+            Nothing ->
+                model
+
+            Just e ->
+                { model | pagingInput = { pagingInput | max_id = getid e } }
+
+    else
+        model
 
 
 sendRequest : Request -> Model -> ( Model, Cmd Msg )
@@ -2305,8 +2428,16 @@ timelinesSelectedUI : Model -> Html Msg
 timelinesSelectedUI model =
     p []
         [ pspace
-
-        -- Paging UI goes first, but not yet
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , text " "
+        , checkBox ToggleSmartPaging model.smartPaging "smart paging "
+        , br
+        , textInput "max id: " 25 SetMaxId model.pagingInput.max_id
+        , text " "
+        , textInput "min id: " 25 SetMinId model.pagingInput.min_id
+        , br
+        , textInput "since id: " 25 SetSinceId model.pagingInput.since_id
+        , br
         , button [ onClick SendGetHomeTimeline ]
             [ text "GetHomeTimeline" ]
         , text " "
@@ -2399,6 +2530,14 @@ accountsSelectedUI model =
         , text " "
         , button [ onClick SendGetFollowing ]
             [ text "GetFollowing" ]
+        , br
+        , textInput "max id: " 25 SetMaxId model.pagingInput.max_id
+        , text " "
+        , textInput "min id: " 25 SetMinId model.pagingInput.min_id
+        , br
+        , textInput "since id: " 25 SetSinceId model.pagingInput.since_id
+        , text " "
+        , checkBox ToggleSmartPaging model.smartPaging "smart paging "
         , br
         , checkBox ToggleOnlyMedia model.onlyMedia "media only"
         , text " "
@@ -2633,6 +2772,10 @@ Click "GetGroup" to get information about the group with the given "id".
             """
 **TimelinesRequest Help**
 
+The paging parameters, "limit", "max id", "min id", and "since id" are used for all the timelines requests. The ids are `Status` ids for `GetXXXTimeline` and `Conversation` ids for `GetConversations`.
+
+If "smart paging" is checked, does its best to be smart about changing the paging parameters after a request. If fewer entities are returned than the "limit", and "since id" & "min id" are blank, will set "max id" to the id of the last entity returned. If "min id" is non-blank, and "max id" and "since id" are blank, will set "min id" to the id of the first entity returned.
+
 The "GetHomeTimeline" button returns the statuses for those you follow.
 
 The "GetConversations" button returns a list of conversations. I don't know what a conversation is, possibly the PM feature.
@@ -2777,6 +2920,7 @@ type alias SavedModel =
     , local : Bool
     , hashtag : String
     , listId : String
+    , smartPaging : Bool
     }
 
 
@@ -2808,6 +2952,7 @@ modelToSavedModel model =
     , local = model.local
     , hashtag = model.hashtag
     , listId = model.listId
+    , smartPaging = model.smartPaging
     }
 
 
@@ -2840,6 +2985,7 @@ savedModelToModel savedModel model =
         , local = savedModel.local
         , hashtag = savedModel.hashtag
         , listId = savedModel.listId
+        , smartPaging = savedModel.smartPaging
     }
 
 
@@ -2929,6 +3075,7 @@ encodeSavedModel savedModel =
         , ( "local", JE.bool savedModel.local )
         , ( "hashtag", JE.string savedModel.hashtag )
         , ( "listId", JE.string savedModel.listId )
+        , ( "smartPaging", JE.bool savedModel.smartPaging )
         ]
 
 
@@ -2973,6 +3120,7 @@ savedModelDecoder =
         |> optional "local" JD.bool False
         |> optional "hashtag" JD.string ""
         |> optional "listId" JD.string ""
+        |> optional "smartPaging" JD.bool False
 
 
 put : String -> Maybe Value -> Cmd Msg
