@@ -66,7 +66,7 @@ import Http
 import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
-import JsonTree
+import JsonTree exposing (TaggedValue(..))
 import List.Extra as LE
 import Markdown
 import Mastodon.EncodeDecode as ED
@@ -152,6 +152,7 @@ type alias Model =
     , hashtag : String
     , listId : String
     , smartPaging : Bool
+    , showJsonTree : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -162,6 +163,8 @@ type alias Model =
     , responseState : JsonTree.State
     , entityTree : Result JD.Error JsonTree.Node
     , entityState : JsonTree.State
+    , selectedKeyPath : JsonTree.KeyPath
+    , selectedKeyValue : String
     , metadata : Maybe Http.Metadata
     , savedModel : Maybe SavedModel
     , key : Key
@@ -189,6 +192,11 @@ type Msg
     = Noop
     | OnUrlRequest UrlRequest
     | OnUrlChange Url
+    | SetResponseState JsonTree.State
+    | SetEntityState JsonTree.State
+    | ExpandAll WhichJson
+    | CollapseAll WhichJson
+    | SelectTreeNode WhichJson JsonTree.KeyPath
     | ToggleClearAllDialog
     | OnKeyPress String
     | SetServer String
@@ -222,6 +230,7 @@ type Msg
     | SetMinId String
     | SetLimit String
     | ToggleSmartPaging
+    | ToggleShowJsonTree
     | ToggleOnlyMedia
     | TogglePinned
     | ToggleExcludeReplies
@@ -420,6 +429,7 @@ init value url key =
     , hashtag = ""
     , listId = ""
     , smartPaging = False
+    , showJsonTree = True
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -430,6 +440,8 @@ init value url key =
     , responseState = JsonTree.defaultState
     , entityTree = emptyJsonTree
     , entityState = JsonTree.defaultState
+    , selectedKeyPath = ""
+    , selectedKeyValue = ""
     , metadata = Nothing
     , savedModel = Nothing
     , key = key
@@ -686,28 +698,44 @@ emptyJsonTree =
 updateJsonTrees : Model -> Model
 updateJsonTrees model =
     let
-        responseTree =
-            case model.response of
+        parse : Maybe Value -> ( Result JD.Error JsonTree.Node, JsonTree.State )
+        parse value =
+            case value of
                 Nothing ->
-                    emptyJsonTree
+                    ( emptyJsonTree, JsonTree.defaultState )
 
                 Just v ->
-                    JsonTree.parseValue v
+                    let
+                        result =
+                            JsonTree.parseValue v
+                    in
+                    ( result
+                    , case result of
+                        Err _ ->
+                            JsonTree.defaultState
 
-        entityTree =
+                        Ok root ->
+                            JsonTree.collapseToDepth 1 root JsonTree.defaultState
+                    )
+
+        ( responseTree, responseState ) =
+            parse model.response
+
+        ( entityTree, entityState ) =
             case model.entity of
                 Nothing ->
-                    emptyJsonTree
+                    parse Nothing
 
                 Just entity ->
-                    ED.encodeEntity entity
-                        |> JsonTree.parseValue
+                    parse (Just <| ED.encodeEntity entity)
     in
     { model
         | responseTree = responseTree
-        , responseState = JsonTree.defaultState
+        , responseState = responseState
         , entityTree = entityTree
-        , entityState = JsonTree.defaultState
+        , entityState = entityState
+        , selectedKeyPath = ""
+        , selectedKeyValue = ""
     }
 
 
@@ -867,6 +895,85 @@ updateInternal msg model =
         OnUrlChange _ ->
             model |> withNoCmd
 
+        SetResponseState state ->
+            { model | responseState = state }
+                |> withNoCmd
+
+        SetEntityState state ->
+            { model | entityState = state }
+                |> withNoCmd
+
+        ExpandAll whichJson ->
+            (case whichJson of
+                ResponseJson ->
+                    { model
+                        | responseState =
+                            JsonTree.expandAll model.responseState
+                    }
+
+                DecodedJson ->
+                    { model
+                        | entityState =
+                            JsonTree.expandAll model.entityState
+                    }
+            )
+                |> withNoCmd
+
+        CollapseAll whichJson ->
+            (case whichJson of
+                ResponseJson ->
+                    case model.responseTree of
+                        Ok root ->
+                            { model
+                                | responseState =
+                                    JsonTree.collapseToDepth 1 root model.responseState
+                            }
+
+                        Err _ ->
+                            model
+
+                DecodedJson ->
+                    case model.entityTree of
+                        Ok root ->
+                            { model
+                                | entityState =
+                                    JsonTree.collapseToDepth 1 root model.entityState
+                            }
+
+                        Err _ ->
+                            model
+            )
+                |> withNoCmd
+
+        SelectTreeNode whichJson keyPath ->
+            let
+                result =
+                    case whichJson of
+                        ResponseJson ->
+                            model.responseTree
+
+                        DecodedJson ->
+                            model.entityTree
+
+                value =
+                    case result of
+                        Err _ ->
+                            ""
+
+                        Ok root ->
+                            case findKeyPath keyPath root of
+                                Nothing ->
+                                    ""
+
+                                Just taggedValue ->
+                                    taggedValueToString taggedValue
+            in
+            { model
+                | selectedKeyPath = keyPath
+                , selectedKeyValue = value
+            }
+                |> withNoCmd
+
         ToggleClearAllDialog ->
             { model | clearAllDialogVisible = not model.clearAllDialogVisible }
                 |> withCmd
@@ -923,7 +1030,10 @@ updateInternal msg model =
             { model
                 | request = Nothing
                 , response = Nothing
+                , entity = Nothing
                 , metadata = Nothing
+                , selectedKeyPath = ""
+                , selectedKeyValue = ""
             }
                 |> withNoCmd
 
@@ -1122,6 +1232,8 @@ updateInternal msg model =
                             , request = Nothing
                             , response = Nothing
                             , entity = Nothing
+                            , selectedKeyPath = ""
+                            , selectedKeyValue = ""
                         }
 
                       else
@@ -1191,6 +1303,8 @@ updateInternal msg model =
                     , response = Nothing
                     , entity = Nothing
                     , metadata = Nothing
+                    , selectedKeyPath = ""
+                    , selectedKeyValue = ""
                 }
                     |> withNoCmd
 
@@ -1245,6 +1359,8 @@ updateInternal msg model =
                         , response = Nothing
                         , entity = Nothing
                         , metadata = Nothing
+                        , selectedKeyPath = ""
+                        , selectedKeyValue = ""
                         , msg = Nothing
                     }
                         |> updatePatchCredentialsInputs
@@ -1263,6 +1379,8 @@ updateInternal msg model =
                         , request = Nothing
                         , response = Nothing
                         , entity = Nothing
+                        , selectedKeyPath = ""
+                        , selectedKeyValue = ""
                         , metadata = Nothing
                         , msg = Nothing
                     }
@@ -1317,6 +1435,21 @@ updateInternal msg model =
 
         ToggleSmartPaging ->
             { model | smartPaging = not model.smartPaging }
+                |> withNoCmd
+
+        ToggleShowJsonTree ->
+            let
+                mdl =
+                    if model.showJsonTree then
+                        { model
+                            | selectedKeyPath = ""
+                            , selectedKeyValue = ""
+                        }
+
+                    else
+                        model
+            in
+            { mdl | showJsonTree = not model.showJsonTree }
                 |> withNoCmd
 
         ToggleOnlyMedia ->
@@ -1591,7 +1724,61 @@ updateInternal msg model =
             receiveResponse result model
 
 
-sendPatchUpdateCredentials : Model -> ( Model, Cmd Msg )
+taggedValueToString : TaggedValue -> String
+taggedValueToString taggedValue =
+    case taggedValue of
+        TString string ->
+            string
+
+        TFloat float ->
+            String.fromFloat float
+
+        TBool bool ->
+            if bool then
+                "true"
+
+            else
+                "false"
+
+        TNull ->
+            "null"
+
+        _ ->
+            ""
+
+
+findKeyPath : String -> JsonTree.Node -> Maybe JsonTree.TaggedValue
+findKeyPath keyPath node =
+    if keyPath == node.keyPath then
+        Just node.value
+
+    else
+        let
+            loop nodes =
+                case nodes of
+                    [] ->
+                        Nothing
+
+                    first :: rest ->
+                        case findKeyPath keyPath first of
+                            Nothing ->
+                                loop rest
+
+                            res ->
+                                res
+        in
+        case node.value of
+            TList nodes ->
+                loop nodes
+
+            TDict dict ->
+                Dict.values dict
+                    |> loop
+
+            _ ->
+                Nothing
+
+
 sendPatchUpdateCredentials model =
     case model.account of
         Nothing ->
@@ -1764,6 +1951,8 @@ receiveResponse result model =
                 , response = Nothing
                 , entity = Nothing
                 , metadata = Nothing
+                , selectedKeyPath = ""
+                , selectedKeyValue = ""
             }
                 |> withNoCmd
 
@@ -1933,6 +2122,8 @@ sendRequest request model =
                 , response = Nothing
                 , entity = Nothing
                 , metadata = Nothing
+                , selectedKeyPath = ""
+                , selectedKeyValue = ""
             }
                 |> withCmd
                     (Request.rawRequestToCmd ReceiveResponse rawRequest)
@@ -2261,16 +2452,28 @@ view model =
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
                     , p []
-                        [ span [ onClick TogglePrettify ]
-                            [ input
-                                [ type_ "checkbox"
-                                , checked model.prettify
-                                ]
-                                []
-                            , b "Prettify"
-                            , text " (easier to read, may no longer be valid JSON)"
-                            ]
-                        , text " "
+                        [ case model.selectedKeyValue of
+                            "" ->
+                                text ""
+
+                            selectedKeyValue ->
+                                span []
+                                    [ b "selected path: "
+                                    , text model.selectedKeyPath
+                                    , br
+                                    , textarea
+                                        [ rows 4
+                                        , cols 80
+                                        , disabled True
+                                        , value selectedKeyValue
+                                        ]
+                                        []
+                                    , br
+                                    ]
+                        , checkBox ToggleShowJsonTree model.showJsonTree "show tree"
+                        , br
+                        , checkBox TogglePrettify model.prettify "prettify"
+                        , text " (easier to read, may no longer be valid JSON) "
                         , button [ onClick ClearSentReceived ]
                             [ text "Clear" ]
                         ]
@@ -2331,19 +2534,11 @@ view model =
                             , button [ onClick ToggleShowReceived ]
                                 [ text "Show" ]
                             ]
-                    , if not model.showReceived then
-                        text ""
-
-                      else
-                        pre []
-                            [ case model.response of
-                                Nothing ->
-                                    text ""
-
-                                Just value ->
-                                    text <|
-                                        encodeWrap model.prettify value
-                            ]
+                    , renderJson ResponseJson
+                        model
+                        model.showReceived
+                        model.response
+                        Nothing
                     , p [] <|
                         if model.showEntity then
                             [ b "Decoded:"
@@ -2356,21 +2551,11 @@ view model =
                             , button [ onClick ToggleShowEntity ]
                                 [ text "Show" ]
                             ]
-                    , if not model.showEntity then
-                        text ""
-
-                      else
-                        pre []
-                            [ case model.entity of
-                                Nothing ->
-                                    text ""
-
-                                Just entity ->
-                                    entity
-                                        |> ED.encodeEntity
-                                        |> encodeWrap model.prettify
-                                        |> text
-                            ]
+                    , renderJson DecodedJson
+                        model
+                        model.showEntity
+                        Nothing
+                        model.entity
                     , div []
                         [ help model ]
                     , br
@@ -2403,6 +2588,79 @@ view model =
             ]
         ]
     }
+
+
+renderJson : WhichJson -> Model -> Bool -> Maybe Value -> Maybe Entity -> Html Msg
+renderJson whichJson model enabled value entity =
+    if not enabled then
+        text ""
+
+    else
+        let
+            mv =
+                case value of
+                    Just val ->
+                        Just val
+
+                    Nothing ->
+                        case entity of
+                            Nothing ->
+                                Nothing
+
+                            Just e ->
+                                Just <| ED.encodeEntity e
+        in
+        case mv of
+            Nothing ->
+                text ""
+
+            Just v ->
+                if model.showJsonTree then
+                    renderJsonTree whichJson model v
+
+                else
+                    pre []
+                        [ text <| encodeWrap model.prettify v ]
+
+
+type WhichJson
+    = ResponseJson
+    | DecodedJson
+
+
+renderJsonTree : WhichJson -> Model -> Value -> Html Msg
+renderJsonTree whichJson model value =
+    let
+        ( setter, treeResponse, state ) =
+            case whichJson of
+                ResponseJson ->
+                    ( SetResponseState, model.responseTree, model.responseState )
+
+                DecodedJson ->
+                    ( SetEntityState, model.entityTree, model.entityState )
+
+        config =
+            { colors = JsonTree.defaultColors
+
+            -- Should copy the text to a <TextArea> on select.
+            , onSelect = Just <| SelectTreeNode whichJson
+            , toMsg = setter
+            }
+    in
+    case treeResponse of
+        Err _ ->
+            text ""
+
+        Ok root ->
+            span []
+                [ button [ onClick <| ExpandAll whichJson ]
+                    [ text "Expand All" ]
+                , text " "
+                , button [ onClick <| CollapseAll whichJson ]
+                    [ text "Collapse All" ]
+                , br
+                , JsonTree.view root config state
+                ]
 
 
 blocksSelectedUI : Model -> Html Msg
@@ -2854,7 +3112,9 @@ The "Set Server" button uses the "Server" for API requests without logging in. O
 
 The "Logout" button logs out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
-The "Prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON.
+The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. This makes it easy to copy values, and enables line-wrap.
+
+The "prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the non-tree output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON. "prettify" has no effect if "show tree" is checked.
 
 The "Headers" section, if enabled, shows the headers received from the server for the last request.
 
@@ -2970,6 +3230,7 @@ type alias SavedModel =
     , hashtag : String
     , listId : String
     , smartPaging : Bool
+    , showJsonTree : Bool
     }
 
 
@@ -3002,6 +3263,7 @@ modelToSavedModel model =
     , hashtag = model.hashtag
     , listId = model.listId
     , smartPaging = model.smartPaging
+    , showJsonTree = model.showJsonTree
     }
 
 
@@ -3035,6 +3297,7 @@ savedModelToModel savedModel model =
         , hashtag = savedModel.hashtag
         , listId = savedModel.listId
         , smartPaging = savedModel.smartPaging
+        , showJsonTree = savedModel.showJsonTree
     }
 
 
@@ -3125,6 +3388,7 @@ encodeSavedModel savedModel =
         , ( "hashtag", JE.string savedModel.hashtag )
         , ( "listId", JE.string savedModel.listId )
         , ( "smartPaging", JE.bool savedModel.smartPaging )
+        , ( "showJsonTree", JE.bool savedModel.showJsonTree )
         ]
 
 
@@ -3170,6 +3434,7 @@ savedModelDecoder =
         |> optional "hashtag" JD.string ""
         |> optional "listId" JD.string ""
         |> optional "smartPaging" JD.bool False
+        |> optional "showJsonTree" JD.bool True
 
 
 put : String -> Maybe Value -> Cmd Msg

@@ -606,6 +606,7 @@ type StatusesReq
         , limit : Maybe Int
         }
       -- Need to handle unique Idempotency-Key header
+      -- `quote_of_id : Maybe String` for Gab quoted posts.
     | PostStatus
         { status : Maybe String
         , in_reply_to_id : Maybe String
