@@ -159,6 +159,7 @@ type alias Model =
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
+    , altKeyDown : Bool
     , request : Maybe RawRequest
     , response : Maybe Value
     , entity : Maybe Entity
@@ -204,6 +205,7 @@ type Msg
     | SelectTreeNode WhichJson JsonTree.KeyPath
     | ToggleClearAllDialog
     | OnKeyPress String
+    | OnAltKey Bool
     | SetServer String
     | SetWhichGroups String
     | ClearSentReceived
@@ -296,6 +298,19 @@ keyDecoder =
         |> JD.map OnKeyPress
 
 
+altKeyDecoder : Bool -> Decoder Msg
+altKeyDecoder down =
+    JD.field "key" JD.string
+        |> JD.andThen
+            (\key ->
+                if key == "Alt" then
+                    JD.succeed <| OnAltKey down
+
+                else
+                    JD.fail "Not Alt key"
+            )
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
@@ -304,7 +319,10 @@ subscriptions model =
             Events.onKeyDown keyDecoder
 
           else
-            Sub.none
+            Sub.batch
+                [ Events.onKeyDown <| altKeyDecoder True
+                , Events.onKeyUp <| altKeyDecoder False
+                ]
         ]
 
 
@@ -438,6 +456,7 @@ init value url key =
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
+    , altKeyDown = False
     , request = Nothing
     , response = Nothing
     , entity = Nothing
@@ -1002,6 +1021,12 @@ updateInternal msg model =
 
                     else
                         model.clearAllDialogVisible
+            }
+                |> withNoCmd
+
+        OnAltKey isDown ->
+            { model
+                | altKeyDown = isDown
             }
                 |> withNoCmd
 
@@ -2473,16 +2498,21 @@ view model =
                                 , value model.selectedKeyValue
                                 ]
                                 []
-                            , WriteClipboard.writeClipboard
-                                [ WriteClipboard.write
-                                    { id = "selectedKeyValue"
-                                    , text = model.clipboardValue
-                                    , count = model.clipboardCount
-                                    }
-                                ]
-                                []
                             , br
                             ]
+                        , WriteClipboard.writeClipboard
+                            [ WriteClipboard.write
+                                { id =
+                                    if Debug.log "altKeyDown" model.altKeyDown then
+                                        ""
+
+                                    else
+                                        "selectedKeyValue"
+                                , text = model.clipboardValue
+                                , count = model.clipboardCount
+                                }
+                            ]
+                            []
                         , checkBox ToggleShowJsonTree model.showJsonTree "show tree"
                         , br
                         , checkBox TogglePrettify model.prettify "prettify"
@@ -3126,6 +3156,8 @@ The "Set Server" button uses the "Server" for API requests without logging in. O
 The "Logout" button logs out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
 The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. It also copies the value to the clipboard. This makes it easy to paste values, e.g. IDs, and to view them with line-wrap.
+
+If you hold down the "Alt" key ("Option" on Macintosh) while clicking on a tree value, the value will be copied into the selected path and to the clipboard, but the selected path textarea will not be focused or selected, nor will it be scrolled into view. You can use this when you want to paste somewhere other than a field on this page, and don't want the scroll position to change.
 
 The "prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the non-tree output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON. "prettify" has no effect if "show tree" is checked.
 
