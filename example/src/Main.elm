@@ -18,6 +18,7 @@ import Browser.Events as Events
 import Browser.Navigation as Navigation exposing (Key)
 import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
+import CustomElement.WriteClipboard as WriteClipboard
 import Dialog
 import Dict exposing (Dict)
 import File exposing (File)
@@ -49,10 +50,12 @@ import Html.Attributes
         , checked
         , cols
         , disabled
+        , hidden
         , href
         , id
         , name
         , placeholder
+        , readonly
         , rows
         , selected
         , size
@@ -165,6 +168,8 @@ type alias Model =
     , entityState : JsonTree.State
     , selectedKeyPath : JsonTree.KeyPath
     , selectedKeyValue : String
+    , clipboardValue : String
+    , clipboardCount : Int
     , metadata : Maybe Http.Metadata
     , savedModel : Maybe SavedModel
     , key : Key
@@ -442,6 +447,8 @@ init value url key =
     , entityState = JsonTree.defaultState
     , selectedKeyPath = ""
     , selectedKeyValue = ""
+    , clipboardValue = ""
+    , clipboardCount = 0
     , metadata = Nothing
     , savedModel = Nothing
     , key = key
@@ -971,6 +978,8 @@ updateInternal msg model =
             { model
                 | selectedKeyPath = keyPath
                 , selectedKeyValue = value
+                , clipboardValue = value
+                , clipboardCount = model.clipboardCount + 1
             }
                 |> withNoCmd
 
@@ -2452,24 +2461,28 @@ view model =
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
                     , p []
-                        [ case model.selectedKeyValue of
-                            "" ->
-                                text ""
-
-                            selectedKeyValue ->
-                                span []
-                                    [ b "selected path: "
-                                    , text model.selectedKeyPath
-                                    , br
-                                    , textarea
-                                        [ rows 4
-                                        , cols 80
-                                        , disabled True
-                                        , value selectedKeyValue
-                                        ]
-                                        []
-                                    , br
-                                    ]
+                        [ span [ hidden <| model.selectedKeyValue == "" ]
+                            [ b "selected path: "
+                            , text model.selectedKeyPath
+                            , br
+                            , textarea
+                                [ id "selectedKeyValue"
+                                , rows 4
+                                , cols 80
+                                , readonly True
+                                , value model.selectedKeyValue
+                                ]
+                                []
+                            , WriteClipboard.writeClipboard
+                                [ WriteClipboard.write
+                                    { id = "selectedKeyValue"
+                                    , text = model.clipboardValue
+                                    , count = model.clipboardCount
+                                    }
+                                ]
+                                []
+                            , br
+                            ]
                         , checkBox ToggleShowJsonTree model.showJsonTree "show tree"
                         , br
                         , checkBox TogglePrettify model.prettify "prettify"
@@ -3112,7 +3125,7 @@ The "Set Server" button uses the "Server" for API requests without logging in. O
 
 The "Logout" button logs out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
-The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. This makes it easy to copy values, and enables line-wrap.
+The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. It also copies the value to the clipboard. This makes it easy to paste values, e.g. IDs, and to view them with line-wrap.
 
 The "prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the non-tree output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON. "prettify" has no effect if "show tree" is checked.
 
