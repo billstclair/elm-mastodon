@@ -156,6 +156,7 @@ type alias Model =
     , smartPaging : Bool
     , showJsonTree : Bool
     , showUpdateCredentials : Bool
+    , statusId : String
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -256,6 +257,7 @@ type Msg
     | ToggleSensitive
     | SetLanguage String
     | SetGroupId String
+    | SetStatusId String
     | ToggleLocal
     | SetHashtag String
     | SetListId String
@@ -276,6 +278,9 @@ type Msg
     | SendPatchUpdateCredentials
     | SendGetGroups
     | SendGetGroup
+    | SendGetStatus
+    | SendGetStatusContext
+    | SendGetStatusCard
     | SendGetHomeTimeline
     | SendGetConversations
     | SendGetPublicTimeline
@@ -458,6 +463,7 @@ init value url key =
     , smartPaging = False
     , showJsonTree = True
     , showUpdateCredentials = False
+    , statusId = ""
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -1589,6 +1595,10 @@ updateInternal msg model =
             { model | groupId = groupId }
                 |> withNoCmd
 
+        SetStatusId statusId ->
+            { model | statusId = statusId }
+                |> withNoCmd
+
         ToggleLocal ->
             { model | local = not model.local }
                 |> withNoCmd
@@ -1711,6 +1721,21 @@ updateInternal msg model =
         SendGetGroup ->
             sendRequest
                 (GroupsRequest <| Request.GetGroup { id = model.groupId })
+                model
+
+        SendGetStatus ->
+            sendRequest
+                (StatusesRequest <| Request.GetStatus { id = model.statusId })
+                model
+
+        SendGetStatusContext ->
+            sendRequest
+                (StatusesRequest <| Request.GetStatusContext { id = model.statusId })
+                model
+
+        SendGetStatusCard ->
+            sendRequest
+                (StatusesRequest <| Request.GetStatusCard { id = model.statusId })
                 model
 
         SendGetHomeTimeline ->
@@ -2306,6 +2331,7 @@ type SelectedRequest
     | AccountsSelected
     | BlocksSelected
     | GroupsSelected
+    | StatusesSelected
     | TimelinesSelected
 
 
@@ -2331,6 +2357,9 @@ selectedRequestToString selectedRequest =
 
         GroupsSelected ->
             "GroupsRequest"
+
+        StatusesSelected ->
+            "StatusesRequest"
 
         TimelinesSelected ->
             "TimelinesRequest"
@@ -2360,6 +2389,9 @@ selectedRequestFromString s =
 
         "GroupsRequest" ->
             GroupsSelected
+
+        "StatusesRequest" ->
+            StatusesSelected
 
         "TimelinesRequest" ->
             TimelinesSelected
@@ -2512,6 +2544,7 @@ view model =
                         , selectedRequestHtml AccountsSelected model accountsSelectedUI
                         , selectedRequestHtml BlocksSelected model blocksSelectedUI
                         , selectedRequestHtml GroupsSelected model groupsSelectedUI
+                        , selectedRequestHtml StatusesSelected model statusesSelectedUI
                         , selectedRequestHtml TimelinesSelected model timelinesSelectedUI
                         ]
                     , p [ style "color" "red" ]
@@ -2806,6 +2839,20 @@ groupsSelectedUI model =
         ]
 
 
+statusesSelectedUI : Model -> Html Msg
+statusesSelectedUI model =
+    p []
+        [ pspace
+        , textInput "status id: " 20 SetStatusId model.statusId
+        , text " "
+        , button SendGetStatus "GetStatus"
+        , text " "
+        , button SendGetStatusContext "GetStatusContext"
+        , text " "
+        , button SendGetStatusCard "GetStatusCard"
+        ]
+
+
 timelinesSelectedUI : Model -> Html Msg
 timelinesSelectedUI model =
     p []
@@ -3048,7 +3095,7 @@ loginSelectedUI model =
             [ onClick Login
             , disabled <| model.server == ""
             ]
-            [ text "Login" ]
+            [ b "Login" ]
         , text " "
         , button SetLoginServer "Set Server"
         ]
@@ -3103,7 +3150,7 @@ clearAllDialog model =
                 [ onClick ToggleClearAllDialog
                 , id cancelButtonId
                 ]
-                [ text "Cancel" ]
+                [ b "Cancel" ]
             , text <| String.repeat 4 special.nbsp
             , button ClearAll "Erase"
             ]
@@ -3330,6 +3377,7 @@ type alias SavedModel =
     , smartPaging : Bool
     , showJsonTree : Bool
     , showUpdateCredentials : Bool
+    , statusId : String
     }
 
 
@@ -3364,6 +3412,7 @@ modelToSavedModel model =
     , smartPaging = model.smartPaging
     , showJsonTree = model.showJsonTree
     , showUpdateCredentials = model.showUpdateCredentials
+    , statusId = model.statusId
     }
 
 
@@ -3399,6 +3448,7 @@ savedModelToModel savedModel model =
         , smartPaging = savedModel.smartPaging
         , showJsonTree = savedModel.showJsonTree
         , showUpdateCredentials = savedModel.showUpdateCredentials
+        , statusId = savedModel.statusId
     }
 
 
@@ -3491,6 +3541,7 @@ encodeSavedModel savedModel =
         , ( "smartPaging", JE.bool savedModel.smartPaging )
         , ( "showJsonTree", JE.bool savedModel.showJsonTree )
         , ( "showUpdateCredentials", JE.bool savedModel.showUpdateCredentials )
+        , ( "statusId", JE.string savedModel.statusId )
         ]
 
 
@@ -3538,6 +3589,7 @@ savedModelDecoder =
         |> optional "smartPaging" JD.bool False
         |> optional "showJsonTree" JD.bool True
         |> optional "showUpdateCredentials" JD.bool False
+        |> optional "statusId" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
