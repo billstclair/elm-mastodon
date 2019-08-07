@@ -13,11 +13,11 @@
 module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
     , serverRequest
-    , AccountsReq(..), AppsReq(..), BlocksReq(..), DomainBlocksReq(..)
+    , AccountsReq(..), AppsReq(..), BlocksReq(..), CustomEmojisReq(..), DomainBlocksReq(..)
     , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowReq(..)
-    , FollowSuggestionsReq(..), GroupsReq(..), ListsReq(..), MediaAttachmentsReq(..)
+    , FollowSuggestionsReq(..), GroupsReq(..), InstanceReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
-    , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..)
+    , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..), TrendsReq(..)
     , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..)
     , userAgentHeader, idempotencyKeyHeader, emptyPaging
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
@@ -43,11 +43,11 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Request details
 
-@docs AccountsReq, AppsReq, BlocksReq, DomainBlocksReq
+@docs AccountsReq, AppsReq, BlocksReq, CustomEmojisReq, DomainBlocksReq
 @docs EndorsementsReq, FavouritesReq, FiltersReq, FollowReq
-@docs FollowSuggestionsReq, GroupsReq, ListsReq, MediaAttachmentsReq
+@docs FollowSuggestionsReq, GroupsReq, InstanceReq, ListsReq, MediaAttachmentsReq
 @docs MutesReq, NotificationsReq, PollsReq, ReportsReq
-@docs ScheduledStatusesReq, SearchReq, StatusesReq, TimelinesReq
+@docs ScheduledStatusesReq, SearchReq, StatusesReq, TimelinesReq, TrendsReq
 
 
 # Non-atomic data in requests
@@ -95,20 +95,12 @@ Broken down as in the documentation.
 The result types are mostly documented in the individual `Request` element types,
 with these exceptions:
 
-`InstanceRequest` results in an `InstanceEntity`.
-
-`CustomEmojisRequest` results in an `EmojiListEntity`.
-
-`TrendsRequest` results in a `TagListEntity`.
-
-`InstanceRequest` and `CustomEmojisRequest` do not require an authentication token.
-
 -}
 type Request
     = AccountsRequest AccountsReq
     | AppsRequest AppsReq
     | BlocksRequest BlocksReq
-    | CustomEmojisRequest
+    | CustomEmojisRequest CustomEmojisReq
     | DomainBlocksRequest DomainBlocksReq
     | EndorsementsRequest EndorsementsReq
     | FavouritesRequest FavouritesReq
@@ -116,7 +108,7 @@ type Request
     | FollowRequest FollowReq
     | FollowSuggestionsRequest FollowSuggestionsReq
     | GroupsRequest GroupsReq
-    | InstanceRequest
+    | InstanceRequest InstanceReq
     | ListsRequest ListsReq
     | MediaAttachmentsRequest MediaAttachmentsReq
     | MutesRequest MutesReq
@@ -127,7 +119,7 @@ type Request
     | SearchRequest SearchReq
     | StatusesRequest StatusesReq
     | TimelinesRequest TimelinesReq
-    | TrendsRequest
+    | TrendsRequest TrendsReq
 
 
 
@@ -273,6 +265,15 @@ type BlocksReq
     | PostUnblock { id : String }
 
 
+{-| GET /api/v8/custom\_emojis
+
+`GetCustomEmojis` results in an `EmojiListEntity`.
+
+-}
+type CustomEmojisReq
+    = GetCustomEmojis
+
+
 {-| GET/POST /api/v8/domain\_blocks
 
 `GetDomainBlocks` results in a `StringListEntity`, a list of domain names.
@@ -396,6 +397,12 @@ The groups API is Gab-only.
 type GroupsReq
     = GetGroups { tab : WhichGroups }
     | GetGroup { id : String }
+
+
+{-| GET /api/v1/instance
+-}
+type InstanceReq
+    = GetInstance
 
 
 {-| GET/POST/PUT/DELETE /api/v1/lists
@@ -659,6 +666,15 @@ type TimelinesReq
         }
 
 
+{-| GET /api/v1/trends
+
+`GetTrends` results in a `TagListEntity`.
+
+-}
+type TrendsReq
+    = GetTrends
+
+
 {-| A response from an API request.
 
 The `request` is a copy of the `Request` that was sent over the wire,
@@ -890,7 +906,7 @@ emptyRawRequest =
     , url = ""
     , headers = []
     , body = Http.emptyBody
-    , request = InstanceRequest
+    , request = InstanceRequest GetInstance
     , jsonBody = Nothing
     , decoder = JD.fail "Unspecified decoder"
     }
@@ -934,8 +950,8 @@ requestToRawRequest headers serverInfo request =
                 BlocksRequest req ->
                     blocksReq req raw
 
-                CustomEmojisRequest ->
-                    customEmojisRequest raw
+                CustomEmojisRequest req ->
+                    customEmojisReq req raw
 
                 DomainBlocksRequest req ->
                     domainBlocksReq req raw
@@ -958,8 +974,8 @@ requestToRawRequest headers serverInfo request =
                 GroupsRequest req ->
                     groupsReq req raw
 
-                InstanceRequest ->
-                    instanceReq raw
+                InstanceRequest req ->
+                    instanceReq req raw
 
                 ListsRequest req ->
                     listsReq req raw
@@ -991,8 +1007,8 @@ requestToRawRequest headers serverInfo request =
                 TimelinesRequest req ->
                     timelinesReq req raw
 
-                TrendsRequest ->
-                    trendsReq raw
+                TrendsRequest req ->
+                    trendsReq req raw
     in
     { res
         | url = "https://" ++ serverInfo.server ++ apiUrlPrefix ++ res.url
@@ -1494,16 +1510,18 @@ blocksReq req res =
             }
 
 
-customEmojisRequest : RawRequest -> RawRequest
-customEmojisRequest res =
+customEmojisReq : CustomEmojisReq -> RawRequest -> RawRequest
+customEmojisReq req res =
     let
         r =
             apiReq.custom_emojis
     in
-    { res
-        | url = relative [ r ] []
-        , decoder = decoders.emojiList
-    }
+    case req of
+        GetCustomEmojis ->
+            { res
+                | url = relative [ r ] []
+                , decoder = decoders.emojiList
+            }
 
 
 domainBlocksReq : DomainBlocksReq -> RawRequest -> RawRequest
@@ -1754,17 +1772,19 @@ groupsReq req res =
             }
 
 
-instanceReq : RawRequest -> RawRequest
-instanceReq res =
+instanceReq : InstanceReq -> RawRequest -> RawRequest
+instanceReq req res =
     let
         r =
             apiReq.instance
     in
-    { res
-        | url =
-            relative [ r ] []
-        , decoder = decoders.instance
-    }
+    case req of
+        GetInstance ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.instance
+            }
 
 
 listsReq : ListsReq -> RawRequest -> RawRequest
@@ -2465,14 +2485,16 @@ timelinesReq req res =
 
 {-| This one wasn't documented. I had to reverse engineer it.
 -}
-trendsReq : RawRequest -> RawRequest
-trendsReq res =
+trendsReq : TrendsReq -> RawRequest -> RawRequest
+trendsReq req res =
     let
         r =
             apiReq.trends
     in
-    { res
-        | url =
-            relative [ r ] []
-        , decoder = decoders.tagList
-    }
+    case req of
+        GetTrends ->
+            { res
+                | url =
+                    relative [ r ] []
+                , decoder = decoders.tagList
+            }

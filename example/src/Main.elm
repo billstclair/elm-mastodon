@@ -156,6 +156,7 @@ type alias Model =
     , listId : String
     , smartPaging : Bool
     , showJsonTree : Bool
+    , showUpdateCredentials : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -238,6 +239,7 @@ type Msg
     | SetLimit String
     | ToggleSmartPaging
     | ToggleShowJsonTree
+    | ToggleShowUpdateCredentials
     | ToggleOnlyMedia
     | TogglePinned
     | ToggleExcludeReplies
@@ -260,6 +262,9 @@ type Msg
     | SetListId String
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
+    | SendGetInstance
+    | SendGetTrends
+    | SendGetCustomEmojies
     | SendGetVerifyCredentials
     | SendGetAccountByUsername
     | SendGetAccount
@@ -453,6 +458,7 @@ init value url key =
     , listId = ""
     , smartPaging = False
     , showJsonTree = True
+    , showUpdateCredentials = False
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -557,7 +563,7 @@ getInstance model =
         []
         serverInfo
         ()
-        InstanceRequest
+        (InstanceRequest Request.GetInstance)
 
 
 getVerifyCredentials : Model -> Cmd Msg
@@ -569,7 +575,7 @@ getVerifyCredentials model =
         Just server ->
             case model.token of
                 Nothing ->
-                    sendRequest InstanceRequest model
+                    sendRequest (InstanceRequest Request.GetInstance) model
                         |> Tuple.second
 
                 Just token ->
@@ -1352,7 +1358,7 @@ updateInternal msg model =
                         }
                             |> updatePatchCredentialsInputs
                 in
-                sendRequest InstanceRequest mdl
+                sendRequest (InstanceRequest Request.GetInstance) mdl
 
         Login ->
             let
@@ -1486,6 +1492,10 @@ updateInternal msg model =
             { mdl | showJsonTree = not model.showJsonTree }
                 |> withNoCmd
 
+        ToggleShowUpdateCredentials ->
+            { model | showUpdateCredentials = not model.showUpdateCredentials }
+                |> withNoCmd
+
         ToggleOnlyMedia ->
             { model | onlyMedia = not model.onlyMedia }
                 |> withNoCmd
@@ -1591,6 +1601,15 @@ updateInternal msg model =
         SetListId listId ->
             { model | listId = listId }
                 |> withNoCmd
+
+        SendGetInstance ->
+            sendRequest (InstanceRequest Request.GetInstance) model
+
+        SendGetTrends ->
+            sendRequest (TrendsRequest Request.GetTrends) model
+
+        SendGetCustomEmojies ->
+            sendRequest (CustomEmojisRequest Request.GetCustomEmojis) model
 
         SendGetVerifyCredentials ->
             sendRequest (AccountsRequest Request.GetVerifyCredentials) model
@@ -2284,6 +2303,7 @@ theStyle =
 
 type SelectedRequest
     = LoginSelected
+    | InstanceSelected
     | AccountsSelected
     | BlocksSelected
     | GroupsSelected
@@ -2300,6 +2320,9 @@ selectedRequestToString selectedRequest =
     case selectedRequest of
         LoginSelected ->
             "login"
+
+        InstanceSelected ->
+            "Instance Information"
 
         AccountsSelected ->
             "AccountsRequest"
@@ -2327,6 +2350,9 @@ selectedRequestDecoder =
 selectedRequestFromString : String -> SelectedRequest
 selectedRequestFromString s =
     case s of
+        "Instance Information" ->
+            InstanceSelected
+
         "AccountsRequest" ->
             AccountsSelected
 
@@ -2478,6 +2504,7 @@ view model =
                                 ]
                     , p []
                         [ selectedRequestHtml LoginSelected model loginSelectedUI
+                        , selectedRequestHtml InstanceSelected model instanceSelectedUI
                         , selectedRequestHtml AccountsSelected model accountsSelectedUI
                         , selectedRequestHtml BlocksSelected model blocksSelectedUI
                         , selectedRequestHtml GroupsSelected model groupsSelectedUI
@@ -2856,6 +2883,21 @@ accountIsVerified model =
             account.is_verified
 
 
+instanceSelectedUI : Model -> Html Msg
+instanceSelectedUI model =
+    p []
+        [ pspace
+        , button [ onClick SendGetInstance ]
+            [ text "GetInstance" ]
+        , text " "
+        , button [ onClick SendGetTrends ]
+            [ text "GetTrends" ]
+        , text " "
+        , button [ onClick SendGetCustomEmojies ]
+            [ text "GetCustomEmojis" ]
+        ]
+
+
 accountsSelectedUI : Model -> Html Msg
 accountsSelectedUI model =
     p []
@@ -2936,45 +2978,53 @@ accountsSelectedUI model =
                 [ text "[account is verified. Changing display name will error]"
                 , br
                 ]
-        , textInput "display name: " 40 SetDisplayName model.displayName
-        , br
-        , b "note:"
-        , br
-        , textarea
-            [ rows 4
-            , cols 50
-            , onInput SetNote
-            , value model.note
-            ]
-            []
-        , br
-        , renderChooseFile "avatar: " model.avatarFile GetAvatarFile
-        , br
-        , renderChooseFile "header: " model.headerFile GetHeaderFile
-        , br
-        , b "privacy: "
-        , privacyRadio PublicPrivacy "public " model.privacy
-        , privacyRadio UnlistedPrivacy "unlisted " model.privacy
-        , privacyRadio PrivatePrivacy "private " model.privacy
-        , br
-        , checkBox ToggleLocked model.locked "blocked"
-        , checkBox ToggleSensitive model.sensitive "sensitive "
-        , br
-        , textInput "Language: " 2 SetLanguage model.language
-        , br
-        , b "Profile metadata:"
-        , br
-        , List.map2 fieldEditorUI
-            model.fields
-            (List.range 0 <| List.length model.fields)
-            |> List.intersperse [ br ]
-            |> List.concat
-            |> span []
-        , br
-        , button [ onClick SendPatchUpdateCredentials ]
-            [ text "PatchUpdateCredentials" ]
+        , if not model.showUpdateCredentials then
+            button [ onClick ToggleShowUpdateCredentials ]
+                [ text "Show PatchUpdateCredentials" ]
 
-        -- avatar (File), header (File), privacy (Privacy), sensitive (Bool), language (Maybe String)
+          else
+            span []
+                [ textInput "display name: " 40 SetDisplayName model.displayName
+                , br
+                , b "note:"
+                , br
+                , textarea
+                    [ rows 4
+                    , cols 50
+                    , onInput SetNote
+                    , value model.note
+                    ]
+                    []
+                , br
+                , renderChooseFile "avatar: " model.avatarFile GetAvatarFile
+                , br
+                , renderChooseFile "header: " model.headerFile GetHeaderFile
+                , br
+                , b "privacy: "
+                , privacyRadio PublicPrivacy "public " model.privacy
+                , privacyRadio UnlistedPrivacy "unlisted " model.privacy
+                , privacyRadio PrivatePrivacy "private " model.privacy
+                , br
+                , checkBox ToggleLocked model.locked "blocked"
+                , checkBox ToggleSensitive model.sensitive "sensitive "
+                , br
+                , textInput "Language: " 2 SetLanguage model.language
+                , br
+                , b "Profile metadata:"
+                , br
+                , List.map2 fieldEditorUI
+                    model.fields
+                    (List.range 0 <| List.length model.fields)
+                    |> List.intersperse [ br ]
+                    |> List.concat
+                    |> span []
+                , br
+                , button [ onClick ToggleShowUpdateCredentials ]
+                    [ text "Hide" ]
+                , text " "
+                , button [ onClick SendPatchUpdateCredentials ]
+                    [ text "PatchUpdateCredentials" ]
+                ]
         ]
 
 
@@ -3044,11 +3094,18 @@ renderHeaders prettify color metadata =
                 ]
                 :: res
     in
-    Dict.foldr fold [] metadata.headers
-        |> table
-            [ style "color" color
-            , style "font-size" "14px"
-            ]
+    span []
+        [ b "status code: "
+        , text <| String.fromInt metadata.statusCode
+        , br
+        , b "status text: "
+        , text metadata.statusText
+        , Dict.foldr fold [] metadata.headers
+            |> table
+                [ style "color" color
+                , style "font-size" "14px"
+                ]
+        ]
 
 
 cancelButtonId : String
@@ -3079,8 +3136,20 @@ clearAllDialog model =
 help : Model -> Html Msg
 help model =
     Markdown.toHtml [] <|
-        if model.selectedRequest == AccountsSelected then
-            """
+        case model.selectedRequest of
+            InstanceSelected ->
+                """
+**Instance Information Help**
+
+The "GetInstance" button fetches the `Instance` entity for the "Use API for" instance.
+
+The "GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
+
+The "GetCustomEmojis" button fetches a list of `Emoji` entities.
+                """
+
+            AccountsSelected ->
+                """
 **AccountsRequest Help**
 
 The "GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
@@ -3097,18 +3166,22 @@ The "GetSearchAccounts" button returns a list of `Account` entities that match "
 
 The "Postfollow / PostUnfollow" button either follows or unfollows the account with the given "id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "id" causes A `GetRelationships` request to be sent.
 
-The "PatchUpdateCredentials" button changes account profile information from "Display name", "Note", "Avatar", "Header", "Privacy", "Locked", "Sensitive", "Language", and "Profile MetaData". Only the changed fields are sent to the server. The displayed field values are updated whenever a request returns the logged-in user's `Account` entity, e.g. at login or when you press the "GetVerifyCredentials" button.
-            """
+Since the parameters to "PatchUpdateCredentials" take a lot of screen space, that section is initially invisible. Click the "Show PatchUpdateCredentials" button to reveal it.
 
-        else if model.selectedRequest == BlocksSelected then
-            """
+The "PatchUpdateCredentials" button changes account profile information from "Display name", "Note", "Avatar", "Header", "Privacy", "Locked", "Sensitive", "Language", and "Profile MetaData". Only the changed fields are sent to the server. The displayed field values are updated whenever a request returns the logged-in user's `Account` entity, e.g. at login or when you press the "GetVerifyCredentials" button.
+
+The "Hide" button to the left of "PatchUpdateCredentials" hides that section of the user interface again.
+              """
+
+            BlocksSelected ->
+                """
 **BlocksRequest Help**
 
 Blocks help goes here.
-            """
+              """
 
-        else if model.selectedRequest == GroupsSelected then
-            """
+            GroupsSelected ->
+                """
 **GroupsRequest Help**
 
 Groups are a Gab-only feature.
@@ -3118,8 +3191,8 @@ Click "GetGroups" to get the list of groups in the "Member", "Featured", or "Adm
 Click "GetGroup" to get information about the group with the given "id".
             """
 
-        else if model.selectedRequest == TimelinesSelected then
-            """
+            TimelinesSelected ->
+                """
 **TimelinesRequest Help**
 
 The paging parameters, "limit", "max id", "min id", and "since id" are used for all the timelines requests. The ids are `Status` ids for `GetXXXTimeline` and `Conversation` ids for `GetConversations`.
@@ -3137,10 +3210,10 @@ The "GetTagTimeline" button returns posts containing the given "hashtag", with l
 The "GetListTimeline" button returns posts for the list with the given "list id".
 
 The "GetGroupTimeline" button returns posts for the given "group id".
-            """
+              """
 
-        else
-            """
+            _ ->
+                """
 **General and Login Help**
 
 Click a radio button to choose the user interface for that section of the API. The names match the variant names in [Mastodon.Request](https://github.com/billstclair/elm-mastodon/blob/master/src/Mastodon/Request.elm)'s `xxxReq` types.
@@ -3176,7 +3249,7 @@ This page does NOT use cookies, but logging in to a Mastodon/Pleroma server will
 The "Dark Mode" checkbox toggles between light and dark mode.
 
 If you look at the [code for this page](https://github.com/billstclair/elm-mastodon/blob/master/example/src/Main.elm), and search for `SendGetVerifyCredentials`, you'll see examples of using the `Mastodon.Request` module.
-    """
+            """
 
 
 convertJsonNewlines : String -> String
@@ -3276,6 +3349,7 @@ type alias SavedModel =
     , listId : String
     , smartPaging : Bool
     , showJsonTree : Bool
+    , showUpdateCredentials : Bool
     }
 
 
@@ -3309,6 +3383,7 @@ modelToSavedModel model =
     , listId = model.listId
     , smartPaging = model.smartPaging
     , showJsonTree = model.showJsonTree
+    , showUpdateCredentials = model.showUpdateCredentials
     }
 
 
@@ -3343,6 +3418,7 @@ savedModelToModel savedModel model =
         , listId = savedModel.listId
         , smartPaging = savedModel.smartPaging
         , showJsonTree = savedModel.showJsonTree
+        , showUpdateCredentials = savedModel.showUpdateCredentials
     }
 
 
@@ -3434,6 +3510,7 @@ encodeSavedModel savedModel =
         , ( "listId", JE.string savedModel.listId )
         , ( "smartPaging", JE.bool savedModel.smartPaging )
         , ( "showJsonTree", JE.bool savedModel.showJsonTree )
+        , ( "showUpdateCredentials", JE.bool savedModel.showUpdateCredentials )
         ]
 
 
@@ -3480,6 +3557,7 @@ savedModelDecoder =
         |> optional "listId" JD.string ""
         |> optional "smartPaging" JD.bool False
         |> optional "showJsonTree" JD.bool True
+        |> optional "showUpdateCredentials" JD.bool False
 
 
 put : String -> Maybe Value -> Cmd Msg

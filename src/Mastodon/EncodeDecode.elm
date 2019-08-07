@@ -1160,12 +1160,29 @@ encodeHistory { day, uses, accounts } =
         ]
 
 
+stringToIntDecoder : Decoder Int
+stringToIntDecoder =
+    JD.oneOf
+        [ JD.int
+        , JD.string
+            |> JD.andThen
+                (\s ->
+                    case String.toInt s of
+                        Just int ->
+                            JD.succeed int
+
+                        Nothing ->
+                            JD.fail <| "Not an integer: " ++ s
+                )
+        ]
+
+
 historyDecoder : Decoder History
 historyDecoder =
     JD.succeed History
         |> required "day" JD.string
-        |> required "uses" JD.int
-        |> required "accounts" JD.int
+        |> required "uses" stringToIntDecoder
+        |> required "accounts" stringToIntDecoder
 
 
 {-| Encode a `Poll`.
