@@ -28,7 +28,6 @@ import Html
         ( Attribute
         , Html
         , a
-        , button
         , div
         , h2
         , input
@@ -2452,6 +2451,12 @@ pspace =
     p [] [ text "" ]
 
 
+button : Msg -> String -> Html Msg
+button msg label =
+    Html.button [ onClick msg ]
+        [ b label ]
+
+
 view : Model -> Document Msg
 view model =
     let
@@ -2486,8 +2491,7 @@ view model =
                                 [ b "Use API for: "
                                 , link server <| "https://" ++ server
                                 , text " "
-                                , button [ onClick Logout ]
-                                    [ text "Logout" ]
+                                , button Logout "Logout"
                                 , br
                                 , case model.account of
                                     Nothing ->
@@ -2516,6 +2520,19 @@ view model =
                         [ span [ hidden <| model.selectedKeyValue == "" ]
                             [ b "selected path: "
                             , text model.selectedKeyPath
+                            , case Url.fromString model.selectedKeyValue of
+                                Nothing ->
+                                    text ""
+
+                                Just _ ->
+                                    span []
+                                        [ br
+                                        , a
+                                            [ href model.selectedKeyValue
+                                            , target "_blank"
+                                            ]
+                                            [ text "open URL in new tab" ]
+                                        ]
                             , br
                             , textarea
                                 [ id "selectedKeyValue"
@@ -2544,8 +2561,7 @@ view model =
                         , br
                         , checkBox TogglePrettify model.prettify "prettify"
                         , text " (easier to read, may no longer be valid JSON) "
-                        , button [ onClick ClearSentReceived ]
-                            [ text "Clear" ]
+                        , button ClearSentReceived "Clear"
                         ]
                     , p [] [ b "Sent:" ]
                     , pre []
@@ -2572,14 +2588,12 @@ view model =
                     , p [] <|
                         if model.showMetadata then
                             [ b "Headers: "
-                            , button [ onClick ToggleShowMetadata ]
-                                [ text "Hide" ]
+                            , button ToggleShowMetadata "Hide"
                             ]
 
                         else
                             [ b "Headers "
-                            , button [ onClick ToggleShowMetadata ]
-                                [ text "Show" ]
+                            , button ToggleShowMetadata "Show"
                             ]
                     , if not model.showMetadata then
                         text ""
@@ -2595,14 +2609,12 @@ view model =
                     , p [] <|
                         if model.showReceived then
                             [ b "Received:"
-                            , button [ onClick ToggleShowReceived ]
-                                [ text "Hide" ]
+                            , button ToggleShowReceived "Hide"
                             ]
 
                         else
                             [ b "Received "
-                            , button [ onClick ToggleShowReceived ]
-                                [ text "Show" ]
+                            , button ToggleShowReceived "Show"
                             ]
                     , renderJson ResponseJson
                         model
@@ -2612,14 +2624,12 @@ view model =
                     , p [] <|
                         if model.showEntity then
                             [ b "Decoded:"
-                            , button [ onClick ToggleShowEntity ]
-                                [ text "Hide" ]
+                            , button ToggleShowEntity "Hide"
                             ]
 
                         else
                             [ b "Decoded "
-                            , button [ onClick ToggleShowEntity ]
-                                [ text "Show" ]
+                            , button ToggleShowEntity "Show"
                             ]
                     , renderJson DecodedJson
                         model
@@ -2630,8 +2640,7 @@ view model =
                         [ help model ]
                     , br
                     , p []
-                        [ button [ onClick ToggleClearAllDialog ]
-                            [ text "Clear All Persistent State" ]
+                        [ button ToggleClearAllDialog "Clear All Persistent State"
                         ]
                     , br
                     , p [ onClick ToggleStyle ]
@@ -2723,11 +2732,9 @@ renderJsonTree whichJson model value =
 
         Ok root ->
             span []
-                [ button [ onClick <| ExpandAll whichJson ]
-                    [ text "Expand All" ]
+                [ button (ExpandAll whichJson) "Expand All"
                 , text " "
-                , button [ onClick <| CollapseAll whichJson ]
-                    [ text "Collapse All" ]
+                , button (CollapseAll whichJson) "Collapse All"
                 , br
                 , JsonTree.view root config state
                 ]
@@ -2791,13 +2798,11 @@ groupsSelectedUI model =
         [ pspace
         , whichGroupsSelect model
         , text " "
-        , button [ onClick SendGetGroups ]
-            [ text "GetGroups" ]
+        , button SendGetGroups "GetGroups"
         , br
         , textInput "id: " 20 SetGroupId model.groupId
         , text " "
-        , button [ onClick SendGetGroup ]
-            [ text "GetGroup" ]
+        , button SendGetGroup "GetGroup"
         ]
 
 
@@ -2815,31 +2820,25 @@ timelinesSelectedUI model =
         , br
         , textInput "since id: " 25 SetSinceId model.pagingInput.since_id
         , br
-        , button [ onClick SendGetHomeTimeline ]
-            [ text "GetHomeTimeline" ]
+        , button SendGetHomeTimeline "GetHomeTimeline"
         , text " "
-        , button [ onClick SendGetConversations ]
-            [ text "GetConversations" ]
+        , button SendGetConversations "GetConversations"
         , br
         , checkBox ToggleLocal model.local "local "
         , checkBox ToggleOnlyMedia model.onlyMedia "media only "
-        , button [ onClick SendGetPublicTimeline ]
-            [ text "GetPublicTimeline" ]
+        , button SendGetPublicTimeline "GetPublicTimeline"
         , br
         , textInput "hashtag: " 30 SetHashtag model.hashtag
         , text " "
-        , button [ onClick SendGetTagTimeline ]
-            [ text "GetTagTimeline" ]
+        , button SendGetTagTimeline "GetTagTimeline"
         , br
         , textInput "list id: " 20 SetListId model.listId
         , text " "
-        , button [ onClick SendGetListTimeline ]
-            [ text "GetListTimeline" ]
+        , button SendGetListTimeline "GetListTimeline"
         , br
         , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
-        , button [ onClick SendGetGroupTimeline ]
-            [ text "GetGroupTimeline" ]
+        , button SendGetGroupTimeline "GetGroupTimeline"
         ]
 
 
@@ -2864,12 +2863,10 @@ renderChooseFile label maybeFile getter =
                     , text " "
                     , text name
                     , text " "
-                    , button [ onClick <| getter True ]
-                        [ text "Clear" ]
+                    , button (getter True) "Clear"
                     , text " "
                     ]
-        , button [ onClick <| getter False ]
-            [ text "Choose File" ]
+        , button (getter False) "Choose File"
         ]
 
 
@@ -2887,14 +2884,11 @@ instanceSelectedUI : Model -> Html Msg
 instanceSelectedUI model =
     p []
         [ pspace
-        , button [ onClick SendGetInstance ]
-            [ text "GetInstance" ]
+        , button SendGetInstance "GetInstance"
         , text " "
-        , button [ onClick SendGetTrends ]
-            [ text "GetTrends" ]
+        , button SendGetTrends "GetTrends"
         , text " "
-        , button [ onClick SendGetCustomEmojies ]
-            [ text "GetCustomEmojis" ]
+        , button SendGetCustomEmojies "GetCustomEmojis"
         ]
 
 
@@ -2902,26 +2896,21 @@ accountsSelectedUI : Model -> Html Msg
 accountsSelectedUI model =
     p []
         [ pspace
-        , button [ onClick SendGetVerifyCredentials ]
-            [ text "GetVerifyCredentials" ]
+        , button SendGetVerifyCredentials "GetVerifyCredentials"
         , br
         , textInput "username: " 30 SetUsername model.username
         , text " "
-        , button [ onClick SendGetAccountByUsername ]
-            [ text "GetAccountByUsername" ]
+        , button SendGetAccountByUsername "GetAccountByUsername"
         , br
         , textInput "id: " 20 SetAccountId model.accountId
         , text " "
-        , button [ onClick SendGetAccount ]
-            [ text "GetAccount" ]
+        , button SendGetAccount "GetAccount"
         , br
         , textInput "limit: " 10 SetLimit model.pagingInput.limit
         , text " "
-        , button [ onClick SendGetFollowers ]
-            [ text "GetFollowers" ]
+        , button SendGetFollowers "GetFollowers"
         , text " "
-        , button [ onClick SendGetFollowing ]
-            [ text "GetFollowing" ]
+        , button SendGetFollowing "GetFollowing"
         , br
         , textInput "max id: " 25 SetMaxId model.pagingInput.max_id
         , text " "
@@ -2939,13 +2928,11 @@ accountsSelectedUI model =
         , text " "
         , checkBox ToggleExcludeReblogs (not model.excludeReblogs) "reblogs"
         , text " "
-        , button [ onClick SendGetStatuses ]
-            [ text "GetStatuses" ]
+        , button SendGetStatuses "GetStatuses"
         , br
         , textInput "ids (1,2,...): " 40 SetAccountIds model.accountIds
         , text " "
-        , button [ onClick SendGetRelationships ]
-            [ text "GetRelationships" ]
+        , button SendGetRelationships "GetRelationships"
         , br
         , textInput "q: " 40 SetQ model.q
         , br
@@ -2953,22 +2940,19 @@ accountsSelectedUI model =
         , text " "
         , checkBox ToggleResolve model.resolve " resolve "
         , checkBox ToggleFollowing model.following " following "
-        , button [ onClick SendGetSearchAccounts ]
-            [ text "GetSearchAccounts" ]
+        , button SendGetSearchAccounts "GetSearchAccounts"
         , br
         , text "-- writes below here --"
         , br
         , textInput "id: " 20 SetAccountId model.accountId
         , text " "
         , checkBox ToggleFollowReblogs model.followReblogs "reblogs "
-        , button [ onClick SendPostFollowOrUnfollow ]
-            [ text <|
-                if model.isAccountFollowed then
-                    "PostUnfollow"
+        , button SendPostFollowOrUnfollow <|
+            if model.isAccountFollowed then
+                "PostUnfollow"
 
-                else
-                    "PostFollow"
-            ]
+            else
+                "PostFollow"
         , br
         , if not <| accountIsVerified model then
             text ""
@@ -2979,8 +2963,7 @@ accountsSelectedUI model =
                 , br
                 ]
         , if not model.showUpdateCredentials then
-            button [ onClick ToggleShowUpdateCredentials ]
-                [ text "Show PatchUpdateCredentials" ]
+            button ToggleShowUpdateCredentials "Show PatchUpdateCredentials"
 
           else
             span []
@@ -3019,11 +3002,9 @@ accountsSelectedUI model =
                     |> List.concat
                     |> span []
                 , br
-                , button [ onClick ToggleShowUpdateCredentials ]
-                    [ text "Hide" ]
+                , button ToggleShowUpdateCredentials "Hide"
                 , text " "
-                , button [ onClick SendPatchUpdateCredentials ]
-                    [ text "PatchUpdateCredentials" ]
+                , button SendPatchUpdateCredentials "PatchUpdateCredentials"
                 ]
         ]
 
@@ -3063,15 +3044,13 @@ loginSelectedUI model =
         , text " "
         , serverSelect model
         , br
-        , button
+        , Html.button
             [ onClick Login
             , disabled <| model.server == ""
             ]
             [ text "Login" ]
         , text " "
-        , button
-            [ onClick SetLoginServer ]
-            [ text "Set Server" ]
+        , button SetLoginServer "Set Server"
         ]
 
 
@@ -3120,14 +3099,13 @@ clearAllDialog model =
         , title = "Confirm"
         , content = [ text "Do you really want to erase everything?" ]
         , actionBar =
-            [ button
+            [ Html.button
                 [ onClick ToggleClearAllDialog
                 , id cancelButtonId
                 ]
                 [ text "Cancel" ]
             , text <| String.repeat 4 special.nbsp
-            , button [ onClick ClearAll ]
-                [ text "Erase" ]
+            , button ClearAll "Erase"
             ]
         }
         model.clearAllDialogVisible
@@ -3231,6 +3209,8 @@ The "Logout" button logs out of the "Use API for" server. This will remove it fr
 The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. It also copies the value to the clipboard. This makes it easy to paste values, e.g. IDs, and to view them with line-wrap.
 
 If you hold down the "Alt" key ("Option" on Macintosh) while clicking on a tree value, the value will be copied into the selected path and to the clipboard, but the selected path textarea will not be focused or selected, nor will it be scrolled into view. You can use this when you want to paste somewhere other than a field on this page, and don't want the scroll position to change.
+
+If the "selected path" textarea shows a URL, there will be an "open URL in new tab" link which will do that.
 
 The "prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the non-tree output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON. "prettify" has no effect if "show tree" is checked.
 
