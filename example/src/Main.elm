@@ -2023,14 +2023,48 @@ receiveResponse : Result Error Response -> Model -> ( Model, Cmd Msg )
 receiveResponse result model =
     case result of
         Err err ->
+            let
+                threeStrikes =
+                    ( Nothing, Nothing, Nothing )
+
+                ( msg, ( response, entity, metadata ) ) =
+                    case err of
+                        BadUrl url ->
+                            ( "BadUrl: " ++ url, threeStrikes )
+
+                        Timeout ->
+                            ( "Timeout", threeStrikes )
+
+                        NetworkError ->
+                            ( "Network Error", threeStrikes )
+
+                        BadStatus meta status ->
+                            ( "Bad status: " ++ status, ( Nothing, Nothing, Just meta ) )
+
+                        BadBody meta jderr json ->
+                            let
+                                res =
+                                    case JD.decodeString JD.value json of
+                                        Err _ ->
+                                            Nothing
+
+                                        Ok v ->
+                                            Just v
+
+                                m =
+                                    "BadBody: " ++ decodeErrorToString jderr
+                            in
+                            ( m, ( res, Nothing, Just meta ) )
+            in
             { model
-                | msg = Just <| Debug.toString err
-                , response = Nothing
-                , entity = Nothing
-                , metadata = Nothing
+                | msg = Just msg
+                , response = response
+                , entity = entity
+                , metadata = metadata
                 , selectedKeyPath = ""
                 , selectedKeyValue = ""
             }
+                |> updateJsonTrees
                 |> withNoCmd
 
         Ok response ->
@@ -2046,6 +2080,28 @@ receiveResponse result model =
             }
                 |> updateJsonTrees
                 |> withNoCmd
+
+
+decodeErrorToString : JD.Error -> String
+decodeErrorToString error =
+    case error of
+        JD.Field field err ->
+            "Error on field \"" ++ field ++ "\": " ++ decodeErrorToString err
+
+        JD.Index idx err ->
+            "Error on index " ++ String.fromInt idx ++ "\": " ++ decodeErrorToString err
+
+        JD.OneOf errors ->
+            case errors of
+                [] ->
+                    "OneOf []"
+
+                err :: _ ->
+                    decodeErrorToString err
+
+        JD.Failure fail value ->
+            -- TODO: encode some part of `value`.
+            fail
 
 
 applyResponseSideEffects : Response -> Model -> Model
@@ -3215,6 +3271,18 @@ Click "GetGroups" to get the list of groups in the "Member", "Featured", or "Adm
 
 Click "GetGroup" to get information about the group with the given "id".
             """
+
+            StatusesSelected ->
+                """
+**StatusesRequest Help**
+
+Click "GetStatus" to get the `Status` entity for "status id".
+
+Click "GetStatusContext" to get the `Context` entity for "status id".
+
+Click "GetStatusCard" to get the `Card` entity for "status id". I haven't yet seen one of these in the wild. Returns are variously `HTTP 404 status`, `{}`, or `null` when the card doesn't exist.
+
+                """
 
             TimelinesSelected ->
                 """
