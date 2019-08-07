@@ -10,6 +10,7 @@
 //////////////////////////////////////////////////////////////////////
 
 (function() {
+
 // From https://stackoverflow.com/a/49186677/1386989
 const getScrollParent = (node) => {
   const regex = /(auto|scroll)/;

@@ -124,9 +124,6 @@ stripStatus status =
     let
         account =
             status.account
-
-        application =
-            status.application
     in
     { status
         | account = stripAccount account
@@ -152,7 +149,12 @@ stripStatus status =
                 Just poll ->
                     Just { poll | v = JE.null }
         , application =
-            { application | v = JE.null }
+            case status.application of
+                Nothing ->
+                    Nothing
+
+                Just application ->
+                    Just { application | v = JE.null }
         , v = JE.null
     }
 
@@ -746,7 +748,7 @@ status1 =
     , tags = [ tag1, tag2 ]
     , card = Just card1
     , poll = Just poll1
-    , application = application1
+    , application = Just application1
     , language = Just "language"
     , pinned = True
     , group_id = Nothing
@@ -780,7 +782,7 @@ status2 =
     , tags = []
     , card = Just card2
     , poll = Just poll2
-    , application = application2
+    , application = Just application2
     , language = Nothing
     , pinned = False
     , group_id = Just "group_id"
@@ -793,6 +795,7 @@ status3 =
     { status2
         | visibility = PrivateVisibility
         , card = Nothing
+        , application = Nothing
     }
 
 
@@ -903,7 +906,7 @@ attachment1 =
     , preview_url = "preview_url"
     , text_url = Just "text_url"
     , meta = Nothing
-    , description = "description"
+    , description = Nothing
     }
 
 
@@ -916,7 +919,7 @@ attachment2 =
     , preview_url = "preview_url2"
     , text_url = Nothing
     , meta = Just imageMeta1
-    , description = "description2"
+    , description = Just "description2"
     }
 
 
@@ -929,7 +932,7 @@ attachment3 =
     , preview_url = "preview_url3"
     , text_url = Just "text_url3"
     , meta = Just imageMeta2
-    , description = "description3"
+    , description = Just "description3"
     }
 
 
@@ -942,7 +945,7 @@ attachment4 =
     , preview_url = "preview_url4"
     , text_url = Nothing
     , meta = Just videoMeta1
-    , description = "description4"
+    , description = Nothing
     }
 
 
@@ -955,7 +958,7 @@ attachment5 =
     , preview_url = "preview_url5"
     , text_url = Nothing
     , meta = Just videoMeta2
-    , description = "description5"
+    , description = Just "description5"
     }
 
 
@@ -990,7 +993,7 @@ imageMetaInfo2 : ImageMetaInfo
 imageMetaInfo2 =
     { width = Nothing
     , height = Nothing
-    , size = Just 128
+    , size = Just "128"
     , aspect = Just 0.5
     }
 
@@ -1027,7 +1030,7 @@ videoMetaInfo2 : VideoMetaInfo
 videoMetaInfo2 =
     { width = Nothing
     , height = Nothing
-    , frame_rate = Just 30
+    , frame_rate = Just "30"
     , duration = Just 12.3
     , bitrate = Just 10000
     }

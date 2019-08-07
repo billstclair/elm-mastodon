@@ -588,10 +588,6 @@ type alias PollDefinition =
 
 The `GetXxx` requests require no authentication token.
 
-`PostStatus` should be accompanied by an `Idempotency-Key` header,
-which you can create with `IdempotencyKeyHeader`.
-See <https://stripe.com/blog/idempotency>.
-
 -}
 type StatusesReq
     = GetStatus { id : String }
@@ -605,7 +601,6 @@ type StatusesReq
         { id : String
         , limit : Maybe Int
         }
-      -- Need to handle unique Idempotency-Key header
       -- `quote_of_id : Maybe String` for Gab quoted posts.
     | PostStatus
         { status : Maybe String
@@ -618,6 +613,7 @@ type StatusesReq
         , visibility : Entity.Visibility
         , scheduled_at : Maybe Entity.Datetime
         , language : Maybe Entity.ISO6391
+        , idempotencyKey : Maybe String
         }
     | DeleteStatus { id : String }
     | PostReblogStatus { id : String }
@@ -867,6 +863,11 @@ userAgentHeader userAgent =
 
 
 {-| Create an "Idempotency-Key" header for use with `PostStatus`.
+
+Usually, you will create this header by passing `Just key` for the
+`idempotencyKey` property of the parameter to `PostStatus`, but if you
+need to create it in another context, use this.
+
 -}
 idempotencyKeyHeader : String -> Http.Header
 idempotencyKeyHeader key =
@@ -2268,8 +2269,7 @@ statusesReq req res =
                 , decoder = decoders.accountList
             }
 
-        -- Caller needs to handle unique Idempotency-Key header
-        PostStatus { status, in_reply_to_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language } ->
+        PostStatus { status, in_reply_to_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language, idempotencyKey } ->
             -- If spoiler_text is included, then sensitive will be passed as true
             let
                 jsonBody =
@@ -2329,16 +2329,26 @@ statusesReq req res =
                                     [ ( "language", JE.string lang ) ]
                             ]
                         )
+
+                res2 =
+                    { res
+                        | method = m.post
+                        , url = relative [ r ] []
+                        , body =
+                            Http.jsonBody jsonBody
+                        , jsonBody =
+                            Just jsonBody
+                        , decoder = decoders.status
+                    }
             in
-            { res
-                | method = m.post
-                , url = relative [ r ] []
-                , body =
-                    Http.jsonBody jsonBody
-                , jsonBody =
-                    Just jsonBody
-                , decoder = decoders.status
-            }
+            case idempotencyKey of
+                Nothing ->
+                    res2
+
+                Just key ->
+                    { res2
+                        | headers = idempotencyKeyHeader key :: res2.headers
+                    }
 
         DeleteStatus { id } ->
             { res
