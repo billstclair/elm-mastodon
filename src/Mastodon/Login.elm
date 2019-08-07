@@ -370,7 +370,7 @@ receiveAuthorization clientId clientSecret response =
         Http.GoodStatus_ metadata body ->
             case JD.decodeString rawTokenDecoder body of
                 Err err ->
-                    Err <| BadBody metadata (JD.errorToString err) body
+                    Err <| BadBody metadata err body
 
                 Ok rawToken ->
                     Ok

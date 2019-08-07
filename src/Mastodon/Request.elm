@@ -730,13 +730,17 @@ apiReq =
 
 Same as `Http.Error`, but includes `Http.Metadata` when it's available.
 
+The `String` in a `BadStatus` is the Http error message, usually HTML.
+
+The `Error` in `BadBody` is a `Json.Decode.Error`. The `String` in `BadBody` is the JSON string returned by the Http request.
+
 -}
 type Error
     = BadUrl String
     | Timeout
     | NetworkError
     | BadStatus Http.Metadata String
-    | BadBody Http.Metadata String String
+    | BadBody Http.Metadata JD.Error String
 
 
 {-| Represent an HTTP request.
@@ -841,7 +845,7 @@ processResponse rawRequest response =
         Http.GoodStatus_ metadata body ->
             case JD.decodeString rawRequest.decoder body of
                 Err err ->
-                    Err <| BadBody metadata (Debug.toString err) body
+                    Err <| BadBody metadata err body
 
                 Ok entity ->
                     Ok
