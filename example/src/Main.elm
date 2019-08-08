@@ -2493,10 +2493,19 @@ selectedRequestRadio selectedRequest model =
         ]
 
 
-selectedRequestHtml : SelectedRequest -> Model -> (Model -> Html Msg) -> Html Msg
-selectedRequestHtml selectedRequest model body =
+selectedRequestHtml : SelectedRequest -> String -> Model -> (Model -> Html Msg) -> Html Msg
+selectedRequestHtml selectedRequest url model body =
     span []
         [ selectedRequestRadio selectedRequest model
+        , if url == "" then
+            text ""
+
+          else
+            span []
+                [ text " ("
+                , link "docs" url
+                , text ")"
+                ]
         , br
         , if selectedRequest /= model.selectedRequest then
             text ""
@@ -2606,13 +2615,34 @@ view model =
                                             ]
                                 ]
                     , p []
-                        [ selectedRequestHtml LoginSelected model loginSelectedUI
-                        , selectedRequestHtml InstanceSelected model instanceSelectedUI
-                        , selectedRequestHtml AccountsSelected model accountsSelectedUI
-                        , selectedRequestHtml BlocksSelected model blocksSelectedUI
-                        , selectedRequestHtml GroupsSelected model groupsSelectedUI
-                        , selectedRequestHtml StatusesSelected model statusesSelectedUI
-                        , selectedRequestHtml TimelinesSelected model timelinesSelectedUI
+                        [ selectedRequestHtml LoginSelected
+                            "https://docs.joinmastodon.org/api/authentication/"
+                            model
+                            loginSelectedUI
+                        , selectedRequestHtml InstanceSelected
+                            "https://docs.joinmastodon.org/api/rest/instances/"
+                            model
+                            instanceSelectedUI
+                        , selectedRequestHtml AccountsSelected
+                            "https://docs.joinmastodon.org/api/rest/accounts/"
+                            model
+                            accountsSelectedUI
+                        , selectedRequestHtml BlocksSelected
+                            "https://docs.joinmastodon.org/api/rest/blocks/"
+                            model
+                            blocksSelectedUI
+                        , selectedRequestHtml GroupsSelected
+                            ""
+                            model
+                            groupsSelectedUI
+                        , selectedRequestHtml StatusesSelected
+                            "https://docs.joinmastodon.org/api/rest/statuses/"
+                            model
+                            statusesSelectedUI
+                        , selectedRequestHtml TimelinesSelected
+                            "https://docs.joinmastodon.org/api/rest/timelines/"
+                            model
+                            timelinesSelectedUI
                         ]
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
@@ -2809,6 +2839,16 @@ type WhichJson
     | DecodedJson
 
 
+jsonTreeColors =
+    let
+        default =
+            JsonTree.defaultColors
+    in
+    { light = default
+    , dark = { default | number = "turquoise" }
+    }
+
+
 renderJsonTree : WhichJson -> Model -> Value -> Html Msg
 renderJsonTree whichJson model value =
     let
@@ -2821,7 +2861,12 @@ renderJsonTree whichJson model value =
                     ( SetEntityState, model.entityTree, model.entityState )
 
         config =
-            { colors = JsonTree.defaultColors
+            { colors =
+                if model.style == DarkStyle then
+                    jsonTreeColors.dark
+
+                else
+                    jsonTreeColors.light
 
             -- Should copy the text to a <TextArea> on select.
             , onSelect = Just <| SelectTreeNode whichJson
@@ -2913,7 +2958,7 @@ statusesSelectedUI model =
     p []
         [ pspace
         , textInput "status id: " 20 SetStatusId model.statusId
-        , text " "
+        , br
         , sendButton SendGetStatus model
         , text " "
         , sendButton SendGetStatusContext model
@@ -3228,8 +3273,16 @@ clearAllDialog model =
 
 dollarButtonNameToSendName : Bool -> String -> String
 dollarButtonNameToSendName useElmButtonNames dollarButtonName =
-    dollarButtonNameToMsg dollarButtonName
-        |> sendButtonName useElmButtonNames
+    let
+        name =
+            dollarButtonNameToMsg dollarButtonName
+                |> sendButtonName useElmButtonNames
+    in
+    if name == unknownButtonName then
+        dollarButtonName
+
+    else
+        name
 
 
 replaceSendButtonNames : Bool -> String -> String
@@ -3339,7 +3392,9 @@ The "$GetGroupTimeline" button returns posts for the given "group id".
                     """
 **General and Login Help**
 
-Click a radio button to choose the user interface for that section of the API. The names match the variant names in [Mastodon.Request](https://github.com/billstclair/elm-mastodon/blob/master/src/Mastodon/Request.elm)'s `xxxReq` types.
+Click a radio button to choose the user interface for that section of the API. The names (mostly) match the variant names in the [`Mastodon.Request`](https://github.com/billstclair/elm-mastodon/blob/master/src/Mastodon/Request.elm)`.Request` type.
+
+The "docs" links open, in a new tab, the relevant section of the documentation at docs.joinmastodon.org.
 
 Type a server name, e.g. `mastodon.social`, in the "Server" box at the top of the screen. As soon as you finish typing the name of a real Mastodon server, it will show its `Instance` entity.
 
@@ -3897,11 +3952,16 @@ tupleToButtonName useElmButtonNames ( elm, http ) =
         http
 
 
+unknownButtonName : String
+unknownButtonName =
+    "**Unknown**"
+
+
 sendButtonName : Bool -> Msg -> String
 sendButtonName useElmButtonNames msg =
     case LE.find (\( m, _ ) -> m == msg) buttonNameAlist of
         Nothing ->
-            "**Unknown**"
+            unknownButtonName
 
         Just ( _, tuple ) ->
             tupleToButtonName useElmButtonNames tuple
