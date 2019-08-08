@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Main exposing (emptyUrl, main, parseQuery, receiveCodeAndState)
+module Main exposing (dollarButtonNameToMsg, dollarButtonNameToSendName, emptyUrl, main, parseQuery, receiveCodeAndState, replaceSendButtonNames, sendButtonName)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Dom as Dom
@@ -96,6 +96,7 @@ import Mastodon.Request as Request
 import PortFunnel.LocalStorage as LocalStorage
 import PortFunnel.WebSocket as WebSocket
 import PortFunnels exposing (FunnelDict, Handler(..), State)
+import Regex
 import String.Extra as SE
 import Task
 import Url exposing (Url)
@@ -157,6 +158,7 @@ type alias Model =
     , showJsonTree : Bool
     , showUpdateCredentials : Bool
     , statusId : String
+    , useElmButtonNames : Bool
 
     -- Non-persistent below here
     , clearAllDialogVisible : Bool
@@ -239,6 +241,7 @@ type Msg
     | SetLimit String
     | ToggleSmartPaging
     | ToggleShowJsonTree
+    | ToggleUseElmButtonNames
     | ToggleShowUpdateCredentials
     | ToggleOnlyMedia
     | TogglePinned
@@ -274,7 +277,8 @@ type Msg
     | SendGetStatuses
     | SendGetRelationships
     | SendGetSearchAccounts
-    | SendPostFollowOrUnfollow
+    | SendPostFollow
+    | SendPostUnfollow
     | SendPatchUpdateCredentials
     | SendGetGroups
     | SendGetGroup
@@ -464,6 +468,7 @@ init value url key =
     , showJsonTree = True
     , showUpdateCredentials = False
     , statusId = ""
+    , useElmButtonNames = False
 
     -- Non-persistent below here
     , clearAllDialogVisible = False
@@ -1497,6 +1502,10 @@ updateInternal msg model =
             { mdl | showJsonTree = not model.showJsonTree }
                 |> withNoCmd
 
+        ToggleUseElmButtonNames ->
+            { model | useElmButtonNames = not model.useElmButtonNames }
+                |> withNoCmd
+
         ToggleShowUpdateCredentials ->
             { model | showUpdateCredentials = not model.showUpdateCredentials }
                 |> withNoCmd
@@ -1696,17 +1705,20 @@ updateInternal msg model =
                 )
                 model
 
-        SendPostFollowOrUnfollow ->
+        SendPostFollow ->
             sendRequest
                 (AccountsRequest <|
-                    if model.isAccountFollowed then
-                        Request.PostUnfollow { id = model.accountId }
+                    Request.PostFollow
+                        { id = model.accountId
+                        , reblogs = model.followReblogs
+                        }
+                )
+                model
 
-                    else
-                        Request.PostFollow
-                            { id = model.accountId
-                            , reblogs = model.followReblogs
-                            }
+        SendPostUnfollow ->
+            sendRequest
+                (AccountsRequest <|
+                    Request.PostUnfollow { id = model.accountId }
                 )
                 model
 
@@ -2188,19 +2200,18 @@ smartPaging : List a -> (a -> String) -> Maybe Paging -> Model -> Model
 smartPaging entities getid paging model =
     let
         ( limit, ( max_id, min_id, since_id ) ) =
-            Debug.log "paging" <|
-                case paging of
-                    Nothing ->
-                        -- use the API default here?
-                        ( 1, ( "", "", "" ) )
+            case paging of
+                Nothing ->
+                    -- use the API default here?
+                    ( 1, ( "", "", "" ) )
 
-                    Just pag ->
-                        ( Maybe.withDefault 1 pag.limit
-                        , ( Maybe.withDefault "" pag.max_id
-                          , Maybe.withDefault "" pag.min_id
-                          , Maybe.withDefault "" pag.since_id
-                          )
-                        )
+                Just pag ->
+                    ( Maybe.withDefault 1 pag.limit
+                    , ( Maybe.withDefault "" pag.max_id
+                      , Maybe.withDefault "" pag.min_id
+                      , Maybe.withDefault "" pag.since_id
+                      )
+                    )
 
         pagingInput =
             model.pagingInput
@@ -2636,7 +2647,7 @@ view model =
                         , WriteClipboard.writeClipboard
                             [ WriteClipboard.write
                                 { id =
-                                    if Debug.log "altKeyDown" model.altKeyDown then
+                                    if model.altKeyDown then
                                         ""
 
                                     else
@@ -2647,6 +2658,8 @@ view model =
                             ]
                             []
                         , checkBox ToggleShowJsonTree model.showJsonTree "show tree"
+                        , text " "
+                        , checkBox ToggleUseElmButtonNames model.useElmButtonNames "elm button names"
                         , br
                         , checkBox TogglePrettify model.prettify "prettify"
                         , text " (easier to read, may no longer be valid JSON) "
@@ -2887,11 +2900,11 @@ groupsSelectedUI model =
         [ pspace
         , whichGroupsSelect model
         , text " "
-        , button SendGetGroups "GetGroups"
+        , sendButton SendGetGroups model
         , br
         , textInput "id: " 20 SetGroupId model.groupId
         , text " "
-        , button SendGetGroup "GetGroup"
+        , sendButton SendGetGroup model
         ]
 
 
@@ -2901,11 +2914,11 @@ statusesSelectedUI model =
         [ pspace
         , textInput "status id: " 20 SetStatusId model.statusId
         , text " "
-        , button SendGetStatus "GetStatus"
+        , sendButton SendGetStatus model
         , text " "
-        , button SendGetStatusContext "GetStatusContext"
+        , sendButton SendGetStatusContext model
         , text " "
-        , button SendGetStatusCard "GetStatusCard"
+        , sendButton SendGetStatusCard model
         ]
 
 
@@ -2923,25 +2936,25 @@ timelinesSelectedUI model =
         , br
         , textInput "since id: " 25 SetSinceId model.pagingInput.since_id
         , br
-        , button SendGetHomeTimeline "GetHomeTimeline"
+        , sendButton SendGetHomeTimeline model
         , text " "
-        , button SendGetConversations "GetConversations"
+        , sendButton SendGetConversations model
         , br
         , checkBox ToggleLocal model.local "local "
         , checkBox ToggleOnlyMedia model.onlyMedia "media only "
-        , button SendGetPublicTimeline "GetPublicTimeline"
+        , sendButton SendGetPublicTimeline model
         , br
         , textInput "hashtag: " 30 SetHashtag model.hashtag
         , text " "
-        , button SendGetTagTimeline "GetTagTimeline"
+        , sendButton SendGetTagTimeline model
         , br
         , textInput "list id: " 20 SetListId model.listId
         , text " "
-        , button SendGetListTimeline "GetListTimeline"
+        , sendButton SendGetListTimeline model
         , br
         , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
-        , button SendGetGroupTimeline "GetGroupTimeline"
+        , sendButton SendGetGroupTimeline model
         ]
 
 
@@ -2987,11 +3000,11 @@ instanceSelectedUI : Model -> Html Msg
 instanceSelectedUI model =
     p []
         [ pspace
-        , button SendGetInstance "GetInstance"
+        , sendButton SendGetInstance model
         , text " "
-        , button SendGetTrends "GetTrends"
+        , sendButton SendGetTrends model
         , text " "
-        , button SendGetCustomEmojies "GetCustomEmojis"
+        , sendButton SendGetCustomEmojies model
         ]
 
 
@@ -2999,21 +3012,21 @@ accountsSelectedUI : Model -> Html Msg
 accountsSelectedUI model =
     p []
         [ pspace
-        , button SendGetVerifyCredentials "GetVerifyCredentials"
+        , sendButton SendGetVerifyCredentials model
         , br
         , textInput "username: " 30 SetUsername model.username
         , text " "
-        , button SendGetAccountByUsername "GetAccountByUsername"
+        , sendButton SendGetAccountByUsername model
         , br
         , textInput "id: " 20 SetAccountId model.accountId
         , text " "
-        , button SendGetAccount "GetAccount"
+        , sendButton SendGetAccount model
         , br
         , textInput "limit: " 10 SetLimit model.pagingInput.limit
         , text " "
-        , button SendGetFollowers "GetFollowers"
+        , sendButton SendGetFollowers model
         , text " "
-        , button SendGetFollowing "GetFollowing"
+        , sendButton SendGetFollowing model
         , br
         , textInput "max id: " 25 SetMaxId model.pagingInput.max_id
         , text " "
@@ -3031,11 +3044,11 @@ accountsSelectedUI model =
         , text " "
         , checkBox ToggleExcludeReblogs (not model.excludeReblogs) "reblogs"
         , text " "
-        , button SendGetStatuses "GetStatuses"
+        , sendButton SendGetStatuses model
         , br
         , textInput "ids (1,2,...): " 40 SetAccountIds model.accountIds
         , text " "
-        , button SendGetRelationships "GetRelationships"
+        , sendButton SendGetRelationships model
         , br
         , textInput "q: " 40 SetQ model.q
         , br
@@ -3043,19 +3056,18 @@ accountsSelectedUI model =
         , text " "
         , checkBox ToggleResolve model.resolve " resolve "
         , checkBox ToggleFollowing model.following " following "
-        , button SendGetSearchAccounts "GetSearchAccounts"
+        , sendButton SendGetSearchAccounts model
         , br
         , text "-- writes below here --"
         , br
         , textInput "id: " 20 SetAccountId model.accountId
         , text " "
         , checkBox ToggleFollowReblogs model.followReblogs "reblogs "
-        , button SendPostFollowOrUnfollow <|
-            if model.isAccountFollowed then
-                "PostUnfollow"
+        , if model.isAccountFollowed then
+            sendButton SendPostUnfollow model
 
-            else
-                "PostFollow"
+          else
+            sendButton SendPostFollow model
         , br
         , if not <| accountIsVerified model then
             text ""
@@ -3066,7 +3078,7 @@ accountsSelectedUI model =
                 , br
                 ]
         , if not model.showUpdateCredentials then
-            button ToggleShowUpdateCredentials "Show PatchUpdateCredentials"
+            button ToggleShowUpdateCredentials "Show 'PATCH accounts/update_credentials'"
 
           else
             span []
@@ -3107,7 +3119,7 @@ accountsSelectedUI model =
                 , br
                 , button ToggleShowUpdateCredentials "Hide"
                 , text " "
-                , button SendPatchUpdateCredentials "PatchUpdateCredentials"
+                , sendButton SendPatchUpdateCredentials model
                 ]
         ]
 
@@ -3214,99 +3226,117 @@ clearAllDialog model =
         model.clearAllDialogVisible
 
 
+dollarButtonNameToSendName : Bool -> String -> String
+dollarButtonNameToSendName useElmButtonNames dollarButtonName =
+    dollarButtonNameToMsg dollarButtonName
+        |> sendButtonName useElmButtonNames
+
+
+replaceSendButtonNames : Bool -> String -> String
+replaceSendButtonNames useElmButtonNames string =
+    case Regex.fromString "\\$[A-Za-z]+" of
+        Nothing ->
+            string
+
+        Just regex ->
+            Regex.replace regex
+                (.match >> dollarButtonNameToSendName useElmButtonNames)
+                string
+
+
 help : Model -> Html Msg
 help model =
     Markdown.toHtml [] <|
-        case model.selectedRequest of
-            InstanceSelected ->
-                """
+        replaceSendButtonNames model.useElmButtonNames <|
+            case model.selectedRequest of
+                InstanceSelected ->
+                    """
 **Instance Information Help**
 
-The "GetInstance" button fetches the `Instance` entity for the "Use API for" instance.
+The "$GetInstance" button fetches the `Instance` entity for the "Use API for" instance.
 
-The "GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
+The "$GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
 
-The "GetCustomEmojis" button fetches a list of `Emoji` entities.
+The "$GetCustomEmojies" button fetches a list of `Emoji` entities.
                 """
 
-            AccountsSelected ->
-                """
+                AccountsSelected ->
+                    """
 **AccountsRequest Help**
 
-The "GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
+The "$GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
 
-The "GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "id" with that user's account ID. This is a Gab-only feature.
+The "$GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "id" with that user's account ID. This is a Gab-only feature.
 
-The "GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
+The "$GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
 
-The "GetFollowers" and "GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it is the maximum number of entities to return.
+The "$GetFollowers" and "$GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it is the maximum number of entities to return.
 
-The "GetRelationships" button returns a list of `Relationship` entities, one for each of the (comma-separated) "ids".
+The "$GetRelationships" button returns a list of `Relationship` entities, one for each of the (comma-separated) "ids".
 
-The "GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" is non-blank, it is the maximum number of entities to return.
+The "$GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" is non-blank, it is the maximum number of entities to return.
 
-The "Postfollow / PostUnfollow" button either follows or unfollows the account with the given "id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "id" causes A `GetRelationships` request to be sent.
+The "$PostFollow" / "$PostUnfollow" button either follows or unfollows the account with the given "id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "id" causes A `GetRelationships` request to be sent.
 
-Since the parameters to "PatchUpdateCredentials" take a lot of screen space, that section is initially invisible. Click the "Show PatchUpdateCredentials" button to reveal it.
+Since the parameters to "$PatchUpdateCredentials" take a lot of screen space, that section is initially invisible. Click the "Show 'PATCH accounts/update_credentials'" button to reveal it.
 
-The "PatchUpdateCredentials" button changes account profile information from "Display name", "Note", "Avatar", "Header", "Privacy", "Locked", "Sensitive", "Language", and "Profile MetaData". Only the changed fields are sent to the server. The displayed field values are updated whenever a request returns the logged-in user's `Account` entity, e.g. at login or when you press the "GetVerifyCredentials" button.
+The "$PatchUpdateCredentials" button changes account profile information from "Display name", "Note", "Avatar", "Header", "Privacy", "Locked", "Sensitive", "Language", and "Profile MetaData". Only the changed fields are sent to the server. The displayed field values are updated whenever a request returns the logged-in user's `Account` entity, e.g. at login or when you press the "$GetVerifyCredentials" button.
 
-The "Hide" button to the left of "PatchUpdateCredentials" hides that section of the user interface again.
+The "Hide" button to the left of "$PatchUpdateCredentials" hides that section of the user interface again.
               """
 
-            BlocksSelected ->
-                """
+                BlocksSelected ->
+                    """
 **BlocksRequest Help**
 
 Blocks help goes here.
               """
 
-            GroupsSelected ->
-                """
+                GroupsSelected ->
+                    """
 **GroupsRequest Help**
 
 Groups are a Gab-only feature.
 
-Click "GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
+Click "$GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
 
-Click "GetGroup" to get information about the group with the given "id".
+Click "$GetGroup" to get information about the group with the given "id".
             """
 
-            StatusesSelected ->
-                """
+                StatusesSelected ->
+                    """
 **StatusesRequest Help**
 
-Click "GetStatus" to get the `Status` entity for "status id".
+Click "$GetStatus" to get the `Status` entity for "status id".
 
-Click "GetStatusContext" to get the `Context` entity for "status id".
+Click "$GetStatusContext" to get the `Context` entity for "status id".
 
-Click "GetStatusCard" to get the `Card` entity for "status id". I haven't yet seen one of these in the wild. Returns are variously `HTTP 404 status`, `{}`, or `null` when the card doesn't exist.
-
+Click "$GetStatusCard" to get the `Card` entity for "status id". A card is generated in the background from the first link in a status. Returns are variously `HTTP 404 status`, `{}`, or `null` when the card doesn't exist.
                 """
 
-            TimelinesSelected ->
-                """
+                TimelinesSelected ->
+                    """
 **TimelinesRequest Help**
 
 The paging parameters, "limit", "max id", "min id", and "since id" are used for all the timelines requests. The ids are `Status` ids for `GetXXXTimeline` and `Conversation` ids for `GetConversations`.
 
 If "smart paging" is checked, does its best to be smart about changing the paging parameters after a request. If fewer entities are returned than the "limit", and "since id" & "min id" are blank, will set "max id" to the id of the last entity returned. If "min id" is non-blank, and "max id" and "since id" are blank, will set "min id" to the id of the first entity returned.
 
-The "GetHomeTimeline" button returns the statuses for those you follow.
+The "$GetHomeTimeline" button returns the statuses for those you follow.
 
-The "GetConversations" button returns a list of conversations. I don't know what a conversation is, possibly the PM feature.
+The "$GetConversations" button returns a list of conversations. I don't know what a conversation is, possibly the PM feature.
 
-The "GetPublicTimeline" button returns the public timeline, with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
+The "$GetPublicTimeline" button returns the public timeline, with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
 
-The "GetTagTimeline" button returns posts containing the given "hashtag", with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
+The "$GetTagTimeline" button returns posts containing the given "hashtag", with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
 
-The "GetListTimeline" button returns posts for the list with the given "list id".
+The "$GetListTimeline" button returns posts for the list with the given "list id".
 
-The "GetGroupTimeline" button returns posts for the given "group id".
+The "$GetGroupTimeline" button returns posts for the given "group id".
               """
 
-            _ ->
-                """
+                _ ->
+                    """
 **General and Login Help**
 
 Click a radio button to choose the user interface for that section of the API. The names match the variant names in [Mastodon.Request](https://github.com/billstclair/elm-mastodon/blob/master/src/Mastodon/Request.elm)'s `xxxReq` types.
@@ -3322,6 +3352,8 @@ The "Set Server" button uses the "Server" for API requests without logging in. O
 The "Logout" button logs out of the "Use API for" server. This will remove it from the server selector and clear its persistent token, requiring you to reauthenticate if you login again.
 
 The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. It also copies the value to the clipboard. This makes it easy to paste values, e.g. IDs, and to view them with line-wrap.
+
+The "elm button names" checkbox controls whether the buttons are labelled with HTTP URLs (with the "/api/v1/" prefix elided) or with the names of the Elm type variants.
 
 If you hold down the "Alt" key ("Option" on Macintosh) while clicking on a tree value, the value will be copied into the selected path and to the clipboard, but the selected path textarea will not be focused or selected, nor will it be scrolled into view. You can use this when you want to paste somewhere other than a field on this page, and don't want the scroll position to change.
 
@@ -3446,6 +3478,7 @@ type alias SavedModel =
     , showJsonTree : Bool
     , showUpdateCredentials : Bool
     , statusId : String
+    , useElmButtonNames : Bool
     }
 
 
@@ -3481,6 +3514,7 @@ modelToSavedModel model =
     , showJsonTree = model.showJsonTree
     , showUpdateCredentials = model.showUpdateCredentials
     , statusId = model.statusId
+    , useElmButtonNames = model.useElmButtonNames
     }
 
 
@@ -3517,6 +3551,7 @@ savedModelToModel savedModel model =
         , showJsonTree = savedModel.showJsonTree
         , showUpdateCredentials = savedModel.showUpdateCredentials
         , statusId = savedModel.statusId
+        , useElmButtonNames = savedModel.useElmButtonNames
     }
 
 
@@ -3610,6 +3645,7 @@ encodeSavedModel savedModel =
         , ( "showJsonTree", JE.bool savedModel.showJsonTree )
         , ( "showUpdateCredentials", JE.bool savedModel.showUpdateCredentials )
         , ( "statusId", JE.string savedModel.statusId )
+        , ( "useElmButtonNames", JE.bool savedModel.useElmButtonNames )
         ]
 
 
@@ -3658,6 +3694,7 @@ savedModelDecoder =
         |> optional "showJsonTree" JD.bool True
         |> optional "showUpdateCredentials" JD.bool False
         |> optional "statusId" JD.string ""
+        |> optional "useElmButtonNames" JD.bool False
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -3776,3 +3813,100 @@ special =
     { nbsp = stringFromCode 160 -- \u00A0
     , copyright = stringFromCode 169 -- \u00A9
     }
+
+
+
+---
+--- Button names
+---
+
+
+dollarButtonNameDict : Dict String Msg
+dollarButtonNameDict =
+    Dict.fromList
+        [ ( "GetGroups", SendGetGroups )
+        , ( "GetGroup", SendGetGroup )
+        , ( "GetStatus", SendGetStatus )
+        , ( "GetStatusContext", SendGetStatusContext )
+        , ( "GetStatusCard", SendGetStatusCard )
+        , ( "GetHomeTimeline", SendGetHomeTimeline )
+        , ( "GetConversations", SendGetConversations )
+        , ( "GetPublicTimeline", SendGetPublicTimeline )
+        , ( "GetTagTimeline", SendGetTagTimeline )
+        , ( "GetListTimeline", SendGetListTimeline )
+        , ( "GetGroupTimeline", SendGetGroupTimeline )
+        , ( "GetInstance", SendGetInstance )
+        , ( "GetTrends", SendGetTrends )
+        , ( "GetCustomEmojies", SendGetCustomEmojies )
+        , ( "GetVerifyCredentials", SendGetVerifyCredentials )
+        , ( "GetAccountByUsername", SendGetAccountByUsername )
+        , ( "GetAccount", SendGetAccount )
+        , ( "GetFollowers", SendGetFollowers )
+        , ( "GetFollowing", SendGetFollowing )
+        , ( "GetStatuses", SendGetStatuses )
+        , ( "GetRelationships", SendGetRelationships )
+        , ( "GetSearchAccounts", SendGetSearchAccounts )
+        , ( "PostFollow", SendPostFollow )
+        , ( "PostUnfollow", SendPostUnfollow )
+        , ( "PatchUpdateCredentials", SendPatchUpdateCredentials )
+        ]
+
+
+dollarButtonNameToMsg : String -> Msg
+dollarButtonNameToMsg dollarButtonName =
+    Dict.get (String.dropLeft 1 dollarButtonName) dollarButtonNameDict
+        |> Maybe.withDefault Noop
+
+
+buttonNameAlist : List ( Msg, ( String, String ) )
+buttonNameAlist =
+    [ ( SendGetGroups, ( "GetGroups", "GET groups" ) )
+    , ( SendGetGroup, ( "GetGroup", "GET groups/:id" ) )
+    , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
+    , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
+    , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )
+    , ( SendGetHomeTimeline, ( "GetHomeTimeline", "GET timelines/home" ) )
+    , ( SendGetConversations, ( "GetConversations", "GET conversations" ) )
+    , ( SendGetPublicTimeline, ( "GetPublicTimeline", "GET timelines/public" ) )
+    , ( SendGetTagTimeline, ( "GetTagTimeline", "GET timelines/tag/:tag" ) )
+    , ( SendGetListTimeline, ( "GetListTimeline", "GET timeslines/list/:id" ) )
+    , ( SendGetGroupTimeline, ( "GetGroupTimeline", "GET timelines/group/:id" ) )
+    , ( SendGetInstance, ( "GetInstance", "GET instance" ) )
+    , ( SendGetTrends, ( "GetTrends", "GET trends" ) )
+    , ( SendGetCustomEmojies, ( "GetCustomEmojies", "GET custom_emojis" ) )
+    , ( SendGetVerifyCredentials, ( "GetVerifyCredentials", "GET accounts/verify_credentials" ) )
+    , ( SendGetAccountByUsername, ( "GetAccountByUsername", "GET account_by_username/:username" ) )
+    , ( SendGetAccount, ( "GetAccount", "GET accounts/:id" ) )
+    , ( SendGetFollowers, ( "GetFollowers", "GET accounts/:id/followers" ) )
+    , ( SendGetFollowing, ( "GetFollowing", "GET accounts/:id/following" ) )
+    , ( SendGetStatuses, ( "GetStatuses", "GET accounts/:id/statuses" ) )
+    , ( SendGetRelationships, ( "GetRelationships", "GET accounts/relationships" ) )
+    , ( SendGetSearchAccounts, ( "GetSearchAccounts", "GET accounts/search" ) )
+    , ( SendPostFollow, ( "PostFollow", "POST accounts/:id/follow" ) )
+    , ( SendPostUnfollow, ( "PostUnfollow", "POST accounts/:id/unfollow" ) )
+    , ( SendPatchUpdateCredentials, ( "PatchUpdateCredentials", "PATCH accounts/update_credentials" ) )
+    ]
+
+
+tupleToButtonName : Bool -> ( String, String ) -> String
+tupleToButtonName useElmButtonNames ( elm, http ) =
+    if useElmButtonNames then
+        elm
+
+    else
+        http
+
+
+sendButtonName : Bool -> Msg -> String
+sendButtonName useElmButtonNames msg =
+    case LE.find (\( m, _ ) -> m == msg) buttonNameAlist of
+        Nothing ->
+            "**Unknown**"
+
+        Just ( _, tuple ) ->
+            tupleToButtonName useElmButtonNames tuple
+
+
+sendButton : Msg -> Model -> Html Msg
+sendButton msg model =
+    button msg <| sendButtonName model.useElmButtonNames msg
