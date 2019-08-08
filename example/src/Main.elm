@@ -2479,7 +2479,10 @@ selectedRequestRadio selectedRequest model =
         string =
             selectedRequestToString selectedRequest
     in
-    span [ onClick <| SetSelectedRequest selectedRequest True ]
+    span
+        [ onClick <| SetSelectedRequest selectedRequest True
+        , style "cursor" "default"
+        ]
         [ input
             [ type_ "radio"
             , name radioNames.selectedRequest
@@ -2775,7 +2778,10 @@ view model =
                         [ button ToggleClearAllDialog "Clear All Persistent State"
                         ]
                     , br
-                    , p [ onClick ToggleStyle ]
+                    , p
+                        [ onClick ToggleStyle
+                        , style "cursor" "default"
+                        ]
                         [ input
                             [ type_ "checkbox"
                             , checked <| model.style == DarkStyle
@@ -2929,7 +2935,10 @@ unlabeledTextInput =
 
 checkBox : Msg -> Bool -> String -> Html Msg
 checkBox msg isChecked label =
-    span [ onClick msg ]
+    span
+        [ onClick msg
+        , style "cursor" "default"
+        ]
         [ input
             [ type_ "checkbox"
             , checked isChecked
