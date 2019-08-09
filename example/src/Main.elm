@@ -127,6 +127,11 @@ emptyPagingInput =
     }
 
 
+type Dialog
+    = NoDialog
+    | ConfirmDialog String String Msg
+
+
 type alias Model =
     { token : Maybe String
     , server : String
@@ -161,7 +166,7 @@ type alias Model =
     , useElmButtonNames : Bool
 
     -- Non-persistent below here
-    , clearAllDialogVisible : Bool
+    , dialog : Dialog
     , altKeyDown : Bool
     , request : Maybe RawRequest
     , response : Maybe Value
@@ -206,7 +211,7 @@ type Msg
     | ExpandAll WhichJson
     | CollapseAll WhichJson
     | SelectTreeNode WhichJson JsonTree.KeyPath
-    | ToggleClearAllDialog
+    | SetDialog Dialog
     | OnKeyPress String
     | OnAltKey Bool
     | SetServer String
@@ -268,6 +273,9 @@ type Msg
       -- Messages from buttons that send requests over the wire.
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
+      -- If you add a message here, it should also be added to the
+      -- `buttonNameAlist` and `dollarButtonNameDict` values near the
+      -- bottom of the file.
     | SendGetInstance
     | SendGetTrends
     | SendGetCustomEmojies
@@ -289,6 +297,7 @@ type Msg
     | SendGetStatusCard
     | SendGetStatusRebloggedBy
     | SendGetStatusFavouritedBy
+    | SendDeleteStatus
     | SendGetHomeTimeline
     | SendGetConversations
     | SendGetPublicTimeline
@@ -333,7 +342,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ PortFunnels.subscriptions Process model
-        , if model.clearAllDialogVisible then
+        , if model.dialog /= NoDialog then
             Events.onKeyDown keyDecoder
 
           else
@@ -476,7 +485,7 @@ init value url key =
     , useElmButtonNames = False
 
     -- Non-persistent below here
-    , clearAllDialogVisible = False
+    , dialog = NoDialog
     , altKeyDown = False
     , request = Nothing
     , response = Nothing
@@ -1023,10 +1032,10 @@ updateInternal msg model =
             }
                 |> withNoCmd
 
-        ToggleClearAllDialog ->
-            { model | clearAllDialogVisible = not model.clearAllDialogVisible }
+        SetDialog whichDialog ->
+            { model | dialog = whichDialog }
                 |> withCmd
-                    (if model.clearAllDialogVisible then
+                    (if model.dialog == NoDialog then
                         Cmd.none
 
                      else
@@ -1036,12 +1045,12 @@ updateInternal msg model =
 
         OnKeyPress key ->
             { model
-                | clearAllDialogVisible =
+                | dialog =
                     if key == "Escape" then
-                        False
+                        NoDialog
 
                     else
-                        model.clearAllDialogVisible
+                        model.dialog
             }
                 |> withNoCmd
 
@@ -1425,7 +1434,7 @@ updateInternal msg model =
             let
                 mdl =
                     { model
-                        | clearAllDialogVisible = False
+                        | dialog = NoDialog
                         , tokens = Dict.empty
                         , server = ""
                         , loginServer = Nothing
@@ -1774,6 +1783,13 @@ updateInternal msg model =
                         }
                 )
                 model
+
+        SendDeleteStatus ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.DeleteStatus { id = model.statusId }
+                )
+                { model | dialog = NoDialog }
 
         SendGetHomeTimeline ->
             sendRequest
@@ -2601,7 +2617,7 @@ view model =
     in
     { title = "Mastodon API Explorer"
     , body =
-        [ clearAllDialog model
+        [ dialog model
         , div
             [ style "background-color" backgroundColor
             , style "padding" "1em 0 0 0"
@@ -2800,7 +2816,14 @@ view model =
                         [ help model ]
                     , br
                     , p []
-                        [ button ToggleClearAllDialog "Clear All Persistent State"
+                        [ button
+                            (SetDialog <|
+                                ConfirmDialog
+                                    "Do you really want to erase everything?"
+                                    "Erase"
+                                    ClearAll
+                            )
+                            "Clear All Persistent State"
                         ]
                     , br
                     , p
@@ -3008,6 +3031,10 @@ statusesSelectedUI model =
         , text "-- writes below here --"
         , br
         , textInput "status id: " 25 SetStatusId model.statusId
+        , br
+        , button (SetDialog <| ConfirmDialog "Delete Status?" "OK" SendDeleteStatus) <|
+            sendButtonName model.useElmButtonNames SendDeleteStatus
+        , text ""
         ]
 
 
@@ -3296,23 +3323,32 @@ cancelButtonId =
     "cancelButton"
 
 
-clearAllDialog : Model -> Html Msg
-clearAllDialog model =
+dialog : Model -> Html Msg
+dialog model =
+    let
+        ( content, okButtonText, msg ) =
+            case model.dialog of
+                NoDialog ->
+                    ( "You should never see this.", "OK", Noop )
+
+                ConfirmDialog cont ok m ->
+                    ( cont, ok, m )
+    in
     Dialog.render
         { styles = [ ( "width", "40%" ) ]
         , title = "Confirm"
-        , content = [ text "Do you really want to erase everything?" ]
+        , content = [ text content ]
         , actionBar =
             [ Html.button
-                [ onClick ToggleClearAllDialog
+                [ onClick <| SetDialog NoDialog
                 , id cancelButtonId
                 ]
                 [ b "Cancel" ]
             , text <| String.repeat 4 special.nbsp
-            , button ClearAll "Erase"
+            , button msg okButtonText
             ]
         }
-        model.clearAllDialogVisible
+        (model.dialog /= NoDialog)
 
 
 dollarButtonNameToSendName : Bool -> String -> String
@@ -3413,6 +3449,8 @@ Click "$GetStatusCard" to get the `Card` entity for "status id". A card is gener
 Click "$GetStatusRebloggedBy" to get a list of `Account` entities that reblogged "status id". "limit" controls the maximum number of results.
 
 Click "$GetStatusFavouritedBy" to get a list of `Account` entities that favorited "status id". "limit" controls the maximum number of results.
+
+Click "$DeleteStatus" to delete "status id", after confirmation.
                 """
 
                 TimelinesSelected ->
@@ -3934,6 +3972,7 @@ dollarButtonNameDict =
         , ( "GetStatusCard", SendGetStatusCard )
         , ( "GetStatusRebloggedBy", SendGetStatusRebloggedBy )
         , ( "GetStatusFavouritedBy", SendGetStatusFavouritedBy )
+        , ( "DeleteStatus", SendDeleteStatus )
         , ( "GetConversations", SendGetConversations )
         , ( "GetPublicTimeline", SendGetPublicTimeline )
         , ( "GetTagTimeline", SendGetTagTimeline )
@@ -3969,8 +4008,9 @@ buttonNameAlist =
     , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
     , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
     , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )
-    , ( SendGetStatusRebloggedBy, ( "GetStatusRebloggedBy", "Get statuses/:id/reblogged_by" ) )
-    , ( SendGetStatusFavouritedBy, ( "GetStatusFavouritedBy", "Get statuses/:id/favourited_by" ) )
+    , ( SendGetStatusRebloggedBy, ( "GetStatusRebloggedBy", "GET statuses/:id/reblogged_by" ) )
+    , ( SendGetStatusFavouritedBy, ( "GetStatusFavouritedBy", "GET statuses/:id/favourited_by" ) )
+    , ( SendDeleteStatus, ( "DeleteStatus", "DELETE statuses/:id" ) )
     , ( SendGetHomeTimeline, ( "GetHomeTimeline", "GET timelines/home" ) )
     , ( SendGetConversations, ( "GetConversations", "GET conversations" ) )
     , ( SendGetPublicTimeline, ( "GetPublicTimeline", "GET timelines/public" ) )
