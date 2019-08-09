@@ -1032,8 +1032,8 @@ updateInternal msg model =
             }
                 |> withNoCmd
 
-        SetDialog whichDialog ->
-            { model | dialog = whichDialog }
+        SetDialog dialog ->
+            { model | dialog = dialog }
                 |> withCmd
                     (if model.dialog == NoDialog then
                         Cmd.none
@@ -2617,7 +2617,7 @@ view model =
     in
     { title = "Mastodon API Explorer"
     , body =
-        [ dialog model
+        [ renderDialog model
         , div
             [ style "background-color" backgroundColor
             , style "padding" "1em 0 0 0"
@@ -2731,14 +2731,20 @@ view model =
                                 }
                             ]
                             []
-                        , checkBox ToggleShowJsonTree model.showJsonTree "show tree"
-                        , text " "
-                        , checkBox ToggleUseElmButtonNames model.useElmButtonNames "elm button names"
-                        , br
-                        , checkBox TogglePrettify model.prettify "prettify"
-                        , text " (easier to read, may no longer be valid JSON) "
-                        , button ClearSentReceived "Clear"
                         ]
+                    , checkBox ToggleShowJsonTree model.showJsonTree "show tree"
+                    , if model.showJsonTree then
+                        text ""
+
+                      else
+                        span []
+                            [ text " "
+                            , checkBox TogglePrettify model.prettify "prettify"
+                            ]
+                    , text " "
+                    , checkBox ToggleUseElmButtonNames model.useElmButtonNames "elm button names"
+                    , text " "
+                    , button ClearSentReceived "Clear"
                     , p [] [ b "Sent:" ]
                     , pre []
                         [ case model.request of
@@ -3034,7 +3040,7 @@ statusesSelectedUI model =
         , br
         , button (SetDialog <| ConfirmDialog "Delete Status?" "OK" SendDeleteStatus) <|
             sendButtonName model.useElmButtonNames SendDeleteStatus
-        , text ""
+        , text " (after confirmation)"
         ]
 
 
@@ -3323,8 +3329,8 @@ cancelButtonId =
     "cancelButton"
 
 
-dialog : Model -> Html Msg
-dialog model =
+renderDialog : Model -> Html Msg
+renderDialog model =
     let
         ( content, okButtonText, msg ) =
             case model.dialog of
@@ -3377,6 +3383,8 @@ replaceSendButtonNames useElmButtonNames string =
                 string
 
 
+{-| `$Foo` will be replaced in strings below by `replaceSendButtonNames`.
+-}
 help : Model -> Html Msg
 help model =
     Markdown.toHtml [] <|
@@ -3494,13 +3502,13 @@ The "Logout" button logs out of the "Use API for" server. This will remove it fr
 
 The "show tree" checkbox controls whether the "Received" and "Decoded" sections are shown as preformatted text or as expandable trees. If trees are shown, clicking on a string, number, or boolean in the tree will copy its path and value to "selected path" and a textarea, which will appear above the "show tree" checkbox. It also copies the value to the clipboard. This makes it easy to paste values, e.g. IDs, and to view them with line-wrap.
 
-The "elm button names" checkbox controls whether the buttons are labelled with HTTP URLs (with the "/api/v1/" prefix elided) or with the names of the Elm type variants.
-
 If you hold down the "Alt" key ("Option" on Macintosh) while clicking on a tree value, the value will be copied into the selected path and to the clipboard, but the selected path textarea will not be focused or selected, nor will it be scrolled into view. You can use this when you want to paste somewhere other than a field on this page, and don't want the scroll position to change.
 
 If the "selected path" textarea shows a URL, there will be an "open URL in new tab" link which will do that.
 
-The "prettify" checkbox controls whether the JSON output lines are wrapped to fit the screen. If selected, then the non-tree output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON. "prettify" has no effect if "show tree" is checked.
+The "prettify" checkbox, which is only shown if "show tree" is not checked, controls whether the JSON output lines are wrapped to fit the screen. If selected, then the non-tree output will not necessarily be valid JSON. If NOT selected, then it will, and you can copy and paste it into environments that expect JSON.
+
+The "elm button names" checkbox controls whether the buttons are labelled with HTTP methods and URLs (with the "/api/v1/" prefix elided) or with the names of the Elm type variants.
 
 The "Headers" section, if enabled, shows the headers received from the server for the last request.
 
