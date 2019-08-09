@@ -233,6 +233,7 @@ type Msg
     | Login
     | Logout
     | ClearAll
+      -- UI input setters
     | SetUsername String
     | SetAccountId String
     | SetMaxId String
@@ -264,6 +265,7 @@ type Msg
     | ToggleLocal
     | SetHashtag String
     | SetListId String
+      -- Messages from buttons that send requests over the wire.
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
     | SendGetInstance
@@ -285,12 +287,15 @@ type Msg
     | SendGetStatus
     | SendGetStatusContext
     | SendGetStatusCard
+    | SendGetStatusRebloggedBy
+    | SendGetStatusFavouritedBy
     | SendGetHomeTimeline
     | SendGetConversations
     | SendGetPublicTimeline
     | SendGetTagTimeline
     | SendGetListTimeline
     | SendGetGroupTimeline
+      -- All of the `SendXXX` messages receive their results via `ReceiveResponse`.
     | ReceiveResponse (Result Error Response)
 
 
@@ -1750,6 +1755,26 @@ updateInternal msg model =
                 (StatusesRequest <| Request.GetStatusCard { id = model.statusId })
                 model
 
+        SendGetStatusRebloggedBy ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.GetStatusRebloggedBy
+                        { id = model.statusId
+                        , limit = String.toInt model.pagingInput.limit
+                        }
+                )
+                model
+
+        SendGetStatusFavouritedBy ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.GetStatusFavouritedBy
+                        { id = model.statusId
+                        , limit = String.toInt model.pagingInput.limit
+                        }
+                )
+                model
+
         SendGetHomeTimeline ->
             sendRequest
                 (TimelinesRequest <|
@@ -2956,7 +2981,7 @@ groupsSelectedUI model =
         , text " "
         , sendButton SendGetGroups model
         , br
-        , textInput "id: " 20 SetGroupId model.groupId
+        , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
         , sendButton SendGetGroup model
         ]
@@ -2966,13 +2991,23 @@ statusesSelectedUI : Model -> Html Msg
 statusesSelectedUI model =
     p []
         [ pspace
-        , textInput "status id: " 20 SetStatusId model.statusId
+        , textInput "status id: " 25 SetStatusId model.statusId
         , br
         , sendButton SendGetStatus model
         , text " "
         , sendButton SendGetStatusContext model
         , text " "
         , sendButton SendGetStatusCard model
+        , br
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , br
+        , sendButton SendGetStatusRebloggedBy model
+        , text " "
+        , sendButton SendGetStatusFavouritedBy model
+        , br
+        , text "-- writes below here --"
+        , br
+        , textInput "status id: " 25 SetStatusId model.statusId
         ]
 
 
@@ -3072,7 +3107,7 @@ accountsSelectedUI model =
         , text " "
         , sendButton SendGetAccountByUsername model
         , br
-        , textInput "id: " 20 SetAccountId model.accountId
+        , textInput "account id: " 20 SetAccountId model.accountId
         , text " "
         , sendButton SendGetAccount model
         , br
@@ -3114,7 +3149,7 @@ accountsSelectedUI model =
         , br
         , text "-- writes below here --"
         , br
-        , textInput "id: " 20 SetAccountId model.accountId
+        , textInput "account id: " 20 SetAccountId model.accountId
         , text " "
         , checkBox ToggleFollowReblogs model.followReblogs "reblogs "
         , if model.isAccountFollowed then
@@ -3328,9 +3363,9 @@ The "$GetCustomEmojies" button fetches a list of `Emoji` entities.
 
 The "$GetVerifyCredentials" button fetches the `Account` entity for the logged-in user.
 
-The "$GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "id" with that user's account ID. This is a Gab-only feature.
+The "$GetAccountByUsername" button fetches the `Account` entity for the user with the given "username". If the "username" is blank, it uses the username of the logged in user, or sends blank, which will result in an error, if not logged in. If successful, it fills in the "account id" with that user's account ID. This is a Gab-only feature.
 
-The "$GetAccount" button fetches the `Account` entity for the user with the given "id". If "id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
+The "$GetAccount" button fetches the `Account` entity for the user with the given "account id". If "account id" is blank, uses the id of the logged in user, or sends blank, which will result in an error, if not logged in.
 
 The "$GetFollowers" and "$GetFollowing" buttons fetch lists of the associated `Account` entities. If "limit" is non-blank, it is the maximum number of entities to return.
 
@@ -3338,7 +3373,7 @@ The "$GetRelationships" button returns a list of `Relationship` entities, one fo
 
 The "$GetSearchAccounts" button returns a list of `Account` entities that match "q", "resolve", and "following". If "limit" is non-blank, it is the maximum number of entities to return.
 
-The "$PostFollow" / "$PostUnfollow" button either follows or unfollows the account with the given "id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "id" causes A `GetRelationships` request to be sent.
+The "$PostFollow" / "$PostUnfollow" button either follows or unfollows the account with the given "account id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "account id" causes A `GetRelationships` request to be sent.
 
 Since the parameters to "$PatchUpdateCredentials" take a lot of screen space, that section is initially invisible. Click the "Show 'PATCH accounts/update_credentials'" button to reveal it.
 
@@ -3362,7 +3397,7 @@ Groups are a Gab-only feature.
 
 Click "$GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
 
-Click "$GetGroup" to get information about the group with the given "id".
+Click "$GetGroup" to get information about the group with the given "group id".
             """
 
                 StatusesSelected ->
@@ -3374,6 +3409,10 @@ Click "$GetStatus" to get the `Status` entity for "status id".
 Click "$GetStatusContext" to get the `Context` entity for "status id".
 
 Click "$GetStatusCard" to get the `Card` entity for "status id". A card is generated in the background from the first link in a status. Returns are variously `HTTP 404 status`, `{}`, or `null` when the card doesn't exist.
+
+Click "$GetStatusRebloggedBy" to get a list of `Account` entities that reblogged "status id". "limit" controls the maximum number of results.
+
+Click "$GetStatusFavouritedBy" to get a list of `Account` entities that favorited "status id". "limit" controls the maximum number of results.
                 """
 
                 TimelinesSelected ->
@@ -3893,7 +3932,8 @@ dollarButtonNameDict =
         , ( "GetStatus", SendGetStatus )
         , ( "GetStatusContext", SendGetStatusContext )
         , ( "GetStatusCard", SendGetStatusCard )
-        , ( "GetHomeTimeline", SendGetHomeTimeline )
+        , ( "GetStatusRebloggedBy", SendGetStatusRebloggedBy )
+        , ( "GetStatusFavouritedBy", SendGetStatusFavouritedBy )
         , ( "GetConversations", SendGetConversations )
         , ( "GetPublicTimeline", SendGetPublicTimeline )
         , ( "GetTagTimeline", SendGetTagTimeline )
@@ -3929,6 +3969,8 @@ buttonNameAlist =
     , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
     , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
     , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )
+    , ( SendGetStatusRebloggedBy, ( "GetStatusRebloggedBy", "Get statuses/:id/reblogged_by" ) )
+    , ( SendGetStatusFavouritedBy, ( "GetStatusFavouritedBy", "Get statuses/:id/favourited_by" ) )
     , ( SendGetHomeTimeline, ( "GetHomeTimeline", "GET timelines/home" ) )
     , ( SendGetConversations, ( "GetConversations", "GET conversations" ) )
     , ( SendGetPublicTimeline, ( "GetPublicTimeline", "GET timelines/public" ) )
