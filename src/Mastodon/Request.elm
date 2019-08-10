@@ -19,7 +19,7 @@ module Mastodon.Request exposing
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..), TrendsReq(..)
     , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..)
-    , userAgentHeader, idempotencyKeyHeader, emptyPaging
+    , userAgentHeader, idempotencyKeyHeader, emptyPaging, simplePostStatus
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
     )
@@ -57,7 +57,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Utility
 
-@docs userAgentHeader, idempotencyKeyHeader, emptyPaging
+@docs userAgentHeader, idempotencyKeyHeader, emptyPaging, simplePostStatus
 
 
 # Low-level request creation
@@ -608,16 +608,17 @@ type StatusesReq
         { id : String
         , limit : Maybe Int
         }
-      -- `quote_of_id : Maybe String` for Gab quoted posts.
     | PostStatus
         { status : Maybe String
         , in_reply_to_id : Maybe String
+        , group_id : Maybe String
+        , quote_of_id : Maybe String
         , media_ids : List String
         , poll : Maybe PollDefinition
 
         -- If included, then sensitive will be passed as true
         , spoiler_text : Maybe String
-        , visibility : Entity.Visibility
+        , visibility : Maybe Entity.Visibility
         , scheduled_at : Maybe Entity.Datetime
         , language : Maybe Entity.ISO6391
         , idempotencyKey : Maybe String
@@ -627,6 +628,42 @@ type StatusesReq
     | PostUnreblogStatus { id : String }
     | PostPinStatus { id : String }
     | PostUnpinStatus { id : String }
+
+
+nothingIfBlank : String -> Maybe String
+nothingIfBlank s =
+    if s == "" then
+        Nothing
+
+    else
+        Just s
+
+
+{-| Create a `PostStatus` request using only the most common non-blank fields.
+
+Parameters are:
+
+    simplePostStatus status in_reply_to_id spoiler_text
+
+-}
+simplePostStatus : String -> Maybe String -> Maybe String -> Request
+simplePostStatus status in_reply_to_id spoiler_text =
+    StatusesRequest <|
+        PostStatus
+            { status = nothingIfBlank status
+            , in_reply_to_id = in_reply_to_id
+            , group_id = Nothing
+            , quote_of_id = Nothing
+            , media_ids = []
+            , poll = Nothing
+
+            -- If included, then sensitive will be passed as true
+            , spoiler_text = spoiler_text
+            , visibility = Nothing
+            , scheduled_at = Nothing
+            , language = Nothing
+            , idempotencyKey = Nothing
+            }
 
 
 {-| GET/POST /api/v1/timelines
@@ -2293,7 +2330,7 @@ statusesReq req res =
                 , decoder = decoders.accountList
             }
 
-        PostStatus { status, in_reply_to_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language, idempotencyKey } ->
+        PostStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language, idempotencyKey } ->
             -- If spoiler_text is included, then sensitive will be passed as true
             let
                 jsonBody =
@@ -2311,6 +2348,18 @@ statusesReq req res =
 
                                 Just id ->
                                     [ ( "in_reply_to_id", JE.string id ) ]
+                            , case group_id of
+                                Nothing ->
+                                    []
+
+                                Just id ->
+                                    [ ( "group_id", JE.string id ) ]
+                            , case quote_of_id of
+                                Nothing ->
+                                    []
+
+                                Just id ->
+                                    [ ( "quote_of_id", JE.string id ) ]
                             , if media_ids == [] then
                                 []
 
@@ -2338,7 +2387,12 @@ statusesReq req res =
                                     [ ( "sensitive", JE.bool True )
                                     , ( "spoiler_text", JE.string text )
                                     ]
-                            , [ ( "visibility", ED.encodeVisibility visibility ) ]
+                            , case visibility of
+                                Nothing ->
+                                    []
+
+                                Just vis ->
+                                    [ ( "visibility", ED.encodeVisibility vis ) ]
                             , case scheduled_at of
                                 Nothing ->
                                     []

@@ -80,6 +80,7 @@ import Mastodon.Entity as Entity
         , Entity(..)
         , Field
         , Privacy(..)
+        , Visibility(..)
         )
 import Mastodon.Login as Login exposing (FetchAccountOrRedirect(..))
 import Mastodon.Request as Request
@@ -164,6 +165,7 @@ type alias Model =
     , showUpdateCredentials : Bool
     , statusId : String
     , useElmButtonNames : Bool
+    , showPostStatus : Bool
 
     -- Non-persistent below here
     , dialog : Dialog
@@ -196,6 +198,13 @@ type alias Model =
     , sensitive : Bool
     , language : String
     , isAccountFollowed : Bool
+    , status : String
+    , in_reply_to_id : String
+    , quote_of_id : String
+    , spoiler_text : String
+    , visibility : Maybe Visibility
+    , scheduled_at : String
+    , idempotencyKey : String
     , msg : Maybe String
     , started : Started
     , funnelState : State
@@ -267,6 +276,8 @@ type Msg
     | SetLanguage String
     | SetGroupId String
     | SetStatusId String
+    | ToggleShowPostStatus
+    | SetStatus String
     | ToggleLocal
     | SetHashtag String
     | SetListId String
@@ -298,6 +309,11 @@ type Msg
     | SendGetStatusRebloggedBy
     | SendGetStatusFavouritedBy
     | SendDeleteStatus
+    | SendPostReblogStatus
+    | SendPostUnreblogStatus
+    | SendPostPinStatus
+    | SendPostUnpinStatus
+    | SendPostStatus
     | SendGetHomeTimeline
     | SendGetConversations
     | SendGetPublicTimeline
@@ -481,6 +497,7 @@ init value url key =
     , smartPaging = False
     , showJsonTree = True
     , showUpdateCredentials = False
+    , showPostStatus = False
     , statusId = ""
     , useElmButtonNames = False
 
@@ -515,6 +532,13 @@ init value url key =
     , sensitive = False
     , language = ""
     , isAccountFollowed = False
+    , status = ""
+    , in_reply_to_id = ""
+    , quote_of_id = ""
+    , spoiler_text = ""
+    , visibility = Nothing
+    , scheduled_at = ""
+    , idempotencyKey = ""
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -867,6 +891,15 @@ imageMimeTypes =
     ]
 
 
+nothingIfBlank : String -> Maybe String
+nothingIfBlank x =
+    if x == "" then
+        Nothing
+
+    else
+        Just x
+
+
 pagingInputToPaging : PagingInput -> Maybe Paging
 pagingInputToPaging pagingInput =
     let
@@ -875,13 +908,6 @@ pagingInputToPaging pagingInput =
 
         ilimit =
             Maybe.withDefault -1 <| String.toInt limit
-
-        nothingIfBlank x =
-            if x == "" then
-                Nothing
-
-            else
-                Just x
     in
     if max_id == "" && since_id == "" && min_id == "" && ilimit < 0 then
         Nothing
@@ -1622,6 +1648,14 @@ updateInternal msg model =
             { model | statusId = statusId }
                 |> withNoCmd
 
+        ToggleShowPostStatus ->
+            { model | showPostStatus = not model.showPostStatus }
+                |> withNoCmd
+
+        SetStatus status ->
+            { model | status = status }
+                |> withNoCmd
+
         ToggleLocal ->
             { model | local = not model.local }
                 |> withNoCmd
@@ -1788,6 +1822,53 @@ updateInternal msg model =
             sendRequest
                 (StatusesRequest <|
                     Request.DeleteStatus { id = model.statusId }
+                )
+                { model | dialog = NoDialog }
+
+        SendPostReblogStatus ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.PostReblogStatus { id = model.statusId }
+                )
+                { model | dialog = NoDialog }
+
+        SendPostUnreblogStatus ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.PostUnreblogStatus { id = model.statusId }
+                )
+                { model | dialog = NoDialog }
+
+        SendPostPinStatus ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.PostPinStatus { id = model.statusId }
+                )
+                { model | dialog = NoDialog }
+
+        SendPostUnpinStatus ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.PostUnpinStatus { id = model.statusId }
+                )
+                { model | dialog = NoDialog }
+
+        SendPostStatus ->
+            sendRequest
+                (StatusesRequest <|
+                    Request.PostStatus
+                        { status = nothingIfBlank model.status
+                        , in_reply_to_id = nothingIfBlank model.in_reply_to_id
+                        , group_id = nothingIfBlank model.groupId
+                        , quote_of_id = nothingIfBlank model.quote_of_id
+                        , media_ids = [] --TODO
+                        , poll = Nothing --TODO
+                        , spoiler_text = nothingIfBlank model.spoiler_text
+                        , visibility = model.visibility
+                        , scheduled_at = nothingIfBlank model.scheduled_at
+                        , language = nothingIfBlank model.language
+                        , idempotencyKey = nothingIfBlank model.idempotencyKey
+                        }
                 )
                 { model | dialog = NoDialog }
 
@@ -3041,6 +3122,39 @@ statusesSelectedUI model =
         , button (SetDialog <| ConfirmDialog "Delete Status?" "OK" SendDeleteStatus) <|
             sendButtonName model.useElmButtonNames SendDeleteStatus
         , text " (after confirmation)"
+        , br
+        , sendButton SendPostReblogStatus model
+        , text " "
+        , sendButton SendPostUnreblogStatus model
+        , br
+        , sendButton SendPostPinStatus model
+        , text " "
+        , sendButton SendPostUnpinStatus model
+        , br
+        , if not model.showPostStatus then
+            let
+                buttonName =
+                    sendButtonName model.useElmButtonNames
+                        SendPostStatus
+            in
+            button ToggleShowPostStatus <| "Show '" ++ buttonName ++ "'"
+
+          else
+            span []
+                [ b "Status:"
+                , br
+                , textarea
+                    [ onInput SetStatus
+                    , value model.status
+                    , rows 4
+                    , cols 80
+                    ]
+                    []
+                , br
+                , button ToggleShowPostStatus "Hide"
+                , text " "
+                , sendButton SendPostStatus model
+                ]
         ]
 
 
@@ -3200,7 +3314,12 @@ accountsSelectedUI model =
                 , br
                 ]
         , if not model.showUpdateCredentials then
-            button ToggleShowUpdateCredentials "Show 'PATCH accounts/update_credentials'"
+            let
+                buttonName =
+                    sendButtonName model.useElmButtonNames
+                        SendPatchUpdateCredentials
+            in
+            button ToggleShowUpdateCredentials <| "Show '" ++ buttonName ++ "'"
 
           else
             span []
@@ -3419,7 +3538,7 @@ The "$GetSearchAccounts" button returns a list of `Account` entities that match 
 
 The "$PostFollow" / "$PostUnfollow" button either follows or unfollows the account with the given "account id". If following, will show reblogs if and only if "reblogs" is checked. In order to decide whether to follow or unfollow when you click the button, every change to the "account id" causes A `GetRelationships` request to be sent.
 
-Since the parameters to "$PatchUpdateCredentials" take a lot of screen space, that section is initially invisible. Click the "Show 'PATCH accounts/update_credentials'" button to reveal it.
+Since the parameters to "$PatchUpdateCredentials" take a lot of screen space, that section is initially invisible. Click the "Show '$PatchUpdateCredentials'" button to reveal it.
 
 The "$PatchUpdateCredentials" button changes account profile information from "Display name", "Note", "Avatar", "Header", "Privacy", "Locked", "Sensitive", "Language", and "Profile MetaData". Only the changed fields are sent to the server. The displayed field values are updated whenever a request returns the logged-in user's `Account` entity, e.g. at login or when you press the "$GetVerifyCredentials" button.
 
@@ -3459,6 +3578,14 @@ Click "$GetStatusRebloggedBy" to get a list of `Account` entities that reblogged
 Click "$GetStatusFavouritedBy" to get a list of `Account` entities that favorited "status id". "limit" controls the maximum number of results.
 
 Click "$DeleteStatus" to delete "status id", after confirmation.
+
+Click "$PostReblogStatus" to reblog "status id".
+
+Click "$PostUnreblogStatus" to unreblog "status id".
+
+Click "$PostPinStatus" to pin "status id".
+
+Click "$PostUnpinStatus" to unpin "status id".
                 """
 
                 TimelinesSelected ->
@@ -3628,6 +3755,7 @@ type alias SavedModel =
     , showUpdateCredentials : Bool
     , statusId : String
     , useElmButtonNames : Bool
+    , showPostStatus : Bool
     }
 
 
@@ -3664,6 +3792,7 @@ modelToSavedModel model =
     , showUpdateCredentials = model.showUpdateCredentials
     , statusId = model.statusId
     , useElmButtonNames = model.useElmButtonNames
+    , showPostStatus = model.showPostStatus
     }
 
 
@@ -3701,6 +3830,7 @@ savedModelToModel savedModel model =
         , showUpdateCredentials = savedModel.showUpdateCredentials
         , statusId = savedModel.statusId
         , useElmButtonNames = savedModel.useElmButtonNames
+        , showPostStatus = savedModel.showPostStatus
     }
 
 
@@ -3795,6 +3925,7 @@ encodeSavedModel savedModel =
         , ( "showUpdateCredentials", JE.bool savedModel.showUpdateCredentials )
         , ( "statusId", JE.string savedModel.statusId )
         , ( "useElmButtonNames", JE.bool savedModel.useElmButtonNames )
+        , ( "showPostStatus", JE.bool savedModel.showPostStatus )
         ]
 
 
@@ -3844,6 +3975,7 @@ savedModelDecoder =
         |> optional "showUpdateCredentials" JD.bool False
         |> optional "statusId" JD.string ""
         |> optional "useElmButtonNames" JD.bool False
+        |> optional "showPostStatus" JD.bool False
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -3981,6 +4113,11 @@ dollarButtonNameDict =
         , ( "GetStatusRebloggedBy", SendGetStatusRebloggedBy )
         , ( "GetStatusFavouritedBy", SendGetStatusFavouritedBy )
         , ( "DeleteStatus", SendDeleteStatus )
+        , ( "PostReblogStatus", SendPostReblogStatus )
+        , ( "PostUnreblogStatus", SendPostUnreblogStatus )
+        , ( "PostPinStatus", SendPostPinStatus )
+        , ( "PostUnpinStatus", SendPostUnpinStatus )
+        , ( "PostStatus", SendPostStatus )
         , ( "GetConversations", SendGetConversations )
         , ( "GetPublicTimeline", SendGetPublicTimeline )
         , ( "GetTagTimeline", SendGetTagTimeline )
@@ -4019,6 +4156,11 @@ buttonNameAlist =
     , ( SendGetStatusRebloggedBy, ( "GetStatusRebloggedBy", "GET statuses/:id/reblogged_by" ) )
     , ( SendGetStatusFavouritedBy, ( "GetStatusFavouritedBy", "GET statuses/:id/favourited_by" ) )
     , ( SendDeleteStatus, ( "DeleteStatus", "DELETE statuses/:id" ) )
+    , ( SendPostReblogStatus, ( "PostReblogStatus", "POST statuses/:id/reblog" ) )
+    , ( SendPostUnreblogStatus, ( "PostUnreblogStatus", "POST statuses/:id/unreblog" ) )
+    , ( SendPostPinStatus, ( "PostPinStatus", "POST statuses/:id/pin" ) )
+    , ( SendPostUnpinStatus, ( "PostUnpinStatus", "POST statuses/:id/unpin" ) )
+    , ( SendPostStatus, ( "PostStatus", "POST statuses" ) )
     , ( SendGetHomeTimeline, ( "GetHomeTimeline", "GET timelines/home" ) )
     , ( SendGetConversations, ( "GetConversations", "GET conversations" ) )
     , ( SendGetPublicTimeline, ( "GetPublicTimeline", "GET timelines/public" ) )
