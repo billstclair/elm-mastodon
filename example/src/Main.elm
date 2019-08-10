@@ -235,7 +235,7 @@ type Msg
     | ToggleResolve
     | ToggleFollowing
     | ToggleFollowReblogs
-    | SetSelectedRequest SelectedRequest Bool
+    | SetSelectedRequest SelectedRequest
     | ReceiveRedirect (Result ( String, Error ) ( String, App, Cmd Msg ))
     | ReceiveAuthorization (Result ( String, Error ) ( String, Authorization, Account ))
     | ReceiveInstance (Result Error Response)
@@ -278,6 +278,12 @@ type Msg
     | SetStatusId String
     | ToggleShowPostStatus
     | SetStatus String
+    | SetInReplyToId String
+    | SetInQuoteOfId String
+    | SetSpoilerText String
+    | SetVisibility (Maybe Visibility)
+    | SetScheduledAt String
+    | SetIdempotencyKey String
     | ToggleLocal
     | SetHashtag String
     | SetListId String
@@ -1170,15 +1176,8 @@ updateInternal msg model =
             { model | followReblogs = not model.followReblogs }
                 |> withNoCmd
 
-        SetSelectedRequest selectedRequest selected ->
-            { model
-                | selectedRequest =
-                    if selected then
-                        selectedRequest
-
-                    else
-                        model.selectedRequest
-            }
+        SetSelectedRequest selectedRequest ->
+            { model | selectedRequest = selectedRequest }
                 |> withNoCmd
 
         ReceiveRedirect result ->
@@ -1654,6 +1653,30 @@ updateInternal msg model =
 
         SetStatus status ->
             { model | status = status }
+                |> withNoCmd
+
+        SetInReplyToId in_reply_to_id ->
+            { model | in_reply_to_id = in_reply_to_id }
+                |> withNoCmd
+
+        SetInQuoteOfId quote_of_id ->
+            { model | quote_of_id = quote_of_id }
+                |> withNoCmd
+
+        SetSpoilerText spoiler_text ->
+            { model | spoiler_text = spoiler_text }
+                |> withNoCmd
+
+        SetVisibility visibility ->
+            { model | visibility = visibility }
+                |> withNoCmd
+
+        SetScheduledAt scheduled_at ->
+            { model | scheduled_at = scheduled_at }
+                |> withNoCmd
+
+        SetIdempotencyKey idempotencyKey ->
+            { model | idempotencyKey = idempotencyKey }
                 |> withNoCmd
 
         ToggleLocal ->
@@ -2279,6 +2302,22 @@ applyResponseSideEffects response model =
         AccountsRequest (Request.GetStatuses { paging }) ->
             statusSmartPaging response.entity paging model
 
+        StatusesRequest (Request.PostStatus _) ->
+            case response.entity of
+                StatusEntity { id } ->
+                    { model
+                        | statusId = id
+                        , status = ""
+                        , in_reply_to_id = ""
+                        , quote_of_id = ""
+                        , spoiler_text = ""
+                        , scheduled_at = ""
+                        , idempotencyKey = ""
+                    }
+
+                _ ->
+                    model
+
         TimelinesRequest req ->
             case req of
                 Request.GetHomeTimeline { paging } ->
@@ -2592,7 +2631,29 @@ selectedRequestFromString s =
 radioNames =
     { selectedRequest = "selectedRequest"
     , privacy = "privacy"
+    , visibility = "visibility"
     }
+
+
+radioButton : { buttonValue : a, radioValue : a, radioName : String, setter : Msg, label : String } -> Html Msg
+radioButton { buttonValue, radioValue, radioName, setter, label } =
+    span []
+        [ input
+            [ type_ "radio"
+            , name radioName
+            , value label
+            , checked <| buttonValue == radioValue
+            , onCheck <|
+                \checked ->
+                    if checked then
+                        setter
+
+                    else
+                        Noop
+            ]
+            []
+        , text label
+        ]
 
 
 selectedRequestRadio : SelectedRequest -> Model -> Html Msg
@@ -2601,21 +2662,13 @@ selectedRequestRadio selectedRequest model =
         string =
             selectedRequestToString selectedRequest
     in
-    span
-        [ onClick <| SetSelectedRequest selectedRequest True
-        , style "cursor" "default"
-        ]
-        [ input
-            [ type_ "radio"
-            , name radioNames.selectedRequest
-            , value string
-            , checked <| model.selectedRequest == selectedRequest
-            , onCheck (SetSelectedRequest selectedRequest)
-            ]
-            []
-        , text " "
-        , text string
-        ]
+    radioButton
+        { buttonValue = selectedRequest
+        , radioValue = model.selectedRequest
+        , radioName = string
+        , setter = SetSelectedRequest selectedRequest
+        , label = string
+        }
 
 
 selectedRequestHtml : SelectedRequest -> String -> Model -> (Model -> Html Msg) -> Html Msg
@@ -2640,24 +2693,15 @@ selectedRequestHtml selectedRequest url model body =
         ]
 
 
-privacyRadio : Privacy -> String -> Privacy -> Html Msg
-privacyRadio privacy label currentPrivacy =
-    span []
-        [ input
-            [ type_ "radio"
-            , name radioNames.privacy
-            , checked <| currentPrivacy == privacy
-            , onCheck <|
-                \checked ->
-                    if checked then
-                        SetPrivacy privacy
-
-                    else
-                        Noop
-            ]
-            []
-        , text label
-        ]
+privacyRadio : Privacy -> String -> Model -> Html Msg
+privacyRadio privacy label model =
+    radioButton
+        { buttonValue = privacy
+        , radioValue = model.privacy
+        , radioName = radioNames.privacy
+        , setter = SetPrivacy privacy
+        , label = label
+        }
 
 
 link : String -> String -> Html Msg
@@ -3151,11 +3195,68 @@ statusesSelectedUI model =
                     ]
                     []
                 , br
+                , textInput "in reply to id: " 25 SetInReplyToId model.in_reply_to_id
+                , br
+                , textInput "group id: " 20 SetGroupId model.groupId
+                , br
+                , textInput "quote of id: " 25 SetInQuoteOfId model.quote_of_id
+                , br
+                , textInput "spoiler text: " 40 SetSpoilerText model.spoiler_text
+                , br
+                , b "visibility: "
+                , visibilityRadio Nothing model
+                , visibilityRadio (Just PublicVisibility) model
+                , visibilityRadio (Just UnlistedVisibility) model
+                , visibilityRadio (Just PrivateVisibility) model
+                , visibilityRadio (Just DirectVisibility) model
+                , br
+                , textInput "scheduled at: " 24 SetScheduledAt model.scheduled_at
+                , br
+                , textInput "language: " 2 SetLanguage model.language
+                , br
+                , textInput "idempotency key: " 20 SetIdempotencyKey model.idempotencyKey
+                , br
                 , button ToggleShowPostStatus "Hide"
                 , text " "
                 , sendButton SendPostStatus model
                 ]
         ]
+
+
+visibilityToString : Maybe Visibility -> String
+visibilityToString visibility =
+    case visibility of
+        Nothing ->
+            "none "
+
+        Just vis ->
+            case vis of
+                PublicVisibility ->
+                    "public "
+
+                UnlistedVisibility ->
+                    "unlisted "
+
+                PrivateVisibility ->
+                    "private "
+
+                DirectVisibility ->
+                    "direct "
+
+
+visibilityRadio : Maybe Visibility -> Model -> Html Msg
+visibilityRadio visibility model =
+    let
+        label =
+            visibilityToString visibility
+    in
+    radioButton
+        { buttonValue = visibility
+        , radioValue = model.visibility
+        , radioName = radioNames.privacy
+        , setter = SetVisibility visibility
+        , label = label
+        }
 
 
 timelinesSelectedUI : Model -> Html Msg
@@ -3340,9 +3441,9 @@ accountsSelectedUI model =
                 , renderChooseFile "header: " model.headerFile GetHeaderFile
                 , br
                 , b "privacy: "
-                , privacyRadio PublicPrivacy "public " model.privacy
-                , privacyRadio UnlistedPrivacy "unlisted " model.privacy
-                , privacyRadio PrivatePrivacy "private " model.privacy
+                , privacyRadio PublicPrivacy "public " model
+                , privacyRadio UnlistedPrivacy "unlisted " model
+                , privacyRadio PrivatePrivacy "private " model
                 , br
                 , checkBox ToggleLocked model.locked "blocked"
                 , checkBox ToggleSensitive model.sensitive "sensitive "
