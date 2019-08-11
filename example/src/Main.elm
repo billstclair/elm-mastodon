@@ -79,6 +79,7 @@ import Mastodon.Entity as Entity
         , Authorization
         , Entity(..)
         , Field
+        , Focus
         , Privacy(..)
         , Visibility(..)
         )
@@ -131,6 +132,10 @@ emptyPagingInput =
 type Dialog
     = NoDialog
     | ConfirmDialog String String Msg
+
+
+type alias FocusInput =
+    { x : String, y : String }
 
 
 type alias Model =
@@ -205,6 +210,13 @@ type alias Model =
     , visibility : Maybe Visibility
     , scheduled_at : String
     , idempotencyKey : String
+    , mediaFile : Maybe File
+    , mediaDescription : String
+    , mediaFocus : FocusInput
+    , media_ids : String
+    , media_id : String
+
+    -- Not input state
     , msg : Maybe String
     , started : Started
     , funnelState : State
@@ -284,6 +296,13 @@ type Msg
     | SetVisibility (Maybe Visibility)
     | SetScheduledAt String
     | SetIdempotencyKey String
+    | GetMediaFile Bool
+    | ReceiveMediaFile File
+    | SetMediaDescription String
+    | SetMediaFocusX String
+    | SetMediaFocusY String
+    | SetMediaId String
+    | SetMediaIds String
     | ToggleLocal
     | SetHashtag String
     | SetListId String
@@ -319,6 +338,8 @@ type Msg
     | SendPostUnreblogStatus
     | SendPostPinStatus
     | SendPostUnpinStatus
+    | SendPostMedia
+    | SendPutMedia
     | SendPostStatus
     | SendGetHomeTimeline
     | SendGetConversations
@@ -545,6 +566,11 @@ init value url key =
     , visibility = Nothing
     , scheduled_at = ""
     , idempotencyKey = ""
+    , mediaFile = Nothing
+    , mediaDescription = ""
+    , mediaFocus = { x = "", y = "" }
+    , media_ids = ""
+    , media_id = ""
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1679,6 +1705,47 @@ updateInternal msg model =
             { model | idempotencyKey = idempotencyKey }
                 |> withNoCmd
 
+        GetMediaFile clearMedia ->
+            if clearMedia then
+                { model | mediaFile = Nothing }
+                    |> withNoCmd
+
+            else
+                model
+                    |> withCmd (File.Select.file imageMimeTypes ReceiveMediaFile)
+
+        ReceiveMediaFile file ->
+            { model | mediaFile = Just file }
+                |> withNoCmd
+
+        SetMediaDescription mediaDescription ->
+            { model | mediaDescription = mediaDescription }
+                |> withNoCmd
+
+        SetMediaFocusX x ->
+            let
+                mediaFocus =
+                    model.mediaFocus
+            in
+            { model | mediaFocus = { mediaFocus | x = x } }
+                |> withNoCmd
+
+        SetMediaFocusY y ->
+            let
+                mediaFocus =
+                    model.mediaFocus
+            in
+            { model | mediaFocus = { mediaFocus | y = y } }
+                |> withNoCmd
+
+        SetMediaId media_id ->
+            { model | media_id = media_id }
+                |> withNoCmd
+
+        SetMediaIds media_ids ->
+            { model | media_ids = media_ids }
+                |> withNoCmd
+
         ToggleLocal ->
             { model | local = not model.local }
                 |> withNoCmd
@@ -1884,7 +1951,8 @@ updateInternal msg model =
                         , in_reply_to_id = nothingIfBlank model.in_reply_to_id
                         , group_id = nothingIfBlank model.groupId
                         , quote_of_id = nothingIfBlank model.quote_of_id
-                        , media_ids = [] --TODO
+                        , media_ids =
+                            splitMediaIds model.media_ids
                         , poll = Nothing --TODO
                         , spoiler_text = nothingIfBlank model.spoiler_text
                         , visibility = model.visibility
@@ -1894,6 +1962,39 @@ updateInternal msg model =
                         }
                 )
                 { model | dialog = NoDialog }
+
+        SendPostMedia ->
+            case ( model.mediaFile, parseFocus model.mediaFocus ) of
+                ( Just file, Just focus ) ->
+                    sendRequest
+                        (MediaAttachmentsRequest <|
+                            Request.PostMedia
+                                { file = file
+                                , description = nothingIfBlank model.mediaDescription
+                                , focus = focus
+                                }
+                        )
+                        model
+
+                _ ->
+                    { model | msg = Just "Missing media file or malformed focus." }
+                        |> withNoCmd
+
+        SendPutMedia ->
+            case parseFocus model.mediaFocus of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just focus ->
+                    sendRequest
+                        (MediaAttachmentsRequest <|
+                            Request.PutMedia
+                                { id = model.media_id
+                                , description = nothingIfBlank model.mediaDescription
+                                , focus = focus
+                                }
+                        )
+                        model
 
         SendGetHomeTimeline ->
             sendRequest
@@ -2232,7 +2333,7 @@ receiveResponse result model =
             { mdl
                 | msg = Nothing
                 , metadata = Just response.metadata
-                , response = Just <| ED.entityValue response.entity
+                , response = Just <| ED.entityValue (Debug.log "entity" response.entity)
                 , entity = Just response.entity
             }
                 |> updateJsonTrees
@@ -2318,6 +2419,35 @@ applyResponseSideEffects response model =
                 _ ->
                     model
 
+        MediaAttachmentsRequest mediaReq ->
+            case response.entity of
+                AttachmentEntity { id } ->
+                    let
+                        mdl =
+                            case mediaReq of
+                                Request.PostMedia _ ->
+                                    { model
+                                        | media_id = id
+                                        , media_ids =
+                                            splitMediaIds model.media_ids
+                                                |> (\ids ->
+                                                        List.concat [ ids, [ id ] ]
+                                                   )
+                                                |> String.join ","
+                                    }
+
+                                _ ->
+                                    model
+                    in
+                    { mdl
+                        | mediaFile = Nothing
+                        , mediaDescription = ""
+                        , mediaFocus = { x = "", y = "" }
+                    }
+
+                _ ->
+                    model
+
         TimelinesRequest req ->
             case req of
                 Request.GetHomeTimeline { paging } ->
@@ -2345,6 +2475,20 @@ applyResponseSideEffects response model =
 
         _ ->
             model
+
+
+splitMediaIds : String -> List String
+splitMediaIds string =
+    let
+        s =
+            String.trim string
+    in
+    if s == "" then
+        []
+
+    else
+        String.split "," s
+            |> List.map String.trim
 
 
 statusSmartPaging : Entity -> Maybe Paging -> Model -> Model
@@ -2728,10 +2872,18 @@ pspace =
     p [] [ text "" ]
 
 
-button : Msg -> String -> Html Msg
-button msg label =
-    Html.button [ onClick msg ]
+enabledButton : Bool -> Msg -> String -> Html Msg
+enabledButton enabled msg label =
+    Html.button
+        [ onClick msg
+        , disabled <| not enabled
+        ]
         [ b label ]
+
+
+button : Msg -> String -> Html Msg
+button =
+    enabledButton True
 
 
 view : Model -> Document Msg
@@ -3216,11 +3368,67 @@ statusesSelectedUI model =
                 , br
                 , textInput "idempotency key: " 20 SetIdempotencyKey model.idempotencyKey
                 , br
+                , textInput "media ids (a,b,...): " 50 SetMediaIds model.media_ids
+                , br
                 , button ToggleShowPostStatus "Hide"
                 , text " "
                 , sendButton SendPostStatus model
+                , br
+                , text "-- new media --"
+                , span []
+                    [ text " ("
+                    , link "docs" "https://docs.joinmastodon.org/api/rest/media/"
+                    , text ")"
+                    ]
+                , br
+                , renderChooseFile "media: " model.mediaFile GetMediaFile
+                , br
+                , textInput "description: " 50 SetMediaDescription model.mediaDescription
+                , br
+                , textInput "focus x: " 5 SetMediaFocusX model.mediaFocus.x
+                , textInput " y: " 5 SetMediaFocusY model.mediaFocus.y
+                , text " "
+                , enabledSendButton (isEnabledPostMedia model) SendPostMedia model
+                , br
+                , textInput "media id: " 20 SetMediaId model.media_id
+                , text " "
+                , enabledSendButton (isEnabledPutMedia model) SendPutMedia model
                 ]
         ]
+
+
+parseFocus : FocusInput -> Maybe (Maybe Focus)
+parseFocus { x, y } =
+    if x == "" && y == "" then
+        Just Nothing
+
+    else
+        case ( String.toFloat x, String.toFloat y ) of
+            ( Just fx, Just fy ) ->
+                Just <| Just { x = fx, y = fy }
+
+            _ ->
+                Nothing
+
+
+isEnabledPostMedia : Model -> Bool
+isEnabledPostMedia model =
+    case parseFocus model.mediaFocus of
+        Nothing ->
+            False
+
+        Just _ ->
+            model.mediaFile /= Nothing
+
+
+isEnabledPutMedia : Model -> Bool
+isEnabledPutMedia model =
+    case parseFocus model.mediaFocus of
+        Nothing ->
+            False
+
+        Just _ ->
+            model.media_id /= ""
 
 
 visibilityToString : Maybe Visibility -> String
@@ -3687,6 +3895,12 @@ Click "$PostUnreblogStatus" to unreblog "status id".
 Click "$PostPinStatus" to pin "status id".
 
 Click "$PostUnpinStatus" to unpin "status id".
+
+Click "$PostStatus" to create a new status, using "status", "in reply to id", "group id", "quote of id", "spoiler text", "visibility", "scheduled at", "language", "idempotency key", and "media ids".
+
+If you want to add media to a status, you can do that in the "-- new media --" section. Click "Choose File" to read a media file. Optionally fill in a "description" and ""focus x" and "y". Click "$PostMedia" to send it to the server. The "id" from the received `Attachment` entity will set the "media id" and be added to the comma-separated list of "media ids".
+
+To edit the description or focus of a "media id", fill in one or both of those, and click "$PutMedia".
                 """
 
                 TimelinesSelected ->
@@ -4219,6 +4433,9 @@ dollarButtonNameDict =
         , ( "PostPinStatus", SendPostPinStatus )
         , ( "PostUnpinStatus", SendPostUnpinStatus )
         , ( "PostStatus", SendPostStatus )
+        , ( "PostMedia", SendPostMedia )
+        , ( "PutMedia", SendPutMedia )
+        , ( "PostStatus", SendPostStatus )
         , ( "GetConversations", SendGetConversations )
         , ( "GetPublicTimeline", SendGetPublicTimeline )
         , ( "GetTagTimeline", SendGetTagTimeline )
@@ -4262,6 +4479,8 @@ buttonNameAlist =
     , ( SendPostPinStatus, ( "PostPinStatus", "POST statuses/:id/pin" ) )
     , ( SendPostUnpinStatus, ( "PostUnpinStatus", "POST statuses/:id/unpin" ) )
     , ( SendPostStatus, ( "PostStatus", "POST statuses" ) )
+    , ( SendPostMedia, ( "PostMedia", "POST media" ) )
+    , ( SendPutMedia, ( "PutMedia", "PUT media" ) )
     , ( SendGetHomeTimeline, ( "GetHomeTimeline", "GET timelines/home" ) )
     , ( SendGetConversations, ( "GetConversations", "GET conversations" ) )
     , ( SendGetPublicTimeline, ( "GetPublicTimeline", "GET timelines/public" ) )
@@ -4309,6 +4528,11 @@ sendButtonName useElmButtonNames msg =
             tupleToButtonName useElmButtonNames tuple
 
 
+enabledSendButton : Bool -> Msg -> Model -> Html Msg
+enabledSendButton enabled msg model =
+    enabledButton enabled msg <| sendButtonName model.useElmButtonNames msg
+
+
 sendButton : Msg -> Model -> Html Msg
-sendButton msg model =
-    button msg <| sendButtonName model.useElmButtonNames msg
+sendButton =
+    enabledSendButton True

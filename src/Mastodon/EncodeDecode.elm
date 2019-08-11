@@ -207,6 +207,12 @@ encodeEntity entity =
         ListEntityEntity list ->
             encodeListEntity list
 
+        AttachmentEntity attachment ->
+            encodeAttachment attachment
+
+        AttachmentListEntity attachments ->
+            JE.list encodeAttachment attachments
+
         NotificationEntity notification ->
             encodeNotification notification
 
@@ -278,6 +284,8 @@ entityDecoder =
         , groupDecoder |> JD.map GroupEntity -- Must come before ListEntity
         , JD.list groupDecoder |> JD.map GroupListEntity
         , listEntityDecoder |> JD.map ListEntityEntity
+        , attachmentDecoder |> JD.map AttachmentEntity
+        , JD.list attachmentDecoder |> JD.map AttachmentListEntity
         , notificationDecoder |> JD.map NotificationEntity
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
         , relationshipDecoder |> JD.map RelationshipEntity
@@ -392,6 +400,16 @@ entityValue entity =
 
         ListEntityEntity list ->
             encodeListEntity list
+
+        AttachmentEntity attachment ->
+            if attachment.v == JE.null then
+                encodeAttachment attachment
+
+            else
+                attachment.v
+
+        AttachmentListEntity attachments ->
+            JE.list entityValue (List.map AttachmentEntity attachments)
 
         NotificationEntity notification ->
             if notification.v == JE.null then
@@ -949,13 +967,14 @@ attachmentDecoder =
             (\type_ ->
                 JD.succeed Attachment
                     |> required "id" JD.string
-                    |> required "type" (JD.succeed type_)
+                    |> custom (JD.succeed type_)
                     |> required "url" JD.string
                     |> optional "remote_url" (JD.nullable JD.string) Nothing
                     |> required "preview_url" JD.string
                     |> optional "text_url" (JD.nullable JD.string) Nothing
                     |> optional "meta" (metaDecoder type_) Nothing
                     |> optional "description" (JD.nullable JD.string) Nothing
+                    |> custom JD.value
             )
 
 

@@ -119,6 +119,11 @@ stripAccount account =
     }
 
 
+stripAttachment : Attachment -> Attachment
+stripAttachment attachment =
+    { attachment | v = JE.null }
+
+
 stripStatus : Status -> Status
 stripStatus status =
     let
@@ -134,6 +139,8 @@ stripStatus status =
 
                 Just (WrappedStatus ws) ->
                     Just <| WrappedStatus (stripStatus ws)
+        , media_attachments =
+            List.map stripAttachment status.media_attachments
         , card =
             case status.card of
                 Nothing ->
@@ -213,6 +220,9 @@ stripEntity entity =
                     , v = JE.null
                 }
 
+        AttachmentEntity attachment ->
+            AttachmentEntity <| stripAttachment attachment
+
         NotificationEntity notification ->
             let
                 account =
@@ -249,7 +259,12 @@ stripEntity entity =
                 }
 
         ScheduledStatusEntity scheduledStatus ->
-            ScheduledStatusEntity { scheduledStatus | v = JE.null }
+            ScheduledStatusEntity
+                { scheduledStatus
+                    | media_attachments =
+                        List.map stripAttachment scheduledStatus.media_attachments
+                    , v = JE.null
+                }
 
         ConversationEntity conversation ->
             let
@@ -907,6 +922,7 @@ attachment1 =
     , text_url = Just "text_url"
     , meta = Nothing
     , description = Nothing
+    , v = JE.null
     }
 
 
@@ -920,6 +936,7 @@ attachment2 =
     , text_url = Nothing
     , meta = Just imageMeta1
     , description = Just "description2"
+    , v = JE.null
     }
 
 
@@ -933,6 +950,7 @@ attachment3 =
     , text_url = Just "text_url3"
     , meta = Just imageMeta2
     , description = Just "description3"
+    , v = JE.null
     }
 
 
@@ -946,6 +964,7 @@ attachment4 =
     , text_url = Nothing
     , meta = Just videoMeta1
     , description = Nothing
+    , v = JE.null
     }
 
 
@@ -959,6 +978,7 @@ attachment5 =
     , text_url = Nothing
     , meta = Just videoMeta2
     , description = Just "description5"
+    , v = JE.null
     }
 
 

@@ -266,6 +266,7 @@ type alias Attachment =
     , text_url : Maybe UrlString
     , meta : Maybe Meta
     , description : Maybe String
+    , v : Value
     }
 
 
@@ -693,6 +694,7 @@ type Entity
     | ListEntityEntity ListEntity
     | ListEntityListEntity (List ListEntity)
     | AttachmentEntity Attachment
+    | AttachmentListEntity (List Attachment)
     | NotificationEntity Notification
     | NotificationListEntity (List Notification)
     | PushSubscriptionEntity PushSubscription
