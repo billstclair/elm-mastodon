@@ -3177,14 +3177,14 @@ view model =
                             ""
                             model
                             groupsSelectedUI
-                        , selectedRequestHtml NotificationsSelected
-                            "https://docs.joinmastodon.org/api/rest/notifications/"
-                            model
-                            notificationsSelectedUI
                         , selectedRequestHtml MutesSelected
                             "https://docs.joinmastodon.org/api/rest/mutes/"
                             model
                             mutesSelectedUI
+                        , selectedRequestHtml NotificationsSelected
+                            "https://docs.joinmastodon.org/api/rest/notifications/"
+                            model
+                            notificationsSelectedUI
                         , selectedRequestHtml StatusesSelected
                             "https://docs.joinmastodon.org/api/rest/statuses/"
                             model
