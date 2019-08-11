@@ -89,6 +89,7 @@ import Mastodon.Request as Request
         ( Error(..)
         , FieldUpdate
         , Paging
+        , PollDefinition
         , RawRequest
         , Request(..)
         , Response
@@ -215,6 +216,10 @@ type alias Model =
     , mediaFocus : FocusInput
     , media_ids : String
     , media_id : String
+    , expires_in : String
+    , multiple : Bool
+    , hide_totals : Bool
+    , pollOptions : List String
 
     -- Not input state
     , msg : Maybe String
@@ -303,6 +308,12 @@ type Msg
     | SetMediaFocusY String
     | SetMediaId String
     | SetMediaIds String
+    | SetExpiresIn String
+    | ToggleMultiple
+    | ToggleHideTotals
+    | RemovePollOption
+    | AddPollOption
+    | SetPollOption Int String
     | ToggleLocal
     | SetHashtag String
     | SetListId String
@@ -571,6 +582,10 @@ init value url key =
     , mediaFocus = { x = "", y = "" }
     , media_ids = ""
     , media_id = ""
+    , expires_in = ""
+    , multiple = False
+    , hide_totals = False
+    , pollOptions = [ "", "" ]
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1746,6 +1761,47 @@ updateInternal msg model =
             { model | media_ids = media_ids }
                 |> withNoCmd
 
+        SetExpiresIn expires_in ->
+            { model | expires_in = expires_in }
+                |> withNoCmd
+
+        ToggleMultiple ->
+            { model | multiple = not model.multiple }
+                |> withNoCmd
+
+        ToggleHideTotals ->
+            { model | hide_totals = not model.hide_totals }
+                |> withNoCmd
+
+        RemovePollOption ->
+            let
+                pollOptions =
+                    model.pollOptions
+
+                len =
+                    max 2 <| List.length pollOptions - 1
+            in
+            { model | pollOptions = List.take len pollOptions }
+                |> withNoCmd
+
+        AddPollOption ->
+            let
+                pollOptions =
+                    model.pollOptions
+            in
+            ( if List.length pollOptions >= 4 then
+                model
+
+              else
+                { model | pollOptions = List.concat [ pollOptions, [ "" ] ] }
+            , Cmd.none
+            )
+
+        SetPollOption idx option ->
+            -- TODO
+            { model | pollOptions = LE.setAt idx option model.pollOptions }
+                |> withNoCmd
+
         ToggleLocal ->
             { model | local = not model.local }
                 |> withNoCmd
@@ -1953,7 +2009,7 @@ updateInternal msg model =
                         , quote_of_id = nothingIfBlank model.quote_of_id
                         , media_ids =
                             splitMediaIds model.media_ids
-                        , poll = Nothing --TODO
+                        , poll = Debug.log "poll" <| pollDefinition model
                         , spoiler_text = nothingIfBlank model.spoiler_text
                         , visibility = model.visibility
                         , scheduled_at = nothingIfBlank model.scheduled_at
@@ -2414,6 +2470,7 @@ applyResponseSideEffects response model =
                         , spoiler_text = ""
                         , scheduled_at = ""
                         , idempotencyKey = ""
+                        , pollOptions = [ "", "" ]
                     }
 
                 _ ->
@@ -3393,6 +3450,43 @@ statusesSelectedUI model =
                 , textInput "media id: " 20 SetMediaId model.media_id
                 , text " "
                 , enabledSendButton (isEnabledPutMedia model) SendPutMedia model
+                , br
+                , text "-- poll --"
+                , br
+                , case pollInvalidReason model of
+                    Nothing ->
+                        text " "
+
+                    Just reason ->
+                        span [ style "color" "red" ]
+                            [ text reason
+                            , br
+                            ]
+                , textInput "expires in: " 10 SetExpiresIn model.expires_in
+                , text " "
+                , checkBox ToggleMultiple model.multiple "multiple"
+                , text " "
+                , checkBox ToggleHideTotals model.hide_totals "hide totals"
+                , br
+                , b "options: "
+                , let
+                    len =
+                        List.length model.pollOptions
+                  in
+                  span []
+                    [ enabledButton (len > 2) RemovePollOption "-"
+                    , text " "
+                    , enabledButton (len < 4) AddPollOption "+"
+                    ]
+                , span [] <|
+                    List.concat <|
+                        List.indexedMap
+                            (\idx option ->
+                                [ br
+                                , unlabeledTextInput 25 (SetPollOption idx) option
+                                ]
+                            )
+                            model.pollOptions
                 ]
         ]
 
@@ -3405,10 +3499,54 @@ parseFocus { x, y } =
     else
         case ( String.toFloat x, String.toFloat y ) of
             ( Just fx, Just fy ) ->
-                Just <| Just { x = fx, y = fy }
+                if fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1 then
+                    Just <| Just { x = fx, y = fy }
+
+                else
+                    Nothing
 
             _ ->
                 Nothing
+
+
+pollInvalidReason : Model -> Maybe String
+pollInvalidReason model =
+    if LE.find ((/=) "") model.pollOptions == Nothing then
+        Nothing
+
+    else
+        case LE.find ((==) "") model.pollOptions of
+            Just _ ->
+                Just "No poll option may be blank"
+
+            Nothing ->
+                case String.toInt model.expires_in of
+                    Nothing ->
+                        Just "\"expires in\" must be integer seconds"
+
+                    Just seconds ->
+                        if seconds <= 0 then
+                            Just "\"expires in\" must be positive"
+
+                        else
+                            Nothing
+
+
+pollDefinition : Model -> Maybe PollDefinition
+pollDefinition model =
+    if LE.find ((/=) "") model.pollOptions == Nothing then
+        Nothing
+
+    else if pollInvalidReason model /= Nothing then
+        Nothing
+
+    else
+        Just
+            { options = model.pollOptions
+            , expires_in = Maybe.withDefault 0 <| String.toInt model.expires_in
+            , multiple = model.multiple
+            , hide_totals = model.hide_totals
+            }
 
 
 isEnabledPostMedia : Model -> Bool
@@ -3898,7 +4036,7 @@ Click "$PostUnpinStatus" to unpin "status id".
 
 Click "$PostStatus" to create a new status, using "status", "in reply to id", "group id", "quote of id", "spoiler text", "visibility", "scheduled at", "language", "idempotency key", and "media ids".
 
-If you want to add media to a status, you can do that in the "-- new media --" section. Click "Choose File" to read a media file. Optionally fill in a "description" and ""focus x" and "y". Click "$PostMedia" to send it to the server. The "id" from the received `Attachment` entity will set the "media id" and be added to the comma-separated list of "media ids".
+If you want to add media to a status, you can do that in the "-- new media --" section. Click "Choose File" to read a media file. Optionally fill in a "description" and ""focus x" and "y" (each between 0.0 and 1.0). Click "$PostMedia" to send it to the server. The "id" from the received `Attachment` entity will set the "media id" and be added to the comma-separated list of "media ids".
 
 To edit the description or focus of a "media id", fill in one or both of those, and click "$PutMedia".
                 """
