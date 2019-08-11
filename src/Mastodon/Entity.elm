@@ -479,6 +479,7 @@ type NotificationType
     | MentionNotification
     | ReblogNotification
     | FavouriteNotification
+    | PollNotification
 
 
 {-| Value for `Status.poll`, and an `Entity` in its own right.

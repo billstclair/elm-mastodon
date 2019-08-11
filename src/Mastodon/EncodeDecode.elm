@@ -1541,6 +1541,9 @@ notificationTypeToString notificationType =
         FavouriteNotification ->
             "favourite"
 
+        PollNotification ->
+            "poll"
+
 
 {-| Encode a `NotificationType`.
 -}
@@ -1568,6 +1571,9 @@ notificationTypeDecoder =
 
                     "favourite" ->
                         JD.succeed FavouriteNotification
+
+                    "poll" ->
+                        JD.succeed PollNotification
 
                     _ ->
                         JD.fail <| "Unknown NotificationType: " ++ t

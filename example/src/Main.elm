@@ -223,6 +223,7 @@ type alias Model =
     , pollOptions : List String
     , excludedNotificationTypes : List NotificationType
     , notificationsAccountId : String
+    , notificationId : String
 
     -- Not input state
     , msg : Maybe String
@@ -296,7 +297,10 @@ type Msg
     | SetLanguage String
     | SetGroupId String
     | ToggleExcludedNotificationType NotificationType
+    | IncludeAllNotifications
+    | IncludeOnlyMentionNotifications
     | SetNotificationsAccountId String
+    | SetNotificationId String
     | SetStatusId String
     | ToggleShowPostStatus
     | SetStatus String
@@ -345,6 +349,9 @@ type Msg
     | SendGetGroups
     | SendGetGroup
     | SendGetNotifications
+    | SendGetNotification
+    | SendPostDismissNotification
+    | SendPostClearNotifications
     | SendGetStatus
     | SendGetStatusContext
     | SendGetStatusCard
@@ -594,6 +601,7 @@ init value url key =
     , pollOptions = [ "", "" ]
     , excludedNotificationTypes = []
     , notificationsAccountId = ""
+    , notificationId = ""
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1707,8 +1715,27 @@ updateInternal msg model =
             { model | excludedNotificationTypes = newTypes }
                 |> withNoCmd
 
+        IncludeAllNotifications ->
+            { model | excludedNotificationTypes = [] }
+                |> withNoCmd
+
+        IncludeOnlyMentionNotifications ->
+            { model
+                | excludedNotificationTypes =
+                    [ FollowNotification
+                    , ReblogNotification
+                    , FavouriteNotification
+                    , PollNotification
+                    ]
+            }
+                |> withNoCmd
+
         SetNotificationsAccountId notificationsAccountId ->
             { model | notificationsAccountId = notificationsAccountId }
+                |> withNoCmd
+
+        SetNotificationId notificationId ->
+            { model | notificationId = notificationId }
                 |> withNoCmd
 
         SetStatusId statusId ->
@@ -1964,6 +1991,27 @@ updateInternal msg model =
                         , exclude_types = model.excludedNotificationTypes
                         , account_id = nothingIfBlank model.notificationsAccountId
                         }
+                )
+                model
+
+        SendGetNotification ->
+            sendRequest
+                (NotificationsRequest <|
+                    Request.GetNotification { id = model.notificationId }
+                )
+                model
+
+        SendPostDismissNotification ->
+            sendRequest
+                (NotificationsRequest <|
+                    Request.PostDismissNotification { id = model.notificationId }
+                )
+                model
+
+        SendPostClearNotifications ->
+            sendRequest
+                (NotificationsRequest <|
+                    Request.PostClearNotifications
                 )
                 model
 
@@ -3433,14 +3481,40 @@ notificationsSelectedUI model =
         , br
         , textInput "since id: " 25 SetSinceId model.pagingInput.since_id
         , br
+        , b "excluded notifications: "
         , excludedNotificationTypeCheckbox "follow" FollowNotification model
         , excludedNotificationTypeCheckbox "mention" MentionNotification model
         , excludedNotificationTypeCheckbox "reblog" ReblogNotification model
-        , excludedNotificationTypeCheckbox "favourite" FavouriteNotification model
+        , excludedNotificationTypeCheckbox "favourite " FavouriteNotification model
+        , excludedNotificationTypeCheckbox "poll" PollNotification model
+        , br
+        , button IncludeAllNotifications "include all"
+        , text " "
+        , button IncludeOnlyMentionNotifications "mentions only"
         , br
         , textInput "from account id only: " 25 SetNotificationsAccountId model.notificationsAccountId
         , br
         , sendButton SendGetNotifications model
+        , br
+        , textInput "notification id: " 25 SetNotificationId model.notificationId
+        , br
+        , enabledSendButton (model.notificationId /= "") SendGetNotification model
+        , br
+        , text "-- writes below here --"
+        , br
+        , enabledSendButton (model.notificationId /= "")
+            SendPostDismissNotification
+            model
+        , br
+        , button
+            (SetDialog <|
+                ConfirmDialog "Clear all notifications? This cannot be undone."
+                    "OK"
+                    SendPostClearNotifications
+            )
+          <|
+            sendButtonName model.useElmButtonNames SendPostClearNotifications
+        , text " (after confirmation)"
         ]
 
 
@@ -4135,6 +4209,21 @@ If you want to add media to a status, you can do that in the "-- new media --" s
 To edit the description or focus of a "media id", fill in one or both of those, and click "$PutMedia".
                 """
 
+                NotificationsSelected ->
+                    """
+**NotificationsRequest Help**
+
+The "include all" and "mentions only" buttons change the "excluded notifications" checkboxes to the two most common configurations.
+
+The "$GetNotifications" button returns a list of notifications meeting the paging requirements in "limit", "max id", "min id", and "since id", excluding the checked "excluded notifications", and, if "from account id only" is non-blank, including only notifications from that account ID.
+
+The "$GetNotification" button returns the notification with the given "notification id". It will be disabled if the id field is empty.
+
+The "$PostDismissNotification" button deletes the notification with the given "notification id". It will be disabled if the id field is empty. It does NOT request confirmation.
+
+The "$PostClearNotifications" button deletes all notifications for your account, after confirmation.
+                   """
+
                 TimelinesSelected ->
                     """
 **TimelinesRequest Help**
@@ -4655,6 +4744,9 @@ dollarButtonNameDict =
         [ ( "GetGroups", SendGetGroups )
         , ( "GetGroup", SendGetGroup )
         , ( "GetNotifications", SendGetNotifications )
+        , ( "GetNotification", SendGetNotification )
+        , ( "PostDismissNotification", SendPostDismissNotification )
+        , ( "PostClearNotifications", SendPostClearNotifications )
         , ( "GetStatus", SendGetStatus )
         , ( "GetStatusContext", SendGetStatusContext )
         , ( "GetStatusCard", SendGetStatusCard )
@@ -4702,6 +4794,9 @@ buttonNameAlist =
     [ ( SendGetGroups, ( "GetGroups", "GET groups" ) )
     , ( SendGetGroup, ( "GetGroup", "GET groups/:id" ) )
     , ( SendGetNotifications, ( "GetNotifications", "GET notifications" ) )
+    , ( SendGetNotification, ( "GetNotification", "GET notifications/:id" ) )
+    , ( SendPostDismissNotification, ( "PostDismissNotification", "POST notifications/dismiss" ) )
+    , ( SendPostClearNotifications, ( "PostClearNotifications", "POST notifications/clear" ) )
     , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
     , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
     , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )
