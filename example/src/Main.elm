@@ -224,6 +224,7 @@ type alias Model =
     , excludedNotificationTypes : List NotificationType
     , notificationsAccountId : String
     , notificationId : String
+    , muteNotifications : Bool
 
     -- Not input state
     , msg : Maybe String
@@ -326,6 +327,7 @@ type Msg
     | ToggleLocal
     | SetHashtag String
     | SetListId String
+    | ToggleMuteNotifications
       -- Messages from buttons that send requests over the wire.
       -- See the `update` code for these messages for examples
       -- of using the `Request` module.
@@ -348,6 +350,11 @@ type Msg
     | SendPatchUpdateCredentials
     | SendGetGroups
     | SendGetGroup
+    | SendGetAccountMutes
+    | SendPostAccountMute
+    | SendPostAccountUnmute
+    | SendPostStatusMute
+    | SendPostStatusUnmute
     | SendGetNotifications
     | SendGetNotification
     | SendPostDismissNotification
@@ -602,6 +609,7 @@ init value url key =
     , excludedNotificationTypes = []
     , notificationsAccountId = ""
     , notificationId = ""
+    , muteNotifications = True
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1700,6 +1708,10 @@ updateInternal msg model =
             { model | groupId = groupId }
                 |> withNoCmd
 
+        ToggleMuteNotifications ->
+            { model | muteNotifications = not model.muteNotifications }
+                |> withNoCmd
+
         ToggleExcludedNotificationType notificationType ->
             let
                 types =
@@ -1981,6 +1993,45 @@ updateInternal msg model =
         SendGetGroup ->
             sendRequest
                 (GroupsRequest <| Request.GetGroup { id = model.groupId })
+                model
+
+        SendGetAccountMutes ->
+            sendRequest
+                (MutesRequest <|
+                    Request.GetAccountMutes
+                        { limit = String.toInt model.pagingInput.limit }
+                )
+                model
+
+        SendPostAccountMute ->
+            sendRequest
+                (MutesRequest <|
+                    Request.PostAccountMute
+                        { id = model.accountId
+                        , notifications = model.muteNotifications
+                        }
+                )
+                model
+
+        SendPostAccountUnmute ->
+            sendRequest
+                (MutesRequest <|
+                    Request.PostAccountUnmute { id = model.accountId }
+                )
+                model
+
+        SendPostStatusMute ->
+            sendRequest
+                (MutesRequest <|
+                    Request.PostStatusMute { id = model.statusId }
+                )
+                model
+
+        SendPostStatusUnmute ->
+            sendRequest
+                (MutesRequest <|
+                    Request.PostStatusUnmute { id = model.statusId }
+                )
                 model
 
         SendGetNotifications ->
@@ -2859,6 +2910,7 @@ type SelectedRequest
     | AccountsSelected
     | BlocksSelected
     | GroupsSelected
+    | MutesSelected
     | NotificationsSelected
     | StatusesSelected
     | TimelinesSelected
@@ -2886,6 +2938,9 @@ selectedRequestToString selectedRequest =
 
         GroupsSelected ->
             "GroupsRequest"
+
+        MutesSelected ->
+            "MutesRequest"
 
         NotificationsSelected ->
             "NotificationsRequest"
@@ -2921,6 +2976,9 @@ selectedRequestFromString s =
 
         "GroupsRequest" ->
             GroupsSelected
+
+        "MutesRequest" ->
+            MutesSelected
 
         "NotificationsRequest" ->
             NotificationsSelected
@@ -3123,6 +3181,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/notifications/"
                             model
                             notificationsSelectedUI
+                        , selectedRequestHtml MutesSelected
+                            "https://docs.joinmastodon.org/api/rest/mutes/"
+                            model
+                            mutesSelectedUI
                         , selectedRequestHtml StatusesSelected
                             "https://docs.joinmastodon.org/api/rest/statuses/"
                             model
@@ -3464,6 +3526,30 @@ groupsSelectedUI model =
         , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
         , sendButton SendGetGroup model
+        ]
+
+
+mutesSelectedUI : Model -> Html Msg
+mutesSelectedUI model =
+    p []
+        [ pspace
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , br
+        , sendButton SendGetAccountMutes model
+        , br
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , br
+        , checkBox ToggleMuteNotifications model.muteNotifications "mute notifications"
+        , text " "
+        , sendButton SendPostAccountMute model
+        , text " "
+        , sendButton SendPostAccountUnmute model
+        , br
+        , textInput "status id: " 25 SetStatusId model.statusId
+        , br
+        , sendButton SendPostStatusMute model
+        , text " "
+        , sendButton SendPostStatusUnmute model
         ]
 
 
@@ -4209,6 +4295,21 @@ If you want to add media to a status, you can do that in the "-- new media --" s
 To edit the description or focus of a "media id", fill in one or both of those, and click "$PutMedia".
                 """
 
+                MutesSelected ->
+                    """
+**MutesRequest Help**
+
+The "$GetAccountMutes" button gets a list of muted accounts, limited in number by "limit".
+
+The "$PostAccountMute" button mutes the "account id", and notifications from that account as well, if "mute notifications" is checked.
+
+The "$PostAccountUnmute" button unmutes the "account id".
+
+The "$PostStatusMute" button mutes the "status id".
+
+The "$PostStatusUnmute" button unmutes the "status id".
+                    """
+
                 NotificationsSelected ->
                     """
 **NotificationsRequest Help**
@@ -4743,6 +4844,11 @@ dollarButtonNameDict =
     Dict.fromList
         [ ( "GetGroups", SendGetGroups )
         , ( "GetGroup", SendGetGroup )
+        , ( "GetAccountMutes", SendGetAccountMutes )
+        , ( "PostAccountMute", SendPostAccountMute )
+        , ( "PostAccountUnmute", SendPostAccountUnmute )
+        , ( "PostStatusMute", SendPostStatusMute )
+        , ( "PostStatusUnmute", SendPostStatusUnmute )
         , ( "GetNotifications", SendGetNotifications )
         , ( "GetNotification", SendGetNotification )
         , ( "PostDismissNotification", SendPostDismissNotification )
@@ -4793,6 +4899,11 @@ buttonNameAlist : List ( Msg, ( String, String ) )
 buttonNameAlist =
     [ ( SendGetGroups, ( "GetGroups", "GET groups" ) )
     , ( SendGetGroup, ( "GetGroup", "GET groups/:id" ) )
+    , ( SendGetAccountMutes, ( "GetAccountMutes", "GET mutes" ) )
+    , ( SendPostAccountMute, ( "PostAccountMute", "POST accounts/:id/mute" ) )
+    , ( SendPostAccountUnmute, ( "PostAccountUnmute", "POST accounts/:id/unmute" ) )
+    , ( SendPostStatusMute, ( "PostStatusMute", "POST statuses/:id/mute" ) )
+    , ( SendPostStatusUnmute, ( "PostStatusUnmute", "POST statuses/:id/unmute" ) )
     , ( SendGetNotifications, ( "GetNotifications", "GET notifications" ) )
     , ( SendGetNotification, ( "GetNotification", "GET notifications/:id" ) )
     , ( SendPostDismissNotification, ( "PostDismissNotification", "POST notifications/dismiss" ) )
