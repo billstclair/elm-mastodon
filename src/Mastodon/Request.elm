@@ -1125,16 +1125,6 @@ pagingParameters paging =
                 ]
 
 
-idListValue : List String -> String
-idListValue ids =
-    let
-        idlist =
-            List.map (\s -> "\"" ++ s ++ "\"") ids
-                |> String.join ","
-    in
-    "[" ++ idlist ++ "]"
-
-
 decoders =
     { account = ED.accountDecoder |> JD.map AccountEntity
     , accountList = JD.list ED.accountDecoder |> JD.map AccountListEntity
@@ -2079,21 +2069,18 @@ notificationsReq req res =
                     relative [ r ] <|
                         List.concat
                             [ pagingParameters paging
-                            , qps
-                                [ case exclude_types of
+                            , List.concat
+                                [ qps
+                                    [ sp "account_id" account_id ]
+                                , case exclude_types of
                                     [] ->
-                                        Nothing
+                                        []
 
                                     _ ->
                                         exclude_types
+                                            |> List.map ED.notificationTypeToString
                                             |> List.map
-                                                (ED.encodeNotificationType
-                                                    >> JE.encode 0
-                                                )
-                                            |> idListValue
-                                            |> Builder.string "exclude_types"
-                                            |> Just
-                                , sp "account_id" account_id
+                                                (Builder.string "exclude_types[]")
                                 ]
                             ]
                 , decoder = decoders.notificationList

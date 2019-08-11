@@ -80,6 +80,7 @@ import Mastodon.Entity as Entity
         , Entity(..)
         , Field
         , Focus
+        , NotificationType(..)
         , Privacy(..)
         , Visibility(..)
         )
@@ -220,6 +221,8 @@ type alias Model =
     , multiple : Bool
     , hide_totals : Bool
     , pollOptions : List String
+    , excludedNotificationTypes : List NotificationType
+    , notificationsAccountId : String
 
     -- Not input state
     , msg : Maybe String
@@ -292,6 +295,8 @@ type Msg
     | ToggleSensitive
     | SetLanguage String
     | SetGroupId String
+    | ToggleExcludedNotificationType NotificationType
+    | SetNotificationsAccountId String
     | SetStatusId String
     | ToggleShowPostStatus
     | SetStatus String
@@ -339,6 +344,7 @@ type Msg
     | SendPatchUpdateCredentials
     | SendGetGroups
     | SendGetGroup
+    | SendGetNotifications
     | SendGetStatus
     | SendGetStatusContext
     | SendGetStatusCard
@@ -586,6 +592,8 @@ init value url key =
     , multiple = False
     , hide_totals = False
     , pollOptions = [ "", "" ]
+    , excludedNotificationTypes = []
+    , notificationsAccountId = ""
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1684,6 +1692,25 @@ updateInternal msg model =
             { model | groupId = groupId }
                 |> withNoCmd
 
+        ToggleExcludedNotificationType notificationType ->
+            let
+                types =
+                    model.excludedNotificationTypes
+
+                newTypes =
+                    if List.member notificationType types then
+                        List.filter ((/=) notificationType) types
+
+                    else
+                        notificationType :: types
+            in
+            { model | excludedNotificationTypes = newTypes }
+                |> withNoCmd
+
+        SetNotificationsAccountId notificationsAccountId ->
+            { model | notificationsAccountId = notificationsAccountId }
+                |> withNoCmd
+
         SetStatusId statusId ->
             { model | statusId = statusId }
                 |> withNoCmd
@@ -1927,6 +1954,17 @@ updateInternal msg model =
         SendGetGroup ->
             sendRequest
                 (GroupsRequest <| Request.GetGroup { id = model.groupId })
+                model
+
+        SendGetNotifications ->
+            sendRequest
+                (NotificationsRequest <|
+                    Request.GetNotifications
+                        { paging = pagingInputToPaging model.pagingInput
+                        , exclude_types = model.excludedNotificationTypes
+                        , account_id = nothingIfBlank model.notificationsAccountId
+                        }
+                )
                 model
 
         SendGetStatus ->
@@ -2459,6 +2497,9 @@ applyResponseSideEffects response model =
         AccountsRequest (Request.GetStatuses { paging }) ->
             statusSmartPaging response.entity paging model
 
+        NotificationsRequest (Request.GetNotifications { paging }) ->
+            notificationsSmartPaging response.entity paging model
+
         StatusesRequest (Request.PostStatus _) ->
             case response.entity of
                 StatusEntity { id } ->
@@ -2558,6 +2599,16 @@ statusSmartPaging entity paging model =
             model
 
 
+notificationsSmartPaging : Entity -> Maybe Paging -> Model -> Model
+notificationsSmartPaging entity paging model =
+    case entity of
+        NotificationListEntity notifications ->
+            smartPaging notifications .id paging model
+
+        _ ->
+            model
+
+
 smartPaging : List a -> (a -> String) -> Maybe Paging -> Model -> Model
 smartPaging entities getid paging model =
     let
@@ -2602,7 +2653,7 @@ smartPaging entities getid paging model =
                 model
 
             Just e ->
-                { model | pagingInput = { pagingInput | max_id = getid e } }
+                { model | pagingInput = Debug.log "pagingInput" { pagingInput | max_id = getid e } }
 
     else
         model
@@ -2760,6 +2811,7 @@ type SelectedRequest
     | AccountsSelected
     | BlocksSelected
     | GroupsSelected
+    | NotificationsSelected
     | StatusesSelected
     | TimelinesSelected
 
@@ -2786,6 +2838,9 @@ selectedRequestToString selectedRequest =
 
         GroupsSelected ->
             "GroupsRequest"
+
+        NotificationsSelected ->
+            "NotificationsRequest"
 
         StatusesSelected ->
             "StatusesRequest"
@@ -2818,6 +2873,9 @@ selectedRequestFromString s =
 
         "GroupsRequest" ->
             GroupsSelected
+
+        "NotificationsRequest" ->
+            NotificationsSelected
 
         "StatusesRequest" ->
             StatusesSelected
@@ -3013,6 +3071,10 @@ view model =
                             ""
                             model
                             groupsSelectedUI
+                        , selectedRequestHtml NotificationsSelected
+                            "https://docs.joinmastodon.org/api/rest/notifications/"
+                            model
+                            notificationsSelectedUI
                         , selectedRequestHtml StatusesSelected
                             "https://docs.joinmastodon.org/api/rest/statuses/"
                             model
@@ -3321,6 +3383,13 @@ unlabeledTextInput =
     maybeLabeledTextInput Nothing
 
 
+excludedNotificationTypeCheckbox : String -> NotificationType -> Model -> Html Msg
+excludedNotificationTypeCheckbox label notificationType model =
+    checkBox (ToggleExcludedNotificationType notificationType)
+        (List.member notificationType model.excludedNotificationTypes)
+        label
+
+
 checkBox : Msg -> Bool -> String -> Html Msg
 checkBox msg isChecked label =
     span
@@ -3347,6 +3416,31 @@ groupsSelectedUI model =
         , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
         , sendButton SendGetGroup model
+        ]
+
+
+notificationsSelectedUI : Model -> Html Msg
+notificationsSelectedUI model =
+    p []
+        [ pspace
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , text " "
+        , checkBox ToggleSmartPaging model.smartPaging "smart paging "
+        , br
+        , textInput "max id: " 25 SetMaxId model.pagingInput.max_id
+        , text " "
+        , textInput "min id: " 25 SetMinId model.pagingInput.min_id
+        , br
+        , textInput "since id: " 25 SetSinceId model.pagingInput.since_id
+        , br
+        , excludedNotificationTypeCheckbox "follow" FollowNotification model
+        , excludedNotificationTypeCheckbox "mention" MentionNotification model
+        , excludedNotificationTypeCheckbox "reblog" ReblogNotification model
+        , excludedNotificationTypeCheckbox "favourite" FavouriteNotification model
+        , br
+        , textInput "from account id only: " 25 SetNotificationsAccountId model.notificationsAccountId
+        , br
+        , sendButton SendGetNotifications model
         ]
 
 
@@ -4560,6 +4654,7 @@ dollarButtonNameDict =
     Dict.fromList
         [ ( "GetGroups", SendGetGroups )
         , ( "GetGroup", SendGetGroup )
+        , ( "GetNotifications", SendGetNotifications )
         , ( "GetStatus", SendGetStatus )
         , ( "GetStatusContext", SendGetStatusContext )
         , ( "GetStatusCard", SendGetStatusCard )
@@ -4606,6 +4701,7 @@ buttonNameAlist : List ( Msg, ( String, String ) )
 buttonNameAlist =
     [ ( SendGetGroups, ( "GetGroups", "GET groups" ) )
     , ( SendGetGroup, ( "GetGroup", "GET groups/:id" ) )
+    , ( SendGetNotifications, ( "GetNotifications", "GET notifications" ) )
     , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
     , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
     , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )

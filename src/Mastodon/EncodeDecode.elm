@@ -40,7 +40,7 @@ module Mastodon.EncodeDecode exposing
     , encodeGroup, groupDecoder
     , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
-    , encodeMaybe, privacyToString
+    , encodeMaybe, privacyToString, notificationTypeToString
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -93,7 +93,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 
 # Utilities
 
-@docs encodeMaybe, privacyToString
+@docs encodeMaybe, privacyToString, notificationTypeToString
 
 -}
 
@@ -215,6 +215,9 @@ encodeEntity entity =
 
         NotificationEntity notification ->
             encodeNotification notification
+
+        NotificationListEntity notifications ->
+            JE.list encodeNotification notifications
 
         PushSubscriptionEntity pushSubscription ->
             encodePushSubscription pushSubscription
@@ -417,6 +420,9 @@ entityValue entity =
 
             else
                 notification.v
+
+        NotificationListEntity notifications ->
+            JE.list entityValue (List.map NotificationEntity notifications)
 
         PushSubscriptionEntity pushSubscription ->
             if pushSubscription.v == JE.null then
@@ -1518,23 +1524,29 @@ listEntityDecoder =
         |> required "title" JD.string
 
 
-{-| Encode a \`NotificationType.
+{-| Convert a `NoticiationType` to a string
+-}
+notificationTypeToString : NotificationType -> String
+notificationTypeToString notificationType =
+    case notificationType of
+        FollowNotification ->
+            "follow"
+
+        MentionNotification ->
+            "mention"
+
+        ReblogNotification ->
+            "reblog"
+
+        FavouriteNotification ->
+            "favourite"
+
+
+{-| Encode a `NotificationType`.
 -}
 encodeNotificationType : NotificationType -> Value
 encodeNotificationType notificationType =
-    JE.string <|
-        case notificationType of
-            FollowNotification ->
-                "FollowNotification"
-
-            MentionNotification ->
-                "MentionNotification"
-
-            ReblogNotification ->
-                "ReblogNotification"
-
-            FavouriteNotification ->
-                "FavouriteNotification"
+    JE.string <| notificationTypeToString notificationType
 
 
 {-| Decode a \`NotificationType.
@@ -1545,16 +1557,16 @@ notificationTypeDecoder =
         |> JD.andThen
             (\t ->
                 case t of
-                    "FollowNotification" ->
+                    "follow" ->
                         JD.succeed FollowNotification
 
-                    "MentionNotification" ->
+                    "mention" ->
                         JD.succeed MentionNotification
 
-                    "ReblogNotification" ->
+                    "reblog" ->
                         JD.succeed ReblogNotification
 
-                    "FavouriteNotification" ->
+                    "favourite" ->
                         JD.succeed FavouriteNotification
 
                     _ ->
