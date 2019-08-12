@@ -1525,14 +1525,14 @@ blocksReq req res =
         PostBlock { id } ->
             { res
                 | method = m.post
-                , url = relative [ r, id, "block" ] []
+                , url = relative [ apiReq.accounts, id, "block" ] []
                 , decoder = decoders.relationship
             }
 
         PostUnblock { id } ->
             { res
                 | method = m.post
-                , url = relative [ r, id, "unblock" ] []
+                , url = relative [ apiReq.accounts, id, "unblock" ] []
                 , decoder = decoders.relationship
             }
 

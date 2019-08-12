@@ -348,6 +348,9 @@ type Msg
     | SendPostFollow
     | SendPostUnfollow
     | SendPatchUpdateCredentials
+    | SendGetBlocks
+    | SendPostBlock
+    | SendPostUnblock
     | SendGetGroups
     | SendGetGroup
     | SendGetAccountMutes
@@ -1985,6 +1988,28 @@ updateInternal msg model =
         SendPatchUpdateCredentials ->
             sendPatchUpdateCredentials model
 
+        SendGetBlocks ->
+            sendRequest
+                (BlocksRequest <|
+                    Request.GetBlocks
+                        { limit = String.toInt model.pagingInput.limit }
+                )
+                model
+
+        SendPostBlock ->
+            sendRequest
+                (BlocksRequest <|
+                    Request.PostBlock { id = model.accountId }
+                )
+                model
+
+        SendPostUnblock ->
+            sendRequest
+                (BlocksRequest <|
+                    Request.PostUnblock { id = model.accountId }
+                )
+                model
+
         SendGetGroups ->
             sendRequest
                 (GroupsRequest <| Request.GetGroups { tab = model.whichGroups })
@@ -3457,7 +3482,15 @@ blocksSelectedUI : Model -> Html Msg
 blocksSelectedUI model =
     p []
         [ pspace
-        , text "Blocks requests go here."
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , br
+        , sendButton SendGetBlocks model
+        , br
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , br
+        , sendButton SendPostBlock model
+        , text " "
+        , sendButton SendPostUnblock model
         ]
 
 
@@ -4250,7 +4283,11 @@ The "Hide" button to the left of "$PatchUpdateCredentials" hides that section of
                     """
 **BlocksRequest Help**
 
-Blocks help goes here.
+The "$GetBlocks" button gets a list of blocked accounts, limited in number by "limit".
+
+The "$PostBlock" button blocks the "account id", and returns a `Relationship` entity.
+
+The "$PostUnblock" button unblocks the "account id", and returns a `Relationship` entity.
               """
 
                 GroupsSelected ->
@@ -4844,6 +4881,9 @@ dollarButtonNameDict =
     Dict.fromList
         [ ( "GetGroups", SendGetGroups )
         , ( "GetGroup", SendGetGroup )
+        , ( "GetBlocks", SendGetBlocks )
+        , ( "PostBlock", SendPostBlock )
+        , ( "PostUnblock", SendPostUnblock )
         , ( "GetAccountMutes", SendGetAccountMutes )
         , ( "PostAccountMute", SendPostAccountMute )
         , ( "PostAccountUnmute", SendPostAccountUnmute )
@@ -4899,6 +4939,9 @@ buttonNameAlist : List ( Msg, ( String, String ) )
 buttonNameAlist =
     [ ( SendGetGroups, ( "GetGroups", "GET groups" ) )
     , ( SendGetGroup, ( "GetGroup", "GET groups/:id" ) )
+    , ( SendGetBlocks, ( "GetBlocks", "GET blocks" ) )
+    , ( SendPostBlock, ( "PostBlock", "POST accounts/:id/block" ) )
+    , ( SendPostUnblock, ( "PostUnblock", "POST accounts/:id/unblock" ) )
     , ( SendGetAccountMutes, ( "GetAccountMutes", "GET mutes" ) )
     , ( SendPostAccountMute, ( "PostAccountMute", "POST accounts/:id/mute" ) )
     , ( SendPostAccountUnmute, ( "PostAccountUnmute", "POST accounts/:id/unmute" ) )
