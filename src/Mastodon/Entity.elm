@@ -683,6 +683,7 @@ type alias GroupRelationship =
     , member : Bool
     , admin : Bool
     , unread_count : Int
+    , v : Value
     }
 
 

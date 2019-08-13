@@ -24,6 +24,7 @@ import Mastodon.Entity as Entity
         , FilterContext(..)
         , Focus
         , Group
+        , GroupRelationship
         , History
         , ImageMetaFields
         , ImageMetaInfo
@@ -287,6 +288,9 @@ stripEntity entity =
         GroupEntity group ->
             GroupEntity { group | v = JE.null }
 
+        GroupRelationshipEntity group ->
+            GroupRelationshipEntity { group | v = JE.null }
+
         _ ->
             entity
 
@@ -362,6 +366,8 @@ entityData =
     , ConversationEntity conversation2
     , GroupEntity group1
     , GroupEntity group2
+    , GroupRelationshipEntity groupRelationship1
+    , GroupRelationshipEntity groupRelationship2
     ]
 
 
@@ -418,6 +424,26 @@ group2 =
     , cover_image_url = "cover_image_url2"
     , is_archived = True
     , member_count = 20
+    , v = JE.null
+    }
+
+
+groupRelationship1 : GroupRelationship
+groupRelationship1 =
+    { id = "id"
+    , member = True
+    , admin = False
+    , unread_count = 10
+    , v = JE.null
+    }
+
+
+groupRelationship2 : GroupRelationship
+groupRelationship2 =
+    { id = "id2"
+    , member = False
+    , admin = True
+    , unread_count = 20
     , v = JE.null
     }
 

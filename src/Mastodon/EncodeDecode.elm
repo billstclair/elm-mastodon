@@ -38,6 +38,7 @@ module Mastodon.EncodeDecode exposing
     , encodeScheduledStatus, scheduledStatusDecoder
     , encodeConversation, conversationDecoder
     , encodeGroup, groupDecoder
+    , encodeGroupRelationship, groupRelationshipDecoder
     , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
     , encodeMaybe, privacyToString, notificationTypeToString
@@ -83,6 +84,8 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodeScheduledStatus, scheduledStatusDecoder
 @docs encodeConversation, conversationDecoder
 @docs encodeGroup, groupDecoder
+@docs encodeGroupRelationship, groupRelationshipDecoder
+
 @docs encodeTag, tagDecoder
 
 
@@ -120,6 +123,7 @@ import Mastodon.Entity as Entity
         , FilterContext(..)
         , Focus
         , Group
+        , GroupRelationship
         , History
         , ImageMetaFields
         , ImageMetaInfo
@@ -240,11 +244,17 @@ encodeEntity entity =
         ConversationListEntity conversations ->
             JE.list encodeConversation conversations
 
-        GroupEntity conversation ->
-            encodeGroup conversation
+        GroupEntity group ->
+            encodeGroup group
 
-        GroupListEntity conversation ->
-            JE.list encodeGroup conversation
+        GroupListEntity groups ->
+            JE.list encodeGroup groups
+
+        GroupRelationshipEntity relationship ->
+            encodeGroupRelationship relationship
+
+        GroupRelationshipListEntity relationships ->
+            JE.list encodeGroupRelationship relationships
 
         TagListEntity tags ->
             JE.list encodeTag tags
@@ -286,6 +296,8 @@ entityDecoder =
         , instanceDecoder |> JD.map InstanceEntity
         , groupDecoder |> JD.map GroupEntity -- Must come before ListEntity
         , JD.list groupDecoder |> JD.map GroupListEntity
+        , groupRelationshipDecoder |> JD.map GroupRelationshipEntity
+        , JD.list groupRelationshipDecoder |> JD.map GroupRelationshipListEntity
         , listEntityDecoder |> JD.map ListEntityEntity
         , attachmentDecoder |> JD.map AttachmentEntity
         , JD.list attachmentDecoder |> JD.map AttachmentListEntity
@@ -1792,6 +1804,28 @@ groupDecoder =
         |> required "cover_image_url" JD.string
         |> required "is_archived" JD.bool
         |> required "member_count" JD.int
+        |> custom JD.value
+
+
+{-| Encoder for `GroupRelationship`.
+-}
+encodeGroupRelationship : GroupRelationship -> Value
+encodeGroupRelationship { id, member, admin, unread_count } =
+    JE.object
+        [ ( "id", JE.string id )
+        , ( "member", JE.bool member )
+        , ( "admin", JE.bool admin )
+        , ( "unread_count", JE.int unread_count )
+        ]
+
+
+groupRelationshipDecoder : Decoder GroupRelationship
+groupRelationshipDecoder =
+    JD.succeed GroupRelationship
+        |> required "id" JD.string
+        |> required "member" JD.bool
+        |> required "admin" JD.bool
+        |> required "unread_count" JD.int
         |> custom JD.value
 
 
