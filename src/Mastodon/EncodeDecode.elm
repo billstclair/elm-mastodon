@@ -1819,6 +1819,8 @@ encodeGroupRelationship { id, member, admin, unread_count } =
         ]
 
 
+{-| Decoder for `GroupRelationship`.
+-}
 groupRelationshipDecoder : Decoder GroupRelationship
 groupRelationshipDecoder =
     JD.succeed GroupRelationship

@@ -401,7 +401,7 @@ The groups API is Gab-only.
 
 `PostGroupJoin` results in a `GroupRelationshipEntity`.
 
-`DeleteGroupJoin`, `DeleteGroupStatus`, `PostGroupRemoveAccount`, `DeleteGroupRemovedAccount`, and `PatchGroupAddAdministrator` result in `NoEntity`.
+`DeleteGroupJoin`, `DeleteGroupStatus`, `PostGroupRemovedAccounts`, `DeleteGroupRemovedAccounts`, and `PatchGroupAddAdministrator` result in `NoEntity`.
 
 
 ## Descriptions
@@ -422,9 +422,9 @@ The groups API is Gab-only.
 
 `DeleteGroupStatus` removes a status from the group.
 
-`PostGroupRemoveAccount` revokes group membership for an account.
+`PostGroupRemovedAccounts` revokes group membership for an account.
 
-`DeleteGroupRemovedAccount` removes a previously revoked membership from the list of deleted accounts.
+`DeleteGroupRemovedAccounts` removes a previously revoked membership from the list of deleted accounts.
 
 `PatchGroupAddAdministrator` adds an administrator to a group. There is currently no way to remove an administrator, except to remove the account from the group.
 
@@ -432,6 +432,7 @@ The groups API is Gab-only.
 type GroupsReq
     = GetGroups { tab : WhichGroups }
     | GetGroup { id : String }
+      -- POST /api/v1/groups
     | PostGroup
         { title : String
         , description : String
@@ -446,7 +447,7 @@ type GroupsReq
         }
       -- GET /api/v1/groups/:id/relationships?id[]=:ids0&id[]=:ids1&id[]=:ids2
       -- I don't know if the first :id is ignored or redundant.
-    | GetGroupRelationships { id : String, ids : List String }
+    | GetGroupRelationships { ids : List String }
       -- POST /api/v1/groups/:id/accounts
     | PostGroupJoin { id : String }
       -- DELETE /api/v1/groups/:id/accounts
@@ -454,9 +455,9 @@ type GroupsReq
       -- DELETE /api/v1/groups/:id/statuses/:status_id
     | DeleteGroupStatus { id : String, status_id : String }
       -- POST /api/v1/groups/:id/removed_accounts
-    | PostGroupRemoveAccount { id : String, account_id : String }
+    | PostGroupRemovedAccounts { id : String, account_id : String }
       -- DELETE /api/v1/groups/:id/removed_accounts
-    | DeleteGroupRemovedAccount { id : String, account_id : String }
+    | DeleteGroupRemovedAccounts { id : String, account_id : String }
       -- PATCH api/v1/groups/:id/accounts
     | PatchGroupAddAdministrator { id : String, account_id : String }
 
@@ -1224,6 +1225,12 @@ decoders =
             |> JD.map ConversationListEntity
     , group = ED.groupDecoder |> JD.map GroupEntity
     , groupList = JD.list ED.groupDecoder |> JD.map GroupListEntity
+    , groupRelationship =
+        ED.groupRelationshipDecoder
+            |> JD.map GroupRelationshipEntity
+    , groupRelationshipList =
+        JD.list ED.groupRelationshipDecoder
+            |> JD.map GroupRelationshipListEntity
     , tagList =
         JD.list ED.tagDecoder |> JD.map TagListEntity
     , value =
@@ -1317,26 +1324,6 @@ accountsReq req res =
                 , decoder = decoders.account
             }
 
-        {- utf8: ✓
-           _method: put
-           authenticity_token: XY...
-           account[display_name]: Bill St. Clair
-           account[note]: I write #lisp for money and #Elm for fun. I play the #trombone in a concert band and sing in a community choir. I dance to infectious backbeats, ride a #bicycle, and wear a #kilt while doing it, every day.
-
-           No, I won't answer that question.
-           account[header]: (binary)
-           account[avatar]: (binary)
-           account[locked]: 0
-           account[bot]: 0
-           account[fields_attributes][0][name]: Home page
-           account[fields_attributes][0][value]: https://billstclair.com
-           account[fields_attributes][1][name]: Elm Games
-           account[fields_attributes][1][value]: https://GibGoyGames.com
-           account[fields_attributes][2][name]: Keybase
-           account[fields_attributes][2][value]: https://keybase.io/billstclair
-           account[fields_attributes][3][name]:
-           account[fields_attributes][3][value]:
-        -}
         PatchUpdateCredentials { display_name, note, avatar, header, locked, source, fields_attributes } ->
             { res
                 | method = m.patch
@@ -1860,9 +1847,127 @@ groupsReq req res =
                 , decoder = decoders.group
             }
 
-        _ ->
-            -- TODO
-            res
+        PostGroup { title, description, cover_image } ->
+            { res
+                | method = m.post
+                , url = relative [ r ] []
+                , body =
+                    Http.multipartBody <|
+                        List.concat
+                            [ [ Http.stringPart "title" title
+                              , Http.stringPart "description" description
+                              ]
+                            , case cover_image of
+                                Nothing ->
+                                    []
+
+                                Just file ->
+                                    [ Http.filePart "cover_image" file ]
+                            ]
+                , decoder = decoders.group
+            }
+
+        -- PUT /api/v1/groups/:id
+        PutGroup { id, title, description, cover_image } ->
+            { res
+                | method = m.post
+                , url = relative [ r, id ] []
+                , body =
+                    Http.multipartBody <|
+                        List.concat
+                            [ case title of
+                                Nothing ->
+                                    []
+
+                                Just titl ->
+                                    [ Http.stringPart "title" titl ]
+                            , case description of
+                                Nothing ->
+                                    []
+
+                                Just desc ->
+                                    [ Http.stringPart "description" desc ]
+                            , case cover_image of
+                                Nothing ->
+                                    []
+
+                                Just file ->
+                                    [ Http.filePart "cover_image" file ]
+                            ]
+                , decoder = decoders.group
+            }
+
+        -- GET /api/v1/groups/:id/relationships?id[]=:ids0&id[]=:ids1&id[]=:ids2
+        -- I don't know if the first :id is ignored or redundant.
+        GetGroupRelationships { ids } ->
+            case ids of
+                [] ->
+                    res
+
+                id :: _ ->
+                    { res
+                        | url =
+                            relative [ r, id, "relationships" ] <|
+                                List.map (Builder.string "id[]") ids
+                        , decoder = decoders.groupRelationshipList
+                    }
+
+        -- POST /api/v1/groups/:id/accounts
+        PostGroupJoin { id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "accounts" ] []
+                , decoder = decoders.groupRelationship
+            }
+
+        -- DELETE /api/v1/groups/:id/accounts
+        DeleteGroupJoin { id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id, "accounts" ] []
+                , decoder = decoders.groupRelationship
+            }
+
+        -- DELETE /api/v1/groups/:id/statuses/:status_id
+        DeleteGroupStatus { id, status_id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id, "statuses", status_id ] []
+                , decoder = decoders.ignore
+            }
+
+        -- POST /api/v1/groups/:id/removed_accounts
+        PostGroupRemovedAccounts { id, account_id } ->
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "removed_accounts" ] <|
+                        [ Builder.string "account_id" account_id ]
+                , decoder = decoders.ignore
+            }
+
+        -- DELETE /api/v1/groups/:id/removed_accounts
+        DeleteGroupRemovedAccounts { id, account_id } ->
+            { res
+                | method = m.delete
+                , url =
+                    relative [ r, id, "removed_accounts" ] <|
+                        [ Builder.string "account_id" account_id ]
+                , decoder = decoders.ignore
+            }
+
+        -- PATCH api/v1/groups/:id/accounts
+        PatchGroupAddAdministrator { id, account_id } ->
+            { res
+                | method = m.patch
+                , url =
+                    relative [ r, id, "accounts" ] <|
+                        [ Builder.string "account_id" account_id ]
+                , decoder = decoders.ignore
+            }
 
 
 instanceReq : InstanceReq -> RawRequest -> RawRequest
