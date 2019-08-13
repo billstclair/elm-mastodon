@@ -17,7 +17,8 @@ module Mastodon.Entity exposing
     , Card, Context, Error, Filter, Instance
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, ScheduledStatus, Conversation, Group
+    , Status, ScheduledStatus, Conversation
+    , Group, GroupRelationship
     , Emoji, Field, Privacy(..), Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
@@ -55,7 +56,8 @@ got over the wire. Code that creates these can set it to
 @docs Card, Context, Error, Filter, Instance
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, ScheduledStatus, Conversation, Group
+@docs Status, ScheduledStatus, Conversation
+@docs Group, GroupRelationship
 
 
 # Entity field types
@@ -666,7 +668,21 @@ type alias Group =
     , description : String
     , cover_image_url : String
     , is_archived : Bool
+    , member_count : Int
     , v : Value
+    }
+
+
+{-| Group relationship entity.
+
+This is a Gab extension.
+
+-}
+type alias GroupRelationship =
+    { id : String
+    , member : Bool
+    , admin : Bool
+    , unread_count : Int
     }
 
 
@@ -710,6 +726,8 @@ type Entity
     | ConversationEntity Conversation
     | ConversationListEntity (List Conversation)
     | GroupEntity Group
+    | GroupRelationshipEntity GroupRelationship
+    | GroupRelationshipListEntity (List GroupRelationship)
     | GroupListEntity (List Group)
     | StringListEntity (List String)
     | TagListEntity (List Tag)

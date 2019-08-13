@@ -393,10 +393,72 @@ whichGroupsToString whichGroups =
 
 The groups API is Gab-only.
 
+`GetGroups` results in a `GroupListEntity`.
+
+`GetGroup`, `PostGroup`, and `PutGroup` result in a `GroupEntity`
+
+`GetGroupRelationships` results in a `GroupRelationshipListEntity`.
+
+`PostGroupJoin` results in a `GroupRelationshipEntity`.
+
+`DeleteGroupJoin`, `DeleteGroupStatus`, `PostGroupRemoveAccount`, `DeleteGroupRemovedAccount`, and `PatchGroupAddAdministrator` result in `NoEntity`.
+
+
+## Descriptions
+
+`GetGroups` fetches the list of all groups of which the logged-in account is a member.
+
+`GetGroup` fetches one group.
+
+`GetGroupRelationships` gets the logged-in account relationships for one or more groups.
+
+`PostGroup` creates a new group.
+
+`PutGroup` updates the group profile information.
+
+`PostGroupJoin` joins a group from the logged-in account.
+
+`DeletGroupJoin` leaves a group from the logged-in account.
+
+`DeleteGroupStatus` removes a status from the group.
+
+`PostGroupRemoveAccount` revokes group membership for an account.
+
+`DeleteGroupRemovedAccount` removes a previously revoked membership from the list of deleted accounts.
+
+`PatchGroupAddAdministrator` adds an administrator to a group. There is currently no way to remove an administrator, except to remove the account from the group.
+
 -}
 type GroupsReq
     = GetGroups { tab : WhichGroups }
     | GetGroup { id : String }
+    | PostGroup
+        { title : String
+        , description : String
+        , cover_image : Maybe File
+        }
+      -- PUT /api/v1/groups/:id
+    | PutGroup
+        { id : String
+        , title : Maybe String
+        , description : Maybe String
+        , cover_image : Maybe File
+        }
+      -- GET /api/v1/groups/:id/relationships?id[]=:ids0&id[]=:ids1&id[]=:ids2
+      -- I don't know if the first :id is ignored or redundant.
+    | GetGroupRelationships { id : String, ids : List String }
+      -- POST /api/v1/groups/:id/accounts
+    | PostGroupJoin { id : String }
+      -- DELETE /api/v1/groups/:id/accounts
+    | DeleteGroupJoin { id : String }
+      -- DELETE /api/v1/groups/:id/statuses/:status_id
+    | DeleteGroupStatus { id : String, status_id : String }
+      -- POST /api/v1/groups/:id/removed_accounts
+    | PostGroupRemoveAccount { id : String, account_id : String }
+      -- DELETE /api/v1/groups/:id/removed_accounts
+    | DeleteGroupRemovedAccount { id : String, account_id : String }
+      -- PATCH api/v1/groups/:id/accounts
+    | PatchGroupAddAdministrator { id : String, account_id : String }
 
 
 {-| GET /api/v1/instance
@@ -1797,6 +1859,10 @@ groupsReq req res =
                     relative [ r, id ] []
                 , decoder = decoders.group
             }
+
+        _ ->
+            -- TODO
+            res
 
 
 instanceReq : InstanceReq -> RawRequest -> RawRequest

@@ -405,6 +405,7 @@ group1 =
     , description = "description"
     , cover_image_url = "cover_image_url"
     , is_archived = False
+    , member_count = 10
     , v = JE.null
     }
 
@@ -416,6 +417,7 @@ group2 =
     , description = "description2"
     , cover_image_url = "cover_image_url2"
     , is_archived = True
+    , member_count = 20
     , v = JE.null
     }
 

@@ -1777,6 +1777,7 @@ encodeGroup group =
         , ( "description", JE.string group.description )
         , ( "cover_image_url", JE.string group.cover_image_url )
         , ( "is_archived", JE.bool group.is_archived )
+        , ( "member_count", JE.int group.member_count )
         ]
 
 
@@ -1790,6 +1791,7 @@ groupDecoder =
         |> required "description" JD.string
         |> required "cover_image_url" JD.string
         |> required "is_archived" JD.bool
+        |> required "member_count" JD.int
         |> custom JD.value
 
 
