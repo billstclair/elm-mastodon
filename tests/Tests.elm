@@ -535,7 +535,7 @@ results1 : Results
 results1 =
     { accounts = [ account1, account2 ]
     , statuses = [ status1, status2 ]
-    , hashtags = [ tag1, tag2 ]
+    , hashtags = [ "tag1", "tag2" ]
     , v = JE.null
     }
 

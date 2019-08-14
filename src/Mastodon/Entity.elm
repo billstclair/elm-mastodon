@@ -539,7 +539,7 @@ type alias Relationship =
 type alias Results =
     { accounts : List Account
     , statuses : List Status
-    , hashtags : List Tag
+    , hashtags : List String
     , v : Value
     }
 

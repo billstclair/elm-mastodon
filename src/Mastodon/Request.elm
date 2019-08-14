@@ -2462,7 +2462,8 @@ searchReq req res =
                 | url =
                     relative [ r ] <|
                         qps
-                            [ bp "resolve" resolve
+                            [ Just <| Builder.string "q" q
+                            , bp "resolve" resolve
                             , ip "limit" limit
                             , ip "offset" offset
                             , bp "following" following

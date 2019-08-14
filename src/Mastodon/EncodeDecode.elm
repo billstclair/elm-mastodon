@@ -1695,7 +1695,7 @@ encodeResults results =
     JE.object
         [ ( "accounts", JE.list encodeAccount results.accounts )
         , ( "statuses", JE.list encodeStatus results.statuses )
-        , ( "hashtags", JE.list encodeTag results.hashtags )
+        , ( "hashtags", JE.list JE.string results.hashtags )
         ]
 
 
@@ -1706,7 +1706,7 @@ resultsDecoder =
     JD.succeed Results
         |> required "accounts" (JD.list accountDecoder)
         |> required "statuses" (JD.list statusDecoder)
-        |> required "hashtags" (JD.list tagDecoder)
+        |> required "hashtags" (JD.list JD.string)
         |> custom JD.value
 
 

@@ -178,6 +178,7 @@ type alias Model =
     , notificationId : String
     , muteNotifications : Bool
     , groupIds : String
+    , offset : String
 
     -- Non-persistent below here
     , dialog : Dialog
@@ -302,6 +303,7 @@ type Msg
     | SetLanguage String
     | SetGroupId String
     | SetGroupIds String
+    | SetOffset String
     | SetGroupTitle String
     | SetGroupDescription String
     | ReceiveGroupCoverImage File
@@ -378,6 +380,7 @@ type Msg
     | SendPostAccountUnmute
     | SendPostStatusMute
     | SendPostStatusUnmute
+    | SendGetSearch
     | SendGetNotifications
     | SendGetNotification
     | SendPostDismissNotification
@@ -586,6 +589,7 @@ init value url key =
     , notificationId = ""
     , muteNotifications = True
     , groupIds = ""
+    , offset = ""
 
     -- Non-persistent below here
     , dialog = NoDialog
@@ -1739,6 +1743,10 @@ updateInternal msg model =
             { model | groupIds = groupIds }
                 |> withNoCmd
 
+        SetOffset offset ->
+            { model | offset = offset }
+                |> withNoCmd
+
         SetGroupTitle groupTitle ->
             { model | groupTitle = groupTitle }
                 |> withNoCmd
@@ -2208,6 +2216,19 @@ updateInternal msg model =
             sendRequest
                 (MutesRequest <|
                     Request.PostStatusUnmute { id = model.statusId }
+                )
+                model
+
+        SendGetSearch ->
+            sendRequest
+                (SearchRequest <|
+                    Request.GetSearch
+                        { q = model.q
+                        , resolve = model.resolve
+                        , limit = String.toInt model.pagingInput.limit
+                        , offset = String.toInt model.offset
+                        , following = model.following
+                        }
                 )
                 model
 
@@ -3109,6 +3130,7 @@ type SelectedRequest
     | GroupsSelected
     | MutesSelected
     | NotificationsSelected
+    | SearchSelected
     | StatusesSelected
     | TimelinesSelected
 
@@ -3138,6 +3160,9 @@ selectedRequestToString selectedRequest =
 
         MutesSelected ->
             "MutesRequest"
+
+        SearchSelected ->
+            "SearchRequest"
 
         NotificationsSelected ->
             "NotificationsRequest"
@@ -3176,6 +3201,9 @@ selectedRequestFromString s =
 
         "MutesRequest" ->
             MutesSelected
+
+        "SearchRequest" ->
+            SearchSelected
 
         "NotificationsRequest" ->
             NotificationsSelected
@@ -3386,6 +3414,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/notifications/"
                             model
                             notificationsSelectedUI
+                        , selectedRequestHtml SearchSelected
+                            "https://docs.joinmastodon.org/api/rest/search/"
+                            model
+                            searchSelectedUI
                         , selectedRequestHtml StatusesSelected
                             "https://docs.joinmastodon.org/api/rest/statuses/"
                             model
@@ -3858,6 +3890,23 @@ notificationsSelectedUI model =
           <|
             sendButtonName model.useElmButtonNames SendPostClearNotifications
         , text " (after confirmation)"
+        ]
+
+
+searchSelectedUI : Model -> Html Msg
+searchSelectedUI model =
+    p []
+        [ pspace
+        , textInput "q: " 40 SetQ model.q
+        , br
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , text " "
+        , textInput "offset: " 10 SetOffset model.offset
+        , br
+        , checkBox ToggleResolve model.resolve "resolve "
+        , checkBox ToggleFollowing model.following "following "
+        , br
+        , sendButton SendGetSearch model
         ]
 
 
@@ -4608,6 +4657,13 @@ The "$PostDismissNotification" button deletes the notification with the given "n
 The "$PostClearNotifications" button deletes all notifications for your account, after confirmation.
                    """
 
+                SearchSelected ->
+                    """
+**SearchRequest Help**
+
+The "$GetSearch" button searches for the query string, "q" in accounts, hashtags, and statuses, and returns a `Results` entity. "limit" is the maximum number of results. "offset" is the offset in the results. "resolve" attempts a WebFinger lookup if true. "following" includes only accounts the user is following.
+                    """
+
                 TimelinesSelected ->
                     """
 **TimelinesRequest Help**
@@ -4781,6 +4837,7 @@ type alias SavedModel =
     , notificationId : String
     , muteNotifications : Bool
     , groupIds : String
+    , offset : String
     }
 
 
@@ -4823,6 +4880,7 @@ modelToSavedModel model =
     , notificationId = model.notificationId
     , muteNotifications = model.muteNotifications
     , groupIds = model.groupIds
+    , offset = model.offset
     }
 
 
@@ -4866,6 +4924,7 @@ savedModelToModel savedModel model =
         , notificationId = savedModel.notificationId
         , muteNotifications = model.muteNotifications
         , groupIds = savedModel.groupIds
+        , offset = savedModel.offset
     }
 
 
@@ -4943,7 +5002,6 @@ encodeSavedModel savedModel =
         , ( "resolve", JE.bool savedModel.resolve )
         , ( "following", JE.bool savedModel.following )
         , ( "groupId", JE.string savedModel.groupId )
-        , ( "groupIds", JE.string savedModel.groupIds )
         , ( "showReceived", JE.bool savedModel.showReceived )
         , ( "showEntity", JE.bool savedModel.showEntity )
         , ( "whichGroups", encodeWhichGroups savedModel.whichGroups )
@@ -4970,6 +5028,8 @@ encodeSavedModel savedModel =
           )
         , ( "notificationId", JE.string savedModel.notificationId )
         , ( "muteNotifications", JE.bool savedModel.muteNotifications )
+        , ( "groupIds", JE.string savedModel.groupIds )
+        , ( "offset", JE.string savedModel.offset )
         ]
 
 
@@ -5025,6 +5085,7 @@ savedModelDecoder =
         |> optional "notificationId" JD.string ""
         |> optional "muteNotifications" JD.bool True
         |> optional "groupIds" JD.string ""
+        |> optional "offset" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -5179,6 +5240,7 @@ dollarButtonNameDict =
         , ( "GetNotification", SendGetNotification )
         , ( "PostDismissNotification", SendPostDismissNotification )
         , ( "PostClearNotifications", SendPostClearNotifications )
+        , ( "GetSearch", SendGetSearch )
         , ( "GetStatus", SendGetStatus )
         , ( "GetStatusContext", SendGetStatusContext )
         , ( "GetStatusCard", SendGetStatusCard )
@@ -5248,6 +5310,7 @@ buttonNameAlist =
     , ( SendGetNotification, ( "GetNotification", "GET notifications/:id" ) )
     , ( SendPostDismissNotification, ( "PostDismissNotification", "POST notifications/dismiss" ) )
     , ( SendPostClearNotifications, ( "PostClearNotifications", "POST notifications/clear" ) )
+    , ( SendGetSearch, ( "GetSearch", "GET search" ) )
     , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
     , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
     , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )
