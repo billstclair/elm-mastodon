@@ -399,6 +399,8 @@ The groups API is Gab-only.
 
 `GetGroupRelationships` results in a `GroupRelationshipListEntity`.
 
+`GetGroupAccounts` and `GetGroupRemovedAccounts` result in an `AccountListEntity`.
+
 `PostGroupJoin` results in a `GroupRelationshipEntity`.
 
 `DeleteGroupJoin`, `DeleteGroupStatus`, `PostGroupRemovedAccounts`, `DeleteGroupRemovedAccounts`, and `PatchGroupAddAdministrator` result in `NoEntity`.
@@ -409,6 +411,8 @@ The groups API is Gab-only.
 `GetGroups` fetches the list of all groups of which the logged-in account is a member.
 
 `GetGroup` fetches one group.
+
+`GetGroupAccounts` returns the members of a group.
 
 `GetGroupRelationships` gets the logged-in account relationships for one or more groups.
 
@@ -422,6 +426,8 @@ The groups API is Gab-only.
 
 `DeleteGroupStatus` removes a status from the group.
 
+`GetGroupRemovedAccounts` returns the list of removed accounts for a group.
+
 `PostGroupRemovedAccounts` revokes group membership for an account.
 
 `DeleteGroupRemovedAccounts` removes a previously revoked membership from the list of deleted accounts.
@@ -431,7 +437,10 @@ The groups API is Gab-only.
 -}
 type GroupsReq
     = GetGroups { tab : WhichGroups }
+      -- GET /api/v1/groups/:id
     | GetGroup { id : String }
+      -- GET /api/v1/groups/:id/accounts
+    | GetGroupAccounts { id : String }
       -- POST /api/v1/groups
     | PostGroup
         { title : String
@@ -454,6 +463,8 @@ type GroupsReq
     | DeleteGroupJoin { id : String }
       -- DELETE /api/v1/groups/:id/statuses/:status_id
     | DeleteGroupStatus { id : String, status_id : String }
+      -- GET /api/v1/groups/:id/removed_accounts
+    | GetGroupRemovedAccounts { id : String }
       -- POST /api/v1/groups/:id/removed_accounts
     | PostGroupRemovedAccounts { id : String, account_id : String }
       -- DELETE /api/v1/groups/:id/removed_accounts
@@ -1847,6 +1858,13 @@ groupsReq req res =
                 , decoder = decoders.group
             }
 
+        GetGroupAccounts { id } ->
+            { res
+                | url =
+                    relative [ r, id, "accounts" ] []
+                , decoder = decoders.accountList
+            }
+
         PostGroup { title, description, cover_image } ->
             { res
                 | method = m.post
@@ -1870,7 +1888,7 @@ groupsReq req res =
         -- PUT /api/v1/groups/:id
         PutGroup { id, title, description, cover_image } ->
             { res
-                | method = m.post
+                | method = m.put
                 , url = relative [ r, id ] []
                 , body =
                     Http.multipartBody <|
@@ -1937,6 +1955,15 @@ groupsReq req res =
                 , url =
                     relative [ r, id, "statuses", status_id ] []
                 , decoder = decoders.ignore
+            }
+
+        -- GET /api/v1/groups/:id/removed_accounts
+        GetGroupRemovedAccounts { id } ->
+            { res
+                | method = m.get
+                , url =
+                    relative [ r, id, "removed_accounts" ] []
+                , decoder = decoders.accountList
             }
 
         -- POST /api/v1/groups/:id/removed_accounts

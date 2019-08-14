@@ -487,6 +487,16 @@ entityValue entity =
         GroupListEntity groups ->
             JE.list entityValue (List.map GroupEntity groups)
 
+        GroupRelationshipEntity relationship ->
+            if relationship.v == JE.null then
+                encodeGroupRelationship relationship
+
+            else
+                relationship.v
+
+        GroupRelationshipListEntity relationships ->
+            JE.list entityValue (List.map GroupRelationshipEntity relationships)
+
         TagListEntity tags ->
             JE.list encodeTag tags
 

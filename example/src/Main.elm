@@ -173,6 +173,11 @@ type alias Model =
     , statusId : String
     , useElmButtonNames : Bool
     , showPostStatus : Bool
+    , excludedNotificationTypes : List NotificationType
+    , notificationsAccountId : String
+    , notificationId : String
+    , muteNotifications : Bool
+    , groupIds : String
 
     -- Non-persistent below here
     , dialog : Dialog
@@ -221,10 +226,9 @@ type alias Model =
     , multiple : Bool
     , hide_totals : Bool
     , pollOptions : List String
-    , excludedNotificationTypes : List NotificationType
-    , notificationsAccountId : String
-    , notificationId : String
-    , muteNotifications : Bool
+    , groupTitle : String
+    , groupDescription : String
+    , groupCoverImage : Maybe File
 
     -- Not input state
     , msg : Maybe String
@@ -297,6 +301,11 @@ type Msg
     | ToggleSensitive
     | SetLanguage String
     | SetGroupId String
+    | SetGroupIds String
+    | SetGroupTitle String
+    | SetGroupDescription String
+    | ReceiveGroupCoverImage File
+    | GetGroupCoverImage Bool
     | ToggleExcludedNotificationType NotificationType
     | IncludeAllNotifications
     | IncludeOnlyMentionNotifications
@@ -352,7 +361,18 @@ type Msg
     | SendPostBlock
     | SendPostUnblock
     | SendGetGroups
+    | SendGetGroupRemovedAccounts
     | SendGetGroup
+    | SendGetGroupAccounts
+    | SendGetGroupRelationships
+    | SendPostGroupJoin
+    | SendDeleteGroupJoin
+    | SendPostGroupRemovedAccounts
+    | SendDeleteGroupRemovedAccounts
+    | SendPatchGroupAddAdministrator
+    | SendDeleteGroupStatus
+    | SendPostGroup
+    | SendPutGroup
     | SendGetAccountMutes
     | SendPostAccountMute
     | SendPostAccountUnmute
@@ -561,6 +581,11 @@ init value url key =
     , showPostStatus = False
     , statusId = ""
     , useElmButtonNames = False
+    , excludedNotificationTypes = []
+    , notificationsAccountId = ""
+    , notificationId = ""
+    , muteNotifications = True
+    , groupIds = ""
 
     -- Non-persistent below here
     , dialog = NoDialog
@@ -609,10 +634,9 @@ init value url key =
     , multiple = False
     , hide_totals = False
     , pollOptions = [ "", "" ]
-    , excludedNotificationTypes = []
-    , notificationsAccountId = ""
-    , notificationId = ""
-    , muteNotifications = True
+    , groupTitle = ""
+    , groupDescription = ""
+    , groupCoverImage = Nothing
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1711,6 +1735,34 @@ updateInternal msg model =
             { model | groupId = groupId }
                 |> withNoCmd
 
+        SetGroupIds groupIds ->
+            { model | groupIds = groupIds }
+                |> withNoCmd
+
+        SetGroupTitle groupTitle ->
+            { model | groupTitle = groupTitle }
+                |> withNoCmd
+
+        SetGroupDescription groupDescription ->
+            { model | groupDescription = groupDescription }
+                |> withNoCmd
+
+        GetGroupCoverImage clearCoverImage ->
+            if clearCoverImage then
+                { model | groupCoverImage = Nothing }
+                    |> withNoCmd
+
+            else
+                model
+                    |> withCmd
+                        (File.Select.file imageMimeTypes
+                            ReceiveGroupCoverImage
+                        )
+
+        ReceiveGroupCoverImage groupCoverImage ->
+            { model | groupCoverImage = Just groupCoverImage }
+                |> withNoCmd
+
         ToggleMuteNotifications ->
             { model | muteNotifications = not model.muteNotifications }
                 |> withNoCmd
@@ -2015,9 +2067,109 @@ updateInternal msg model =
                 (GroupsRequest <| Request.GetGroups { tab = model.whichGroups })
                 model
 
+        SendGetGroupRemovedAccounts ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.GetGroupRemovedAccounts { id = model.groupId }
+                )
+                model
+
         SendGetGroup ->
             sendRequest
                 (GroupsRequest <| Request.GetGroup { id = model.groupId })
+                model
+
+        SendGetGroupAccounts ->
+            sendRequest
+                (GroupsRequest <| Request.GetGroupAccounts { id = model.groupId })
+                model
+
+        SendGetGroupRelationships ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.GetGroupRelationships
+                        { ids =
+                            String.split "," model.groupIds
+                                |> List.map String.trim
+                        }
+                )
+                model
+
+        SendPostGroupJoin ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.PostGroupJoin { id = model.groupId }
+                )
+                model
+
+        SendDeleteGroupJoin ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.DeleteGroupJoin { id = model.groupId }
+                )
+                model
+
+        SendPostGroupRemovedAccounts ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.PostGroupRemovedAccounts
+                        { id = model.groupId
+                        , account_id = model.accountId
+                        }
+                )
+                model
+
+        SendDeleteGroupRemovedAccounts ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.DeleteGroupRemovedAccounts
+                        { id = model.groupId
+                        , account_id = model.accountId
+                        }
+                )
+                model
+
+        SendPatchGroupAddAdministrator ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.PatchGroupAddAdministrator
+                        { id = model.groupId
+                        , account_id = model.accountId
+                        }
+                )
+                model
+
+        SendDeleteGroupStatus ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.DeleteGroupStatus
+                        { id = model.groupId
+                        , status_id = model.statusId
+                        }
+                )
+                model
+
+        SendPostGroup ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.PostGroup
+                        { title = model.groupTitle
+                        , description = model.groupDescription
+                        , cover_image = model.groupCoverImage
+                        }
+                )
+                model
+
+        SendPutGroup ->
+            sendRequest
+                (GroupsRequest <|
+                    Request.PutGroup
+                        { id = model.groupId
+                        , title = nothingIfBlank model.groupTitle
+                        , description = nothingIfBlank model.groupDescription
+                        , cover_image = model.groupCoverImage
+                        }
+                )
                 model
 
         SendGetAccountMutes ->
@@ -2621,6 +2773,26 @@ applyResponseSideEffects response model =
         AccountsRequest (Request.GetStatuses { paging }) ->
             statusSmartPaging response.entity paging model
 
+        GroupsRequest (Request.PostGroup _) ->
+            case response.entity of
+                GroupEntity { id } ->
+                    { model
+                        | groupId = id
+                        , groupTitle = ""
+                        , groupDescription = ""
+                        , groupCoverImage = Nothing
+                    }
+
+                _ ->
+                    model
+
+        GroupsRequest (Request.PutGroup _) ->
+            { model
+                | groupTitle = ""
+                , groupDescription = ""
+                , groupCoverImage = Nothing
+            }
+
         NotificationsRequest (Request.GetNotifications { paging }) ->
             notificationsSmartPaging response.entity paging model
 
@@ -3042,7 +3214,11 @@ radioButton { buttonValue, radioValue, radioName, setter, label } =
                         Noop
             ]
             []
-        , text label
+        , span
+            [ onClick setter
+            , style "cursor" "default"
+            ]
+            [ text label ]
         ]
 
 
@@ -3557,8 +3733,56 @@ groupsSelectedUI model =
         , sendButton SendGetGroups model
         , br
         , textInput "group id: " 20 SetGroupId model.groupId
-        , text " "
+        , br
         , sendButton SendGetGroup model
+        , text " "
+        , sendButton SendGetGroupAccounts model
+        , br
+        , sendButton SendGetGroupRemovedAccounts model
+        , br
+        , textInput "group ids (a,b,...): " 50 SetGroupIds model.groupIds
+        , br
+        , sendButton SendGetGroupRelationships model
+        , br
+        , text "-- writes below here --"
+        , br
+        , textInput "group id: " 20 SetGroupId model.groupId
+        , br
+        , sendButton SendPostGroupJoin model
+        , text " "
+        , sendButton SendDeleteGroupJoin model
+        , br
+        , textInput "acccount id: " 25 SetAccountId model.accountId
+        , br
+        , sendButton SendPostGroupRemovedAccounts model
+        , text " "
+        , sendButton SendDeleteGroupRemovedAccounts model
+        , br
+        , sendButton SendPatchGroupAddAdministrator model
+        , br
+        , textInput "status id: " 25 SetStatusId model.statusId
+        , text " "
+        , sendButton SendDeleteGroupStatus model
+        , br
+        , textInput "title: " 60 SetGroupTitle model.groupTitle
+        , br
+        , b "description:"
+        , br
+        , textarea
+            [ onInput SetGroupDescription
+            , value model.groupDescription
+            , rows 4
+            , cols 80
+            ]
+            []
+        , br
+        , renderChooseFile "cover image (19x7): " model.groupCoverImage GetGroupCoverImage
+        , br
+        , sendButton SendPostGroup model
+        , br
+        , textInput "group id: " 20 SetGroupId model.groupId
+        , text " "
+        , sendButton SendPutGroup model
         ]
 
 
@@ -4296,9 +4520,31 @@ The "$PostUnblock" button unblocks the "account id", and returns a `Relationship
 
 Groups are a Gab-only feature.
 
-Click "$GetGroups" to get the list of groups in the "Member", "Featured", or "Admin" selector.
+Click "$GetGroups" to get a list of `Group` entities in the "Member", "Featured", or "Admin" selector.
 
-Click "$GetGroup" to get information about the group with the given "group id".
+Click "$GetGroup" to get the `Group` entity for "group id".
+
+Click "$GetGroupAccounts" to get a list of `Account` entities for the group members.
+
+Click "$GetGroupRemovedAccounts" to get a list of `Account` entities for accounts that have been removed from the group (via "$PostGroupRemovedAccounts").
+
+Click "$GetGroupRelationships" to get the list of `GroupRelationship` entities for the comma-separated "group ids".
+
+Click "$PostGroupJoin" to join "group id".
+
+Click "$DeleteGroupJoin" to leave "group id".
+
+Click "$PostGroupRemovedAccounts" to remove "account id" from "group id". It will be returned by "$GetGroupRemovedAccounts".
+
+Click "$DeleteGroupRemovedAccounts" to remove "account id" from the list of removed accounts for "group id". This will allow that person to join again.
+
+Click "$PatchGroupAddAdministrator" to make "account id" an administrator for "group id". There is currently no way to remove an administrator except by removing her from the group with "$PostGroupRemovedAccounts". (This doesn't currently work for me. Don't know why yet)
+
+Click "$DeleteGroupStatus" to remove "status id" from "group id". The status will still exist, but will no longer be part of the group's timeline.
+
+Click "$PostGroup" to create a new group from "title", "description", and "cover image". The cover image will be cropped to a 19x7 aspect ratio (1900x700).
+
+Click $PutGroup to change the "title", "description", and/or "cover image" for "group id". Leave a field blank or the image unspecified to not change it.
             """
 
                 StatusesSelected ->
@@ -4530,6 +4776,11 @@ type alias SavedModel =
     , statusId : String
     , useElmButtonNames : Bool
     , showPostStatus : Bool
+    , excludedNotificationTypes : List NotificationType
+    , notificationsAccountId : String
+    , notificationId : String
+    , muteNotifications : Bool
+    , groupIds : String
     }
 
 
@@ -4567,6 +4818,11 @@ modelToSavedModel model =
     , statusId = model.statusId
     , useElmButtonNames = model.useElmButtonNames
     , showPostStatus = model.showPostStatus
+    , excludedNotificationTypes = model.excludedNotificationTypes
+    , notificationsAccountId = model.notificationsAccountId
+    , notificationId = model.notificationId
+    , muteNotifications = model.muteNotifications
+    , groupIds = model.groupIds
     }
 
 
@@ -4605,6 +4861,11 @@ savedModelToModel savedModel model =
         , statusId = savedModel.statusId
         , useElmButtonNames = savedModel.useElmButtonNames
         , showPostStatus = savedModel.showPostStatus
+        , excludedNotificationTypes = savedModel.excludedNotificationTypes
+        , notificationsAccountId = savedModel.notificationsAccountId
+        , notificationId = savedModel.notificationId
+        , muteNotifications = model.muteNotifications
+        , groupIds = savedModel.groupIds
     }
 
 
@@ -4682,6 +4943,7 @@ encodeSavedModel savedModel =
         , ( "resolve", JE.bool savedModel.resolve )
         , ( "following", JE.bool savedModel.following )
         , ( "groupId", JE.string savedModel.groupId )
+        , ( "groupIds", JE.string savedModel.groupIds )
         , ( "showReceived", JE.bool savedModel.showReceived )
         , ( "showEntity", JE.bool savedModel.showEntity )
         , ( "whichGroups", encodeWhichGroups savedModel.whichGroups )
@@ -4700,6 +4962,14 @@ encodeSavedModel savedModel =
         , ( "statusId", JE.string savedModel.statusId )
         , ( "useElmButtonNames", JE.bool savedModel.useElmButtonNames )
         , ( "showPostStatus", JE.bool savedModel.showPostStatus )
+        , ( "excludedNotificationTypes"
+          , JE.list ED.encodeNotificationType savedModel.excludedNotificationTypes
+          )
+        , ( "notificationsAccountId"
+          , JE.string savedModel.notificationsAccountId
+          )
+        , ( "notificationId", JE.string savedModel.notificationId )
+        , ( "muteNotifications", JE.bool savedModel.muteNotifications )
         ]
 
 
@@ -4750,6 +5020,11 @@ savedModelDecoder =
         |> optional "statusId" JD.string ""
         |> optional "useElmButtonNames" JD.bool False
         |> optional "showPostStatus" JD.bool False
+        |> optional "excludedNotificationTypes" (JD.list ED.notificationTypeDecoder) []
+        |> optional "notificationsAccountId" JD.string ""
+        |> optional "notificationId" JD.string ""
+        |> optional "muteNotifications" JD.bool True
+        |> optional "groupIds" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -4881,6 +5156,17 @@ dollarButtonNameDict =
     Dict.fromList
         [ ( "GetGroups", SendGetGroups )
         , ( "GetGroup", SendGetGroup )
+        , ( "GetGroupAccounts", SendGetGroupAccounts )
+        , ( "GetGroupRemovedAccounts", SendGetGroupRemovedAccounts )
+        , ( "GetGroupRelationships", SendGetGroupRelationships )
+        , ( "PostGroupJoin", SendPostGroupJoin )
+        , ( "DeleteGroupJoin", SendDeleteGroupJoin )
+        , ( "PostGroupRemovedAccounts", SendPostGroupRemovedAccounts )
+        , ( "DeleteGroupRemovedAccounts", SendDeleteGroupRemovedAccounts )
+        , ( "PatchGroupAddAdministrator", SendPatchGroupAddAdministrator )
+        , ( "DeleteGroupStatus", SendDeleteGroupStatus )
+        , ( "PostGroup", SendPostGroup )
+        , ( "PutGroup", SendPutGroup )
         , ( "GetBlocks", SendGetBlocks )
         , ( "PostBlock", SendPostBlock )
         , ( "PostUnblock", SendPostUnblock )
@@ -4939,6 +5225,17 @@ buttonNameAlist : List ( Msg, ( String, String ) )
 buttonNameAlist =
     [ ( SendGetGroups, ( "GetGroups", "GET groups" ) )
     , ( SendGetGroup, ( "GetGroup", "GET groups/:id" ) )
+    , ( SendGetGroupAccounts, ( "GetGroupAccounts", "GET groups/:id/accounts" ) )
+    , ( SendGetGroupRemovedAccounts, ( "GetGroupRemovedAccounts", "GET groups/:id/removed_accounts" ) )
+    , ( SendGetGroupRelationships, ( "GetGroupRelationships", "GET groups/:id/relationships" ) )
+    , ( SendPostGroupJoin, ( "PostGroupJoin", "POST groups/:id/accounts" ) )
+    , ( SendDeleteGroupJoin, ( "DeleteGroupJoin", "DELETE groups/:id/accounts" ) )
+    , ( SendPostGroupRemovedAccounts, ( "PostGroupRemovedAccounts", "POST groups/:id/removed_accounts" ) )
+    , ( SendDeleteGroupRemovedAccounts, ( "DeleteGroupRemovedAccounts", "DELETE groups/:id/removed_accounts" ) )
+    , ( SendPatchGroupAddAdministrator, ( "PatchGroupAddAdministrator", "PATCH groups/:id/accounts" ) )
+    , ( SendDeleteGroupStatus, ( "DeleteGroupStatus", "DELETE groups/:id/statuses/:status_id" ) )
+    , ( SendPostGroup, ( "PostGroup", "POST groups" ) )
+    , ( SendPutGroup, ( "PutGroup", "PUT groups" ) )
     , ( SendGetBlocks, ( "GetBlocks", "GET blocks" ) )
     , ( SendPostBlock, ( "PostBlock", "POST accounts/:id/block" ) )
     , ( SendPostUnblock, ( "PostUnblock", "POST accounts/:id/unblock" ) )
