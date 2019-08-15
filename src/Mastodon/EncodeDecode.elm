@@ -211,6 +211,9 @@ encodeEntity entity =
         ListEntityEntity list ->
             encodeListEntity list
 
+        ListEntityListEntity list ->
+            JE.list encodeListEntity list
+
         AttachmentEntity attachment ->
             encodeAttachment attachment
 
@@ -299,6 +302,7 @@ entityDecoder =
         , groupRelationshipDecoder |> JD.map GroupRelationshipEntity
         , JD.list groupRelationshipDecoder |> JD.map GroupRelationshipListEntity
         , listEntityDecoder |> JD.map ListEntityEntity
+        , JD.list listEntityDecoder |> JD.map ListEntityListEntity
         , attachmentDecoder |> JD.map AttachmentEntity
         , JD.list attachmentDecoder |> JD.map AttachmentListEntity
         , notificationDecoder |> JD.map NotificationEntity
@@ -415,6 +419,9 @@ entityValue entity =
 
         ListEntityEntity list ->
             encodeListEntity list
+
+        ListEntityListEntity lists ->
+            JE.list encodeListEntity lists
 
         AttachmentEntity attachment ->
             if attachment.v == JE.null then

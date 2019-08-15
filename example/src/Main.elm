@@ -179,6 +179,7 @@ type alias Model =
     , muteNotifications : Bool
     , groupIds : String
     , offset : String
+    , listTitle : String
 
     -- Non-persistent below here
     , dialog : Dialog
@@ -308,6 +309,7 @@ type Msg
     | SetGroupDescription String
     | ReceiveGroupCoverImage File
     | GetGroupCoverImage Bool
+    | SetListTitle String
     | ToggleExcludedNotificationType NotificationType
     | IncludeAllNotifications
     | IncludeOnlyMentionNotifications
@@ -375,6 +377,15 @@ type Msg
     | SendDeleteGroupStatus
     | SendPostGroup
     | SendPutGroup
+    | SendGetLists
+    | SendGetList
+    | SendGetListAccounts
+    | SendGetAccountLists
+    | SendPostList
+    | SendPutList
+    | SendDeleteList
+    | SendPostListAccounts
+    | SendDeleteListAccounts
     | SendGetAccountMutes
     | SendPostAccountMute
     | SendPostAccountUnmute
@@ -590,6 +601,7 @@ init value url key =
     , muteNotifications = True
     , groupIds = ""
     , offset = ""
+    , listTitle = ""
 
     -- Non-persistent below here
     , dialog = NoDialog
@@ -1771,6 +1783,10 @@ updateInternal msg model =
             { model | groupCoverImage = Just groupCoverImage }
                 |> withNoCmd
 
+        SetListTitle listTitle ->
+            { model | listTitle = listTitle }
+                |> withNoCmd
+
         ToggleMuteNotifications ->
             { model | muteNotifications = not model.muteNotifications }
                 |> withNoCmd
@@ -2176,6 +2192,83 @@ updateInternal msg model =
                         , title = nothingIfBlank model.groupTitle
                         , description = nothingIfBlank model.groupDescription
                         , cover_image = model.groupCoverImage
+                        }
+                )
+                model
+
+        SendGetLists ->
+            sendRequest
+                (ListsRequest Request.GetLists)
+                model
+
+        SendGetList ->
+            sendRequest
+                (ListsRequest <|
+                    Request.GetList { id = model.listId }
+                )
+                model
+
+        SendGetListAccounts ->
+            sendRequest
+                (ListsRequest <|
+                    Request.GetListAccounts
+                        { id = model.listId
+                        , limit = String.toInt model.pagingInput.limit
+                        }
+                )
+                model
+
+        SendGetAccountLists ->
+            sendRequest
+                (ListsRequest <|
+                    Request.GetAccountLists { id = model.accountId }
+                )
+                model
+
+        SendPostList ->
+            sendRequest
+                (ListsRequest <|
+                    Request.PostList { title = model.listTitle }
+                )
+                model
+
+        SendPutList ->
+            sendRequest
+                (ListsRequest <|
+                    Request.PutList
+                        { id = model.listId
+                        , title = model.listTitle
+                        }
+                )
+                model
+
+        SendDeleteList ->
+            sendRequest
+                (ListsRequest <|
+                    Request.DeleteList { id = model.listId }
+                )
+                model
+
+        SendPostListAccounts ->
+            sendRequest
+                (ListsRequest <|
+                    Request.PostListAccounts
+                        { id = model.listId
+                        , account_ids =
+                            String.split "," model.accountIds
+                                |> List.map String.trim
+                        }
+                )
+                model
+
+        SendDeleteListAccounts ->
+            sendRequest
+                (ListsRequest <|
+                    Request.DeleteListAccounts
+                        { id = model.listId
+                        , account_ids =
+                            String.split "," model.accountIds
+                                |> List.map String.trim
                         }
                 )
                 model
@@ -3128,6 +3221,7 @@ type SelectedRequest
     | AccountsSelected
     | BlocksSelected
     | GroupsSelected
+    | ListsSelected
     | MutesSelected
     | NotificationsSelected
     | SearchSelected
@@ -3157,6 +3251,9 @@ selectedRequestToString selectedRequest =
 
         GroupsSelected ->
             "GroupsRequest"
+
+        ListsSelected ->
+            "ListsRequest"
 
         MutesSelected ->
             "MutesRequest"
@@ -3198,6 +3295,9 @@ selectedRequestFromString s =
 
         "GroupsRequest" ->
             GroupsSelected
+
+        "ListsRequest" ->
+            ListsSelected
 
         "MutesRequest" ->
             MutesSelected
@@ -3406,6 +3506,10 @@ view model =
                             ""
                             model
                             groupsSelectedUI
+                        , selectedRequestHtml ListsSelected
+                            "https://docs.joinmastodon.org/api/rest/lists/"
+                            model
+                            listsSelectedUI
                         , selectedRequestHtml MutesSelected
                             "https://docs.joinmastodon.org/api/rest/mutes/"
                             model
@@ -3815,6 +3919,42 @@ groupsSelectedUI model =
         , textInput "group id: " 20 SetGroupId model.groupId
         , text " "
         , sendButton SendPutGroup model
+        ]
+
+
+listsSelectedUI : Model -> Html Msg
+listsSelectedUI model =
+    p []
+        [ pspace
+        , sendButton SendGetLists model
+        , br
+        , textInput "list id: " 25 SetListId model.listId
+        , text " "
+        , sendButton SendGetList model
+        , text " "
+        , sendButton SendGetListAccounts model
+        , br
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , text " "
+        , sendButton SendGetAccountLists model
+        , br
+        , text "-- writes below here --"
+        , br
+        , textInput "title: " 40 SetListTitle model.listTitle
+        , text " "
+        , sendButton SendPostList model
+        , br
+        , textInput "list id: " 25 SetListId model.listId
+        , text " "
+        , sendButton SendPutList model
+        , text " "
+        , sendButton SendDeleteList model
+        , br
+        , textInput "account ids (a,b,...): " 40 SetAccountIds model.accountIds
+        , br
+        , sendButton SendPostListAccounts model
+        , text " "
+        , sendButton SendDeleteListAccounts model
         ]
 
 
@@ -4627,6 +4767,29 @@ If you want to add media to a status, you can do that in the "-- new media --" s
 To edit the description or focus of a "media id", fill in one or both of those, and click "$PutMedia".
                 """
 
+                ListsSelected ->
+                    """
+**ListsSelected Help**
+
+The "$GetLists" button gets your list of `List` entities.
+
+The "$GetList" button gets the `List` entity for "list id".
+
+The "$GetListAccounts" button gets the list of `Account` entities that are in "list id".
+
+The "$GetAccountLists" button gets the list of `List` entities containing "account id".
+
+The "$PostList" button creates a new list with the given "title".
+
+The "$PutList" button changes the title for "list id" to "title".
+
+The "$DeleteList" button deletes "list id".
+
+The "$PostListAccounts" button adds the (comma-separated) "account ids" to "list id". You must follow each of them, or you'll get an error.
+
+The "$DeleteListAccounts" button removes the "account ids" from "list id".
+                    """
+
                 MutesSelected ->
                     """
 **MutesRequest Help**
@@ -4838,6 +5001,7 @@ type alias SavedModel =
     , muteNotifications : Bool
     , groupIds : String
     , offset : String
+    , listTitle : String
     }
 
 
@@ -4881,6 +5045,7 @@ modelToSavedModel model =
     , muteNotifications = model.muteNotifications
     , groupIds = model.groupIds
     , offset = model.offset
+    , listTitle = model.listTitle
     }
 
 
@@ -4925,6 +5090,7 @@ savedModelToModel savedModel model =
         , muteNotifications = model.muteNotifications
         , groupIds = savedModel.groupIds
         , offset = savedModel.offset
+        , listTitle = savedModel.listTitle
     }
 
 
@@ -5030,6 +5196,7 @@ encodeSavedModel savedModel =
         , ( "muteNotifications", JE.bool savedModel.muteNotifications )
         , ( "groupIds", JE.string savedModel.groupIds )
         , ( "offset", JE.string savedModel.offset )
+        , ( "listTitle", JE.string savedModel.listTitle )
         ]
 
 
@@ -5086,6 +5253,7 @@ savedModelDecoder =
         |> optional "muteNotifications" JD.bool True
         |> optional "groupIds" JD.string ""
         |> optional "offset" JD.string ""
+        |> optional "listTitle" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -5228,6 +5396,15 @@ dollarButtonNameDict =
         , ( "DeleteGroupStatus", SendDeleteGroupStatus )
         , ( "PostGroup", SendPostGroup )
         , ( "PutGroup", SendPutGroup )
+        , ( "GetLists", SendGetLists )
+        , ( "GetList", SendGetList )
+        , ( "GetListAccounts", SendGetListAccounts )
+        , ( "GetAccountLists", SendGetAccountLists )
+        , ( "PostList", SendPostList )
+        , ( "PutList", SendPutList )
+        , ( "DeleteList", SendDeleteList )
+        , ( "PostListAccounts", SendPostListAccounts )
+        , ( "DeleteListAccounts", SendDeleteListAccounts )
         , ( "GetBlocks", SendGetBlocks )
         , ( "PostBlock", SendPostBlock )
         , ( "PostUnblock", SendPostUnblock )
@@ -5298,6 +5475,15 @@ buttonNameAlist =
     , ( SendDeleteGroupStatus, ( "DeleteGroupStatus", "DELETE groups/:id/statuses/:status_id" ) )
     , ( SendPostGroup, ( "PostGroup", "POST groups" ) )
     , ( SendPutGroup, ( "PutGroup", "PUT groups" ) )
+    , ( SendGetLists, ( "GetLists", "GET lists" ) )
+    , ( SendGetList, ( "GetList", "GET lists/:id" ) )
+    , ( SendGetListAccounts, ( "GetListAccounts", "GET lists/:id/accounts" ) )
+    , ( SendGetAccountLists, ( "GetAccountLists", "GET accounts/:id/lists" ) )
+    , ( SendPostList, ( "PostList", "POST lists" ) )
+    , ( SendPutList, ( "PutList", "PUT lists/:id" ) )
+    , ( SendDeleteList, ( "DeleteList", "DELETE lists/:id" ) )
+    , ( SendPostListAccounts, ( "PostListAccounts", "POST lists/:id/accounts" ) )
+    , ( SendDeleteListAccounts, ( "DeleteListAccounts", "DELETE lists/:id/accounts" ) )
     , ( SendGetBlocks, ( "GetBlocks", "GET blocks" ) )
     , ( SendPostBlock, ( "PostBlock", "POST accounts/:id/block" ) )
     , ( SendPostUnblock, ( "PostUnblock", "POST accounts/:id/unblock" ) )
