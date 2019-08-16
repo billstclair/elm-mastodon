@@ -14,7 +14,7 @@ module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
     , serverRequest
     , AccountsReq(..), AppsReq(..), BlocksReq(..), CustomEmojisReq(..), DomainBlocksReq(..)
-    , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowReq(..)
+    , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowRequestsReq(..)
     , FollowSuggestionsReq(..), GroupsReq(..), InstanceReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..), TrendsReq(..)
@@ -44,7 +44,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 # Request details
 
 @docs AccountsReq, AppsReq, BlocksReq, CustomEmojisReq, DomainBlocksReq
-@docs EndorsementsReq, FavouritesReq, FiltersReq, FollowReq
+@docs EndorsementsReq, FavouritesReq, FiltersReq, FollowRequestsReq
 @docs FollowSuggestionsReq, GroupsReq, InstanceReq, ListsReq, MediaAttachmentsReq
 @docs MutesReq, NotificationsReq, PollsReq, ReportsReq
 @docs ScheduledStatusesReq, SearchReq, StatusesReq, TimelinesReq, TrendsReq
@@ -105,7 +105,7 @@ type Request
     | EndorsementsRequest EndorsementsReq
     | FavouritesRequest FavouritesReq
     | FiltersRequest FiltersReq
-    | FollowRequest FollowReq
+    | FollowRequestsRequest FollowRequestsReq
     | FollowSuggestionsRequest FollowSuggestionsReq
     | GroupsRequest GroupsReq
     | InstanceRequest InstanceReq
@@ -350,7 +350,7 @@ type FiltersReq
 `PostAuthorizeFollow` and `PostRejectFollow` result in `NoEntity`.
 
 -}
-type FollowReq
+type FollowRequestsReq
     = GetFollowRequests { limit : Maybe Int }
     | PostAuthorizeFollow { id : String }
     | PostRejectFollow { id : String }
@@ -1076,8 +1076,8 @@ requestToRawRequest headers serverInfo request =
                 FiltersRequest req ->
                     filtersReq req raw
 
-                FollowRequest req ->
-                    followReq req raw
+                FollowRequestsRequest req ->
+                    followRequestsReq req raw
 
                 FollowSuggestionsRequest req ->
                     followSuggestionsReq req raw
@@ -1780,8 +1780,8 @@ filtersReq req res =
             }
 
 
-followReq : FollowReq -> RawRequest -> RawRequest
-followReq req res =
+followRequestsReq : FollowRequestsReq -> RawRequest -> RawRequest
+followRequestsReq req res =
     let
         r =
             apiReq.follow_requests

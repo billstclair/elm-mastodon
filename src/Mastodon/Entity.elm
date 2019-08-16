@@ -371,7 +371,7 @@ type alias Context =
     }
 
 
-{-| Values for the `Account.emojis` list. Also returned by /api/v1/custom\_emojis.
+{-| Values for the `Account.emojis` list. Also returned by `/api/v1/custom_emojis`.
 -}
 type alias Emoji =
     { shortcode : String

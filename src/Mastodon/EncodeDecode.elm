@@ -160,6 +160,9 @@ import Mastodon.Entity as Entity
 encodeEntity : Entity -> Value
 encodeEntity entity =
     case entity of
+        NoEntity ->
+            JE.null
+
         AccountEntity account ->
             encodeAccount account
 
@@ -281,7 +284,8 @@ its decoder explicitly. In case you don't...
 entityDecoder : Decoder Entity
 entityDecoder =
     JD.oneOf
-        [ accountDecoder |> JD.map AccountEntity
+        [ JD.null NoEntity
+        , accountDecoder |> JD.map AccountEntity
         , appDecoder |> JD.map AppEntity
         , JD.list accountDecoder |> JD.map AccountListEntity
         , sourceDecoder |> JD.map SourceEntity

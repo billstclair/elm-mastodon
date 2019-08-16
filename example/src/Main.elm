@@ -349,7 +349,6 @@ type Msg
       -- bottom of the file.
     | SendGetInstance
     | SendGetTrends
-    | SendGetCustomEmojies
     | SendGetVerifyCredentials
     | SendGetAccountByUsername
     | SendGetAccount
@@ -364,6 +363,13 @@ type Msg
     | SendGetBlocks
     | SendPostBlock
     | SendPostUnblock
+    | SendGetCustomEmojis
+    | SendGetFavourites
+    | SendPostFavourite
+    | SendPostUnfavourite
+    | SendGetFollowRequests
+    | SendPostAuthorizeFollow
+    | SendPostRejectFollow
     | SendGetGroups
     | SendGetGroupRemovedAccounts
     | SendGetGroup
@@ -1943,7 +1949,6 @@ updateInternal msg model =
             )
 
         SetPollOption idx option ->
-            -- TODO
             { model | pollOptions = LE.setAt idx option model.pollOptions }
                 |> withNoCmd
 
@@ -1964,9 +1969,6 @@ updateInternal msg model =
 
         SendGetTrends ->
             sendRequest (TrendsRequest Request.GetTrends) model
-
-        SendGetCustomEmojies ->
-            sendRequest (CustomEmojisRequest Request.GetCustomEmojis) model
 
         SendGetVerifyCredentials ->
             sendRequest (AccountsRequest Request.GetVerifyCredentials) model
@@ -2083,6 +2085,54 @@ updateInternal msg model =
             sendRequest
                 (BlocksRequest <|
                     Request.PostUnblock { id = model.accountId }
+                )
+                model
+
+        SendGetCustomEmojis ->
+            sendRequest (CustomEmojisRequest Request.GetCustomEmojis)
+                model
+
+        SendGetFavourites ->
+            sendRequest
+                (FavouritesRequest <|
+                    Request.GetFavourites
+                        { limit = String.toInt model.pagingInput.limit }
+                )
+                model
+
+        SendPostFavourite ->
+            sendRequest
+                (FavouritesRequest <|
+                    Request.PostFavourite { id = model.statusId }
+                )
+                model
+
+        SendPostUnfavourite ->
+            sendRequest
+                (FavouritesRequest <|
+                    Request.PostUnfavourite { id = model.statusId }
+                )
+                model
+
+        SendGetFollowRequests ->
+            sendRequest
+                (FollowRequestsRequest <|
+                    Request.GetFollowRequests
+                        { limit = String.toInt model.pagingInput.limit }
+                )
+                model
+
+        SendPostAuthorizeFollow ->
+            sendRequest
+                (FollowRequestsRequest <|
+                    Request.PostAuthorizeFollow { id = model.accountId }
+                )
+                model
+
+        SendPostRejectFollow ->
+            sendRequest
+                (FollowRequestsRequest <|
+                    Request.PostRejectFollow { id = model.accountId }
                 )
                 model
 
@@ -3220,6 +3270,9 @@ type SelectedRequest
     | InstanceSelected
     | AccountsSelected
     | BlocksSelected
+    | CustomEmojisSelected
+    | FavouritesSelected
+    | FollowRequestsSelected
     | GroupsSelected
     | ListsSelected
     | MutesSelected
@@ -3248,6 +3301,15 @@ selectedRequestToString selectedRequest =
 
         BlocksSelected ->
             "BlocksRequest"
+
+        CustomEmojisSelected ->
+            "CustomEmojisRequest"
+
+        FavouritesSelected ->
+            "FavouritesRequest"
+
+        FollowRequestsSelected ->
+            "FollowRequestsRequest"
 
         GroupsSelected ->
             "GroupsRequest"
@@ -3292,6 +3354,15 @@ selectedRequestFromString s =
 
         "BlocksRequest" ->
             BlocksSelected
+
+        "CustomEmojisRequest" ->
+            CustomEmojisSelected
+
+        "FavouritesRequest" ->
+            FavouritesSelected
+
+        "FollowRequestsRequest" ->
+            FollowRequestsSelected
 
         "GroupsRequest" ->
             GroupsSelected
@@ -3502,6 +3573,18 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/blocks/"
                             model
                             blocksSelectedUI
+                        , selectedRequestHtml CustomEmojisSelected
+                            "https://docs.joinmastodon.org/api/rest/custom-emojis/"
+                            model
+                            customEmojisSelectedUI
+                        , selectedRequestHtml FavouritesSelected
+                            "https://docs.joinmastodon.org/api/rest/favourites/"
+                            model
+                            favouritesSelectedUI
+                        , selectedRequestHtml FollowRequestsSelected
+                            "https://docs.joinmastodon.org/api/rest/follow-requests/"
+                            model
+                            followRequestsSelectedUI
                         , selectedRequestHtml GroupsSelected
                             ""
                             model
@@ -3857,6 +3940,48 @@ checkBox msg isChecked label =
             ]
             []
         , b label
+        ]
+
+
+customEmojisSelectedUI : Model -> Html Msg
+customEmojisSelectedUI model =
+    p []
+        [ pspace
+        , sendButton SendGetCustomEmojis model
+        ]
+
+
+favouritesSelectedUI : Model -> Html Msg
+favouritesSelectedUI model =
+    p []
+        [ pspace
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , text " "
+        , sendButton SendGetFavourites model
+        , br
+        , text "-- writes below here --"
+        , br
+        , textInput "status id: " 25 SetStatusId model.statusId
+        , br
+        , sendButton SendPostFavourite model
+        , text " "
+        , sendButton SendPostUnfavourite model
+        ]
+
+
+followRequestsSelectedUI : Model -> Html Msg
+followRequestsSelectedUI model =
+    p []
+        [ pspace
+        , textInput "limit: " 10 SetLimit model.pagingInput.limit
+        , text " "
+        , sendButton SendGetFollowRequests model
+        , br
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , br
+        , sendButton SendPostAuthorizeFollow model
+        , text " "
+        , sendButton SendPostRejectFollow model
         ]
 
 
@@ -4386,8 +4511,6 @@ instanceSelectedUI model =
         , sendButton SendGetInstance model
         , text " "
         , sendButton SendGetTrends model
-        , text " "
-        , sendButton SendGetCustomEmojies model
         ]
 
 
@@ -4663,8 +4786,6 @@ help model =
 The "$GetInstance" button fetches the `Instance` entity for the "Use API for" instance.
 
 The "$GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
-
-The "$GetCustomEmojies" button fetches a list of `Emoji` entities.
                 """
 
                 AccountsSelected ->
@@ -4702,6 +4823,36 @@ The "$PostBlock" button blocks the "account id", and returns a `Relationship` en
 
 The "$PostUnblock" button unblocks the "account id", and returns a `Relationship` entity.
               """
+
+                CustomEmojisSelected ->
+                    """
+**CustomEmojisRequest Help**
+
+The "$GetCustomEmojis" button gets a list of `Emoji` entities.
+                   """
+
+                FavouritesSelected ->
+                    """
+**FavouritesRequest Help**
+
+The "$GetFavourites" button gets a maximum of "limit" `Favourites` entities.
+
+The "$PostFavourite" button add "status id" to your list of favourites.
+
+The "$PostUnfavourite" button removes "status id" from your list of favourites.
+                   """
+
+                FollowRequestsSelected ->
+                    """
+**FollowRequestsRequest Help**
+
+The "$GetFollowRequests" button gets a maximum of "limit" `FollowRequest` entities.
+
+The "$PostAuthorizeFollow" button authorizes the follow request from "account id".
+
+The "$PostRejectFollow" button rejects the follow request from "account id".
+
+                   """
 
                 GroupsSelected ->
                     """
@@ -5408,6 +5559,13 @@ dollarButtonNameDict =
         , ( "GetBlocks", SendGetBlocks )
         , ( "PostBlock", SendPostBlock )
         , ( "PostUnblock", SendPostUnblock )
+        , ( "GetCustomEmojis", SendGetCustomEmojis )
+        , ( "GetFavourites", SendGetFavourites )
+        , ( "PostFavourite", SendPostFavourite )
+        , ( "PostUnfavourite", SendPostUnfavourite )
+        , ( "GetFollowRequests", SendGetFollowRequests )
+        , ( "PostAuthorizeFollow", SendPostAuthorizeFollow )
+        , ( "PostRejectFollow", SendPostRejectFollow )
         , ( "GetAccountMutes", SendGetAccountMutes )
         , ( "PostAccountMute", SendPostAccountMute )
         , ( "PostAccountUnmute", SendPostAccountUnmute )
@@ -5439,7 +5597,6 @@ dollarButtonNameDict =
         , ( "GetGroupTimeline", SendGetGroupTimeline )
         , ( "GetInstance", SendGetInstance )
         , ( "GetTrends", SendGetTrends )
-        , ( "GetCustomEmojies", SendGetCustomEmojies )
         , ( "GetVerifyCredentials", SendGetVerifyCredentials )
         , ( "GetAccountByUsername", SendGetAccountByUsername )
         , ( "GetAccount", SendGetAccount )
@@ -5487,6 +5644,13 @@ buttonNameAlist =
     , ( SendGetBlocks, ( "GetBlocks", "GET blocks" ) )
     , ( SendPostBlock, ( "PostBlock", "POST accounts/:id/block" ) )
     , ( SendPostUnblock, ( "PostUnblock", "POST accounts/:id/unblock" ) )
+    , ( SendGetCustomEmojis, ( "GetCustomEmojis", "GET custom_emojis" ) )
+    , ( SendGetFavourites, ( "GetFavourites", "GET favourites" ) )
+    , ( SendPostFavourite, ( "PostFavourite", "POST statuses/:id/favourite" ) )
+    , ( SendPostUnfavourite, ( "PostUnfavourite", "POST statuses/:id/unfavourite" ) )
+    , ( SendGetFollowRequests, ( "GetFollowRequests", "GET follow_requests" ) )
+    , ( SendPostAuthorizeFollow, ( "PostAuthorizeFollow", "POST follow_requests/:id/authorize" ) )
+    , ( SendPostRejectFollow, ( "PostRejectFollow", "POST follow_requests/:id/reject" ) )
     , ( SendGetAccountMutes, ( "GetAccountMutes", "GET mutes" ) )
     , ( SendPostAccountMute, ( "PostAccountMute", "POST accounts/:id/mute" ) )
     , ( SendPostAccountUnmute, ( "PostAccountUnmute", "POST accounts/:id/unmute" ) )
@@ -5518,7 +5682,6 @@ buttonNameAlist =
     , ( SendGetGroupTimeline, ( "GetGroupTimeline", "GET timelines/group/:id" ) )
     , ( SendGetInstance, ( "GetInstance", "GET instance" ) )
     , ( SendGetTrends, ( "GetTrends", "GET trends" ) )
-    , ( SendGetCustomEmojies, ( "GetCustomEmojies", "GET custom_emojis" ) )
     , ( SendGetVerifyCredentials, ( "GetVerifyCredentials", "GET accounts/verify_credentials" ) )
     , ( SendGetAccountByUsername, ( "GetAccountByUsername", "GET account_by_username/:username" ) )
     , ( SendGetAccount, ( "GetAccount", "GET accounts/:id" ) )
