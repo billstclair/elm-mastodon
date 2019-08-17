@@ -364,6 +364,9 @@ type Msg
     | SendPostBlock
     | SendPostUnblock
     | SendGetCustomEmojis
+    | SendGetEndorsements
+    | SendPostPinAccount
+    | SendPostUnpinAccount
     | SendGetFavourites
     | SendPostFavourite
     | SendPostUnfavourite
@@ -2092,6 +2095,24 @@ updateInternal msg model =
             sendRequest (CustomEmojisRequest Request.GetCustomEmojis)
                 model
 
+        SendGetEndorsements ->
+            sendRequest (EndorsementsRequest Request.GetEndorsements)
+                model
+
+        SendPostPinAccount ->
+            sendRequest
+                (EndorsementsRequest <|
+                    Request.PostPinAccount { id = model.accountId }
+                )
+                model
+
+        SendPostUnpinAccount ->
+            sendRequest
+                (EndorsementsRequest <|
+                    Request.PostUnpinAccount { id = model.accountId }
+                )
+                model
+
         SendGetFavourites ->
             sendRequest
                 (FavouritesRequest <|
@@ -3271,6 +3292,7 @@ type SelectedRequest
     | AccountsSelected
     | BlocksSelected
     | CustomEmojisSelected
+    | EndorsementsSelected
     | FavouritesSelected
     | FollowRequestsSelected
     | GroupsSelected
@@ -3304,6 +3326,9 @@ selectedRequestToString selectedRequest =
 
         CustomEmojisSelected ->
             "CustomEmojisRequest"
+
+        EndorsementsSelected ->
+            "EndorsementsRequest"
 
         FavouritesSelected ->
             "FavouritesRequest"
@@ -3357,6 +3382,9 @@ selectedRequestFromString s =
 
         "CustomEmojisRequest" ->
             CustomEmojisSelected
+
+        "EndorsementsRequest" ->
+            EndorsementsSelected
 
         "FavouritesRequest" ->
             FavouritesSelected
@@ -3577,6 +3605,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/custom-emojis/"
                             model
                             customEmojisSelectedUI
+                        , selectedRequestHtml EndorsementsSelected
+                            "https://docs.joinmastodon.org/api/rest/endorsements/"
+                            model
+                            endorsementsSelectedUI
                         , selectedRequestHtml FavouritesSelected
                             "https://docs.joinmastodon.org/api/rest/favourites/"
                             model
@@ -3948,6 +3980,19 @@ customEmojisSelectedUI model =
     p []
         [ pspace
         , sendButton SendGetCustomEmojis model
+        ]
+
+
+endorsementsSelectedUI : Model -> Html Msg
+endorsementsSelectedUI model =
+    p []
+        [ pspace
+        , sendButton SendGetEndorsements model
+        , br
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , br
+        , sendButton SendPostPinAccount model
+        , sendButton SendPostUnpinAccount model
         ]
 
 
@@ -4831,6 +4876,17 @@ The "$PostUnblock" button unblocks the "account id", and returns a `Relationship
 The "$GetCustomEmojis" button gets a list of `Emoji` entities.
                    """
 
+                EndorsementsSelected ->
+                    """
+**EndorsementsRequest Help**
+
+The "$GetEndorsements" button gets a list of endorsed "Account" entities.
+
+The "$PostPinAccount" button adds "account id" to the list of endorsed accounts.
+
+The "$PostUnpinAccount" button removes "account id" from the list of endorsed accounts.
+                   """
+
                 FavouritesSelected ->
                     """
 **FavouritesRequest Help**
@@ -5560,6 +5616,9 @@ dollarButtonNameDict =
         , ( "PostBlock", SendPostBlock )
         , ( "PostUnblock", SendPostUnblock )
         , ( "GetCustomEmojis", SendGetCustomEmojis )
+        , ( "GetEndorsements", SendGetEndorsements )
+        , ( "PostPinAccount", SendPostPinAccount )
+        , ( "PostUnpinAccount", SendPostUnpinAccount )
         , ( "GetFavourites", SendGetFavourites )
         , ( "PostFavourite", SendPostFavourite )
         , ( "PostUnfavourite", SendPostUnfavourite )
@@ -5645,6 +5704,9 @@ buttonNameAlist =
     , ( SendPostBlock, ( "PostBlock", "POST accounts/:id/block" ) )
     , ( SendPostUnblock, ( "PostUnblock", "POST accounts/:id/unblock" ) )
     , ( SendGetCustomEmojis, ( "GetCustomEmojis", "GET custom_emojis" ) )
+    , ( SendGetEndorsements, ( "GetEndorsements", "GET endorsements" ) )
+    , ( SendPostPinAccount, ( "PostPinAccount", "POST accounts/:id/pin" ) )
+    , ( SendPostUnpinAccount, ( "PostUnpinAccount", "POST accounts/:id/unpin" ) )
     , ( SendGetFavourites, ( "GetFavourites", "GET favourites" ) )
     , ( SendPostFavourite, ( "PostFavourite", "POST statuses/:id/favourite" ) )
     , ( SendPostUnfavourite, ( "PostUnfavourite", "POST statuses/:id/unfavourite" ) )

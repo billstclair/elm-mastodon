@@ -11,7 +11,6 @@
             "NoRedInk/elm-json-decode-pipeline": "1.0.0",
             "billstclair/elm-dialog": "1.0.1",
             "billstclair/elm-localstorage": "7.2.0",
-            "billstclair/elm-oauth-middleware": "3.0.0",
             "billstclair/elm-port-funnel": "1.2.0",
             "billstclair/elm-websocket-client": "4.1.0",
             "elm/browser": "1.0.1",
@@ -26,8 +25,7 @@
             "elm-community/string-extra": "4.0.1",
             "elm-explorations/markdown": "1.0.0",
             "klazuka/elm-json-tree-view": "2.1.0",
-            "truqu/elm-base64": "2.0.4",
-            "truqu/elm-oauth2": "5.0.0"
+            "truqu/elm-base64": "2.0.4"
         },
         "indirect": {
             "elm/bytes": "1.0.7",
