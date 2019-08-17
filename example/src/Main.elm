@@ -79,6 +79,7 @@ import Mastodon.Entity as Entity
         , Authorization
         , Entity(..)
         , Field
+        , FilterContext(..)
         , Focus
         , NotificationType(..)
         , Privacy(..)
@@ -140,6 +141,55 @@ type alias FocusInput =
     { x : String, y : String }
 
 
+type alias FilterInput =
+    { phrase : String
+    , context : List FilterContext
+    , irreversible : Bool
+    , whole_word : Bool
+    , expires_in : String
+    }
+
+
+emptyFilterInput : FilterInput
+emptyFilterInput =
+    { phrase = ""
+    , context = [ HomeContext ]
+    , irreversible = False
+    , whole_word = False
+    , expires_in = ""
+    }
+
+
+isFilterInputValid : FilterInput -> Bool
+isFilterInputValid { phrase, context, expires_in } =
+    (phrase /= "")
+        && (context /= [])
+        && ((expires_in == "")
+                || (Nothing /= String.toInt expires_in)
+           )
+
+
+encodeFilterInput : FilterInput -> Value
+encodeFilterInput { phrase, context, irreversible, whole_word, expires_in } =
+    JE.object
+        [ ( "phrase", JE.string phrase )
+        , ( "context", JE.list ED.encodeFilterContext context )
+        , ( "irreversible", JE.bool irreversible )
+        , ( "whole_word", JE.bool whole_word )
+        , ( "expires_in", JE.string expires_in )
+        ]
+
+
+filterInputDecoder : Decoder FilterInput
+filterInputDecoder =
+    JD.succeed FilterInput
+        |> required "phrase" JD.string
+        |> required "context" (JD.list ED.filterContextDecoder)
+        |> required "irreversible" JD.bool
+        |> required "whole_word" JD.bool
+        |> required "expires_in" JD.string
+
+
 type alias Model =
     { token : Maybe String
     , server : String
@@ -180,6 +230,8 @@ type alias Model =
     , groupIds : String
     , offset : String
     , listTitle : String
+    , filterId : String
+    , filterInput : FilterInput
 
     -- Non-persistent below here
     , dialog : Dialog
@@ -302,6 +354,12 @@ type Msg
     | ToggleLocked
     | ToggleSensitive
     | SetLanguage String
+    | SetFilterId String
+    | ToggleFilterInputContext FilterContext
+    | SetFilterPhrase String
+    | ToggleFilterIrreversible
+    | ToggleFilterWholeWord
+    | SetFilterExpiresIn String
     | SetGroupId String
     | SetGroupIds String
     | SetOffset String
@@ -370,6 +428,11 @@ type Msg
     | SendGetFavourites
     | SendPostFavourite
     | SendPostUnfavourite
+    | SendGetFilters
+    | SendGetFilter
+    | SendPostFilter
+    | SendPutFilter
+    | SendDeleteFilter
     | SendGetFollowRequests
     | SendPostAuthorizeFollow
     | SendPostRejectFollow
@@ -611,6 +674,8 @@ init value url key =
     , groupIds = ""
     , offset = ""
     , listTitle = ""
+    , filterId = ""
+    , filterInput = emptyFilterInput
 
     -- Non-persistent below here
     , dialog = NoDialog
@@ -1756,6 +1821,69 @@ updateInternal msg model =
             { model | language = language }
                 |> withNoCmd
 
+        SetFilterId filterId ->
+            { model | filterId = filterId }
+                |> withNoCmd
+
+        ToggleFilterInputContext context ->
+            let
+                filterInput =
+                    model.filterInput
+
+                isSet =
+                    List.member context filterInput.context
+            in
+            { model
+                | filterInput =
+                    { filterInput
+                        | context =
+                            if isSet then
+                                List.filter ((/=) context) filterInput.context
+
+                            else
+                                context :: filterInput.context
+                    }
+            }
+                |> withNoCmd
+
+        SetFilterPhrase phrase ->
+            let
+                filterInput =
+                    model.filterInput
+            in
+            { model | filterInput = { filterInput | phrase = phrase } }
+                |> withNoCmd
+
+        ToggleFilterIrreversible ->
+            let
+                filterInput =
+                    model.filterInput
+            in
+            { model
+                | filterInput =
+                    { filterInput | irreversible = not filterInput.irreversible }
+            }
+                |> withNoCmd
+
+        ToggleFilterWholeWord ->
+            let
+                filterInput =
+                    model.filterInput
+            in
+            { model
+                | filterInput =
+                    { filterInput | whole_word = not filterInput.whole_word }
+            }
+                |> withNoCmd
+
+        SetFilterExpiresIn expires_in ->
+            let
+                filterInput =
+                    model.filterInput
+            in
+            { model | filterInput = { filterInput | expires_in = expires_in } }
+                |> withNoCmd
+
         SetGroupId groupId ->
             { model | groupId = groupId }
                 |> withNoCmd
@@ -2132,6 +2260,59 @@ updateInternal msg model =
             sendRequest
                 (FavouritesRequest <|
                     Request.PostUnfavourite { id = model.statusId }
+                )
+                model
+
+        SendGetFilters ->
+            sendRequest (FiltersRequest Request.GetFilters)
+                model
+
+        SendGetFilter ->
+            sendRequest
+                (FiltersRequest <|
+                    Request.GetFilter { id = model.filterId }
+                )
+                model
+
+        SendPostFilter ->
+            let
+                { phrase, context, irreversible, whole_word, expires_in } =
+                    model.filterInput
+            in
+            sendRequest
+                (FiltersRequest <|
+                    Request.PostFilter
+                        { phrase = phrase
+                        , context = context
+                        , irreversible = irreversible
+                        , whole_word = whole_word
+                        , expires_in = String.toInt expires_in
+                        }
+                )
+                model
+
+        SendPutFilter ->
+            let
+                { phrase, context, irreversible, whole_word, expires_in } =
+                    model.filterInput
+            in
+            sendRequest
+                (FiltersRequest <|
+                    Request.PutFilter
+                        { id = model.filterId
+                        , phrase = phrase
+                        , context = context
+                        , irreversible = irreversible
+                        , whole_word = whole_word
+                        , expires_in = String.toInt expires_in
+                        }
+                )
+                model
+
+        SendDeleteFilter ->
+            sendRequest
+                (FiltersRequest <|
+                    Request.DeleteFilter { id = model.filterId }
                 )
                 model
 
@@ -2957,6 +3138,14 @@ applyResponseSideEffects response model =
 
         AccountsRequest (Request.GetStatuses { paging }) ->
             statusSmartPaging response.entity paging model
+
+        FiltersRequest (Request.PostFilter _) ->
+            case response.entity of
+                FilterEntity { id } ->
+                    { model | filterId = id }
+
+                _ ->
+                    model
 
         GroupsRequest (Request.PostGroup _) ->
             case response.entity of
@@ -4031,10 +4220,64 @@ favouritesSelectedUI model =
 
 filtersSelectedUI : Model -> Html Msg
 filtersSelectedUI model =
+    let
+        { phrase, context, irreversible, whole_word, expires_in } =
+            model.filterInput
+
+        canPost =
+            isFilterInputValid model.filterInput
+    in
     p []
         [ pspace
-        , text "GetFilters, PostFilter, GetFilter, PutFilter, DeleteFilter"
+        , sendButton SendGetFilters model
+        , br
+        , textInput "filter id: " 25 SetFilterId model.filterId
+        , text " "
+        , sendButton SendGetFilter model
+        , br
+        , text "-- writes below here --"
+        , br
+        , textInput "phrase: " 50 SetFilterPhrase phrase
+        , br
+        , b "context (check at least one): "
+        , filterContextCheckBoxes context
+        , br
+        , checkBox ToggleFilterIrreversible irreversible "irreversible"
+        , text " "
+        , checkBox ToggleFilterWholeWord whole_word "whole word"
+        , br
+        , textInput "expires in (seconds): " 10 SetFilterExpiresIn expires_in
+        , br
+        , enabledSendButton canPost SendPostFilter model
+        , br
+        , textInput "filter id: " 25 SetFilterId model.filterId
+        , text " "
+        , enabledSendButton canPost SendPutFilter model
+        , text " "
+        , enabledSendButton (String.trim model.filterId /= "")
+            SendDeleteFilter
+            model
         ]
+
+
+filterContextCheckBoxes : List FilterContext -> Html Msg
+filterContextCheckBoxes context =
+    span [] <|
+        List.map
+            (\c ->
+                span []
+                    [ filterContextCheckbox c context
+                    , text " "
+                    ]
+            )
+            [ HomeContext, NotificationsContext, PublicContext, ThreadContext ]
+
+
+filterContextCheckbox : FilterContext -> List FilterContext -> Html Msg
+filterContextCheckbox context contexts =
+    checkBox (ToggleFilterInputContext context)
+        (List.member context contexts)
+        (ED.filterContextToString context |> String.toLower)
 
 
 followRequestsSelectedUI : Model -> Html Msg
@@ -4925,6 +5168,21 @@ The "$PostFavourite" button add "status id" to your list of favourites.
 The "$PostUnfavourite" button removes "status id" from your list of favourites.
                    """
 
+                FiltersSelected ->
+                    """
+**FiltersRequest Help**
+
+The "$GetFilters" button gets your list of `Filter` entities.
+
+The "$GetFilter" button gets the `Filter` entity for "filter id".
+
+The "$PostFilter" button creates a new filter from "phrase", "context", "irreversible", "whole word", and "expires in".
+
+The "$PutFilter" button updates the filter parameters for "filter id".
+
+The "$DeleteFilter" button deletes "filter id".
+                    """
+
                 FollowRequestsSelected ->
                     """
 **FollowRequestsRequest Help**
@@ -5236,6 +5494,8 @@ type alias SavedModel =
     , groupIds : String
     , offset : String
     , listTitle : String
+    , filterId : String
+    , filterInput : FilterInput
     }
 
 
@@ -5280,6 +5540,8 @@ modelToSavedModel model =
     , groupIds = model.groupIds
     , offset = model.offset
     , listTitle = model.listTitle
+    , filterId = model.filterId
+    , filterInput = model.filterInput
     }
 
 
@@ -5325,6 +5587,8 @@ savedModelToModel savedModel model =
         , groupIds = savedModel.groupIds
         , offset = savedModel.offset
         , listTitle = savedModel.listTitle
+        , filterId = savedModel.filterId
+        , filterInput = savedModel.filterInput
     }
 
 
@@ -5431,6 +5695,8 @@ encodeSavedModel savedModel =
         , ( "groupIds", JE.string savedModel.groupIds )
         , ( "offset", JE.string savedModel.offset )
         , ( "listTitle", JE.string savedModel.listTitle )
+        , ( "filterId", JE.string savedModel.filterId )
+        , ( "filterInput", encodeFilterInput savedModel.filterInput )
         ]
 
 
@@ -5488,6 +5754,8 @@ savedModelDecoder =
         |> optional "groupIds" JD.string ""
         |> optional "offset" JD.string ""
         |> optional "listTitle" JD.string ""
+        |> optional "filterId" JD.string ""
+        |> optional "filterInput" filterInputDecoder emptyFilterInput
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -5649,6 +5917,11 @@ dollarButtonNameDict =
         , ( "GetFavourites", SendGetFavourites )
         , ( "PostFavourite", SendPostFavourite )
         , ( "PostUnfavourite", SendPostUnfavourite )
+        , ( "GetFilters", SendGetFilters )
+        , ( "GetFilter", SendGetFilter )
+        , ( "PostFilter", SendPostFilter )
+        , ( "PutFilter", SendPutFilter )
+        , ( "DeleteFilter", SendDeleteFilter )
         , ( "GetFollowRequests", SendGetFollowRequests )
         , ( "PostAuthorizeFollow", SendPostAuthorizeFollow )
         , ( "PostRejectFollow", SendPostRejectFollow )
@@ -5737,6 +6010,11 @@ buttonNameAlist =
     , ( SendGetFavourites, ( "GetFavourites", "GET favourites" ) )
     , ( SendPostFavourite, ( "PostFavourite", "POST statuses/:id/favourite" ) )
     , ( SendPostUnfavourite, ( "PostUnfavourite", "POST statuses/:id/unfavourite" ) )
+    , ( SendGetFilters, ( "GetFilters", "GET filters" ) )
+    , ( SendGetFilter, ( "GetFilter", "GET filters/:id" ) )
+    , ( SendPostFilter, ( "PostFilter", "POST filters" ) )
+    , ( SendPutFilter, ( "PutFilter", "PUT filters/:id" ) )
+    , ( SendDeleteFilter, ( "DeleteFilter", "DELETE filters/:id" ) )
     , ( SendGetFollowRequests, ( "GetFollowRequests", "GET follow_requests" ) )
     , ( SendPostAuthorizeFollow, ( "PostAuthorizeFollow", "POST follow_requests/:id/authorize" ) )
     , ( SendPostRejectFollow, ( "PostRejectFollow", "POST follow_requests/:id/reject" ) )

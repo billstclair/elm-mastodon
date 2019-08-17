@@ -41,7 +41,8 @@ module Mastodon.EncodeDecode exposing
     , encodeGroupRelationship, groupRelationshipDecoder
     , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
-    , encodeMaybe, privacyToString, notificationTypeToString
+    , encodeMaybe
+    , privacyToString, notificationTypeToString, filterContextToString
     )
 
 {-| Encoders and Decoders for JSON that goes over the wire.
@@ -96,7 +97,8 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 
 # Utilities
 
-@docs encodeMaybe, privacyToString, notificationTypeToString
+@docs encodeMaybe
+@docs privacyToString, notificationTypeToString, filterContextToString
 
 -}
 
@@ -1402,23 +1404,29 @@ errorDecoder httpStatus =
         |> required "error" JD.string
 
 
+{-| Turn a `FilterContext` into a `String`.
+-}
+filterContextToString : FilterContext -> String
+filterContextToString context =
+    case context of
+        HomeContext ->
+            "home"
+
+        NotificationsContext ->
+            "notifications"
+
+        PublicContext ->
+            "public"
+
+        ThreadContext ->
+            "thread"
+
+
 {-| Encode a `FilterContext`.
 -}
 encodeFilterContext : FilterContext -> Value
 encodeFilterContext context =
-    JE.string <|
-        case context of
-            HomeContext ->
-                "HomeContext"
-
-            NotificationsContext ->
-                "NotificationsContext"
-
-            PublicContext ->
-                "PublicContext"
-
-            ThreadContext ->
-                "ThreadContext"
+    JE.string <| filterContextToString context
 
 
 {-| Decode a `FilterContext`.
@@ -1429,16 +1437,16 @@ filterContextDecoder =
         |> JD.andThen
             (\c ->
                 case c of
-                    "HomeContext" ->
+                    "home" ->
                         JD.succeed HomeContext
 
-                    "NotificationsContext" ->
+                    "notifications" ->
                         JD.succeed NotificationsContext
 
-                    "PublicContext" ->
+                    "public" ->
                         JD.succeed PublicContext
 
-                    "ThreadContext" ->
+                    "thread" ->
                         JD.succeed ThreadContext
 
                     _ ->
