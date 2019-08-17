@@ -283,6 +283,9 @@ type alias Model =
     , groupTitle : String
     , groupDescription : String
     , groupCoverImage : Maybe File
+    , reportComment : String
+    , statusIds : String
+    , forwardReport : Bool
 
     -- Not input state
     , msg : Maybe String
@@ -367,13 +370,17 @@ type Msg
     | SetGroupDescription String
     | ReceiveGroupCoverImage File
     | GetGroupCoverImage Bool
+    | SetReportCommentString String
+    | SetStatusIds String
+    | SetReportComment String
+    | ToggleForwardReport
     | SetListTitle String
+    | SetStatusId String
     | ToggleExcludedNotificationType NotificationType
     | IncludeAllNotifications
     | IncludeOnlyMentionNotifications
     | SetNotificationsAccountId String
     | SetNotificationId String
-    | SetStatusId String
     | ToggleShowPostStatus
     | SetStatus String
     | SetInReplyToId String
@@ -470,6 +477,7 @@ type Msg
     | SendGetNotification
     | SendPostDismissNotification
     | SendPostClearNotifications
+    | SendPostReports
     | SendGetStatus
     | SendGetStatusContext
     | SendGetStatusCard
@@ -729,6 +737,9 @@ init value url key =
     , groupTitle = ""
     , groupDescription = ""
     , groupCoverImage = Nothing
+    , reportComment = ""
+    , statusIds = ""
+    , forwardReport = True
     , msg = msg
     , started = NotStarted
     , funnelState = initialFunnelState
@@ -1918,12 +1929,32 @@ updateInternal msg model =
                             ReceiveGroupCoverImage
                         )
 
+        SetReportCommentString reportComment ->
+            { model | reportComment = reportComment }
+                |> withNoCmd
+
+        SetStatusIds statusIds ->
+            { model | statusIds = statusIds }
+                |> withNoCmd
+
+        SetReportComment reportComment ->
+            { model | reportComment = reportComment }
+                |> withNoCmd
+
+        ToggleForwardReport ->
+            { model | forwardReport = not model.forwardReport }
+                |> withNoCmd
+
         ReceiveGroupCoverImage groupCoverImage ->
             { model | groupCoverImage = Just groupCoverImage }
                 |> withNoCmd
 
         SetListTitle listTitle ->
             { model | listTitle = listTitle }
+                |> withNoCmd
+
+        SetStatusId statusId ->
+            { model | statusId = statusId }
                 |> withNoCmd
 
         ToggleMuteNotifications ->
@@ -1966,10 +1997,6 @@ updateInternal msg model =
 
         SetNotificationId notificationId ->
             { model | notificationId = notificationId }
-                |> withNoCmd
-
-        SetStatusId statusId ->
-            { model | statusId = statusId }
                 |> withNoCmd
 
         ToggleShowPostStatus ->
@@ -2623,6 +2650,20 @@ updateInternal msg model =
             sendRequest
                 (NotificationsRequest <|
                     Request.PostClearNotifications
+                )
+                model
+
+        SendPostReports ->
+            sendRequest
+                (ReportsRequest <|
+                    Request.PostReports
+                        { account_id = model.accountId
+                        , status_ids =
+                            String.split "," model.statusIds
+                                |> List.map String.trim
+                        , comment = nothingIfBlank model.reportComment
+                        , forward = model.forwardReport
+                        }
                 )
                 model
 
@@ -3492,6 +3533,11 @@ theStyle =
     DarkStyle
 
 
+{-| Choose the visible section of the user interface.
+
+`MediaAttachmentsRequest` and `PollsRequest` are done as part of `StatusesSelected`.
+
+-}
 type SelectedRequest
     = LoginSelected
     | InstanceSelected
@@ -3507,9 +3553,14 @@ type SelectedRequest
     | ListsSelected
     | MutesSelected
     | NotificationsSelected
+    | ReportsSelected
     | SearchSelected
     | StatusesSelected
     | TimelinesSelected
+
+
+
+-- TrendsSelected
 
 
 encodeSelectedRequest : SelectedRequest -> Value
@@ -3564,6 +3615,9 @@ selectedRequestToString selectedRequest =
 
         NotificationsSelected ->
             "NotificationsRequest"
+
+        ReportsSelected ->
+            "ReportsRequest"
 
         StatusesSelected ->
             "StatusesRequest"
@@ -3626,6 +3680,9 @@ selectedRequestFromString s =
 
         "NotificationsRequest" ->
             NotificationsSelected
+
+        "ReportsRequest" ->
+            ReportsSelected
 
         "StatusesRequest" ->
             StatusesSelected
@@ -3865,6 +3922,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/search/"
                             model
                             searchSelectedUI
+                        , selectedRequestHtml ReportsSelected
+                            "https://docs.joinmastodon.org/api/rest/reports/"
+                            model
+                            reportsSelectedUI
                         , selectedRequestHtml StatusesSelected
                             "https://docs.joinmastodon.org/api/rest/statuses/"
                             model
@@ -4527,6 +4588,28 @@ searchSelectedUI model =
         , checkBox ToggleFollowing model.following "following "
         , br
         , sendButton SendGetSearch model
+        ]
+
+
+reportsSelectedUI : Model -> Html Msg
+reportsSelectedUI model =
+    p []
+        [ pspace
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , br
+        , textInput "status ids: " 60 SetStatusIds model.statusIds
+        , br
+        , textarea
+            [ onInput SetReportComment
+            , value model.reportComment
+            , rows 4
+            , cols 80
+            ]
+            []
+        , br
+        , checkBox ToggleForwardReport model.forwardReport "forward"
+        , text " "
+        , sendButton SendPostReports model
         ]
 
 
@@ -5986,6 +6069,7 @@ dollarButtonNameDict =
         , ( "PostDismissNotification", SendPostDismissNotification )
         , ( "PostClearNotifications", SendPostClearNotifications )
         , ( "GetSearch", SendGetSearch )
+        , ( "PostReports", SendPostReports )
         , ( "GetStatus", SendGetStatus )
         , ( "GetStatusContext", SendGetStatusContext )
         , ( "GetStatusCard", SendGetStatusCard )
@@ -6081,6 +6165,7 @@ buttonNameAlist =
     , ( SendPostDismissNotification, ( "PostDismissNotification", "POST notifications/dismiss" ) )
     , ( SendPostClearNotifications, ( "PostClearNotifications", "POST notifications/clear" ) )
     , ( SendGetSearch, ( "GetSearch", "GET search" ) )
+    , ( SendPostReports, ( "PostReports", "POST reports" ) )
     , ( SendGetStatus, ( "GetStatus", "GET statuses/:id" ) )
     , ( SendGetStatusContext, ( "GetStatusContext", "GET statuses/:id/context" ) )
     , ( SendGetStatusCard, ( "GetStatusCard", "GET statuses/:id/card" ) )
