@@ -92,8 +92,7 @@ import Url.Builder as Builder exposing (QueryParameter, relative)
 
 Broken down as in the documentation.
 
-The result types are mostly documented in the individual `Request` element types,
-with these exceptions:
+Result entity types are documented with the various "xxxReq" types.
 
 -}
 type Request

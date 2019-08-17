@@ -436,6 +436,8 @@ type Msg
     | SendGetFollowRequests
     | SendPostAuthorizeFollow
     | SendPostRejectFollow
+    | SendGetFollowSuggestions
+    | SendDeleteFollowSuggestions
     | SendGetGroups
     | SendGetGroupRemovedAccounts
     | SendGetGroup
@@ -2338,6 +2340,21 @@ updateInternal msg model =
                 )
                 model
 
+        SendGetFollowSuggestions ->
+            sendRequest
+                (FollowSuggestionsRequest <|
+                    Request.GetFollowSuggestions
+                )
+                model
+
+        SendDeleteFollowSuggestions ->
+            sendRequest
+                (FollowSuggestionsRequest <|
+                    Request.DeleteFollowSuggestions
+                        { account_id = model.accountId }
+                )
+                model
+
         SendGetGroups ->
             sendRequest
                 (GroupsRequest <| Request.GetGroups { tab = model.whichGroups })
@@ -3485,6 +3502,7 @@ type SelectedRequest
     | FavouritesSelected
     | FiltersSelected
     | FollowRequestsSelected
+    | FollowSuggestionsSelected
     | GroupsSelected
     | ListsSelected
     | MutesSelected
@@ -3528,6 +3546,9 @@ selectedRequestToString selectedRequest =
 
         FollowRequestsSelected ->
             "FollowRequestsRequest"
+
+        FollowSuggestionsSelected ->
+            "FollowSuggestionsRequest"
 
         GroupsSelected ->
             "GroupsRequest"
@@ -3587,6 +3608,9 @@ selectedRequestFromString s =
 
         "FollowRequestsRequest" ->
             FollowRequestsSelected
+
+        "FollowSuggestionsRequest" ->
+            FollowSuggestionsSelected
 
         "GroupsRequest" ->
             GroupsSelected
@@ -3817,6 +3841,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/follow-requests/"
                             model
                             followRequestsSelectedUI
+                        , selectedRequestHtml FollowSuggestionsSelected
+                            "https://docs.joinmastodon.org/api/rest/follow-suggestions/"
+                            model
+                            followSuggestionsSelectedUI
                         , selectedRequestHtml GroupsSelected
                             ""
                             model
@@ -4295,6 +4323,18 @@ followRequestsSelectedUI model =
         , sendButton SendPostAuthorizeFollow model
         , text " "
         , sendButton SendPostRejectFollow model
+        ]
+
+
+followSuggestionsSelectedUI : Model -> Html Msg
+followSuggestionsSelectedUI model =
+    p []
+        [ pspace
+        , sendButton SendGetFollowSuggestions model
+        , br
+        , textInput "account id: " 25 SetAccountId model.accountId
+        , text " "
+        , sendButton SendDeleteFollowSuggestions model
         ]
 
 
@@ -5195,6 +5235,15 @@ The "$PostRejectFollow" button rejects the follow request from "account id".
 
                    """
 
+                FollowSuggestionsSelected ->
+                    """
+**FollowSuggestionsRequest Help**
+
+The "$GetFollowSuggestions" button requests a list of suggested Account entities.
+
+The "$DeleteFollowSuggestions" button deletes "account id" from the suggestion list.
+                   """
+
                 GroupsSelected ->
                     """
 **GroupsRequest Help**
@@ -5925,6 +5974,8 @@ dollarButtonNameDict =
         , ( "GetFollowRequests", SendGetFollowRequests )
         , ( "PostAuthorizeFollow", SendPostAuthorizeFollow )
         , ( "PostRejectFollow", SendPostRejectFollow )
+        , ( "GetFollowSuggestions", SendGetFollowSuggestions )
+        , ( "DeleteFollowSuggestions", SendDeleteFollowSuggestions )
         , ( "GetAccountMutes", SendGetAccountMutes )
         , ( "PostAccountMute", SendPostAccountMute )
         , ( "PostAccountUnmute", SendPostAccountUnmute )
@@ -6018,6 +6069,8 @@ buttonNameAlist =
     , ( SendGetFollowRequests, ( "GetFollowRequests", "GET follow_requests" ) )
     , ( SendPostAuthorizeFollow, ( "PostAuthorizeFollow", "POST follow_requests/:id/authorize" ) )
     , ( SendPostRejectFollow, ( "PostRejectFollow", "POST follow_requests/:id/reject" ) )
+    , ( SendGetFollowSuggestions, ( "GetFollowSuggestions", "GET suggestions" ) )
+    , ( SendDeleteFollowSuggestions, ( "DeleteFollowSuggestions", "DELETE suggestions/:account_id" ) )
     , ( SendGetAccountMutes, ( "GetAccountMutes", "GET mutes" ) )
     , ( SendPostAccountMute, ( "PostAccountMute", "POST accounts/:id/mute" ) )
     , ( SendPostAccountUnmute, ( "PostAccountUnmute", "POST accounts/:id/unmute" ) )
