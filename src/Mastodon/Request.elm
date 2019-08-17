@@ -2601,7 +2601,12 @@ statusesReq req res =
                             Http.jsonBody jsonBody
                         , jsonBody =
                             Just jsonBody
-                        , decoder = decoders.status
+                        , decoder =
+                            if scheduled_at == Nothing then
+                                decoders.status
+
+                            else
+                                decoders.scheduledStatus
                     }
             in
             case idempotencyKey of

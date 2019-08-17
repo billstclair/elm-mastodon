@@ -622,7 +622,7 @@ type alias StatusParams =
     , media_ids : List String
     , sensitive : Bool
     , spoiler_text : Maybe String
-    , visibility : Visibility
+    , visibility : Maybe Visibility
     , scheduled_at : Maybe Datetime
     , application_id : String
     }

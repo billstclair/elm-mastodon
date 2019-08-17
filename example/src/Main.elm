@@ -232,6 +232,7 @@ type alias Model =
     , listTitle : String
     , filterId : String
     , filterInput : FilterInput
+    , scheduledStatusId : String
 
     -- Non-persistent below here
     , dialog : Dialog
@@ -374,6 +375,7 @@ type Msg
     | SetStatusIds String
     | SetReportComment String
     | ToggleForwardReport
+    | SetScheduledStatusId String
     | SetListTitle String
     | SetStatusId String
     | ToggleExcludedNotificationType NotificationType
@@ -421,6 +423,10 @@ type Msg
     | SendGetFollowing
     | SendGetStatuses
     | SendGetRelationships
+    | SendGetScheduledStatuses
+    | SendGetScheduledStatus
+    | SendPutScheduledStatus
+    | SendDeleteScheduledStatus
     | SendGetSearchAccounts
     | SendPostFollow
     | SendPostUnfollow
@@ -686,6 +692,7 @@ init value url key =
     , listTitle = ""
     , filterId = ""
     , filterInput = emptyFilterInput
+    , scheduledStatusId = ""
 
     -- Non-persistent below here
     , dialog = NoDialog
@@ -1945,6 +1952,10 @@ updateInternal msg model =
             { model | forwardReport = not model.forwardReport }
                 |> withNoCmd
 
+        SetScheduledStatusId scheduledStatusId ->
+            { model | scheduledStatusId = scheduledStatusId }
+                |> withNoCmd
+
         ReceiveGroupCoverImage groupCoverImage ->
             { model | groupCoverImage = Just groupCoverImage }
                 |> withNoCmd
@@ -2191,6 +2202,36 @@ updateInternal msg model =
                             String.split "," model.accountIds
                                 |> List.map String.trim
                         }
+                )
+                model
+
+        SendGetScheduledStatuses ->
+            sendRequest
+                (ScheduledStatusesRequest Request.GetScheduledStatuses)
+                model
+
+        SendGetScheduledStatus ->
+            sendRequest
+                (ScheduledStatusesRequest <|
+                    Request.GetScheduledStatus
+                        { id = model.scheduledStatusId }
+                )
+                model
+
+        SendPutScheduledStatus ->
+            sendRequest
+                (ScheduledStatusesRequest <|
+                    Request.PutScheduledStatus
+                        { id = model.scheduledStatusId
+                        , scheduled_at = nothingIfBlank model.scheduled_at
+                        }
+                )
+                model
+
+        SendDeleteScheduledStatus ->
+            sendRequest
+                (ScheduledStatusesRequest <|
+                    Request.DeleteScheduledStatus { id = model.scheduledStatusId }
                 )
                 model
 
@@ -3555,6 +3596,7 @@ type SelectedRequest
     | NotificationsSelected
     | ReportsSelected
     | SearchSelected
+    | ScheduledStatusesSelected
     | StatusesSelected
     | TimelinesSelected
 
@@ -3612,6 +3654,9 @@ selectedRequestToString selectedRequest =
 
         SearchSelected ->
             "SearchRequest"
+
+        ScheduledStatusesSelected ->
+            "ScheduledStatusRequest"
 
         NotificationsSelected ->
             "NotificationsRequest"
@@ -3677,6 +3722,9 @@ selectedRequestFromString s =
 
         "SearchRequest" ->
             SearchSelected
+
+        "ScheduledStatusRequest" ->
+            ScheduledStatusesSelected
 
         "NotificationsRequest" ->
             NotificationsSelected
@@ -3918,14 +3966,18 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/notifications/"
                             model
                             notificationsSelectedUI
-                        , selectedRequestHtml SearchSelected
-                            "https://docs.joinmastodon.org/api/rest/search/"
-                            model
-                            searchSelectedUI
                         , selectedRequestHtml ReportsSelected
                             "https://docs.joinmastodon.org/api/rest/reports/"
                             model
                             reportsSelectedUI
+                        , selectedRequestHtml ScheduledStatusesSelected
+                            "https://docs.joinmastodon.org/api/rest/scheduled-statuses/"
+                            model
+                            scheduledStatusesSelectedUI
+                        , selectedRequestHtml SearchSelected
+                            "https://docs.joinmastodon.org/api/rest/search/"
+                            model
+                            searchSelectedUI
                         , selectedRequestHtml StatusesSelected
                             "https://docs.joinmastodon.org/api/rest/statuses/"
                             model
@@ -4574,6 +4626,24 @@ notificationsSelectedUI model =
         ]
 
 
+scheduledStatusesSelectedUI : Model -> Html Msg
+scheduledStatusesSelectedUI model =
+    p []
+        [ pspace
+        , sendButton SendGetScheduledStatuses model
+        , br
+        , textInput "scheduled status id: " 25 SetScheduledStatusId model.scheduledStatusId
+        , br
+        , sendButton SendGetScheduledStatus model
+        , text " "
+        , sendButton SendDeleteScheduledStatus model
+        , br
+        , textInput "scheduled at: " 40 SetScheduledAt model.scheduled_at
+        , text " "
+        , sendButton SendPutScheduledStatus model
+        ]
+
+
 searchSelectedUI : Model -> Html Msg
 searchSelectedUI model =
     p []
@@ -4682,7 +4752,7 @@ statusesSelectedUI model =
                 , visibilityRadio (Just PrivateVisibility) model
                 , visibilityRadio (Just DirectVisibility) model
                 , br
-                , textInput "scheduled at: " 24 SetScheduledAt model.scheduled_at
+                , textInput "scheduled at: " 40 SetScheduledAt model.scheduled_at
                 , br
                 , textInput "language: " 2 SetLanguage model.language
                 , br
@@ -5628,6 +5698,7 @@ type alias SavedModel =
     , listTitle : String
     , filterId : String
     , filterInput : FilterInput
+    , scheduledStatusId : String
     }
 
 
@@ -5674,6 +5745,7 @@ modelToSavedModel model =
     , listTitle = model.listTitle
     , filterId = model.filterId
     , filterInput = model.filterInput
+    , scheduledStatusId = model.scheduledStatusId
     }
 
 
@@ -5721,6 +5793,7 @@ savedModelToModel savedModel model =
         , listTitle = savedModel.listTitle
         , filterId = savedModel.filterId
         , filterInput = savedModel.filterInput
+        , scheduledStatusId = savedModel.scheduledStatusId
     }
 
 
@@ -5829,6 +5902,7 @@ encodeSavedModel savedModel =
         , ( "listTitle", JE.string savedModel.listTitle )
         , ( "filterId", JE.string savedModel.filterId )
         , ( "filterInput", encodeFilterInput savedModel.filterInput )
+        , ( "scheduledStatusId", JE.string savedModel.scheduledStatusId )
         ]
 
 
@@ -5888,6 +5962,7 @@ savedModelDecoder =
         |> optional "listTitle" JD.string ""
         |> optional "filterId" JD.string ""
         |> optional "filterInput" filterInputDecoder emptyFilterInput
+        |> optional "scheduledStatusId" JD.string ""
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -6098,6 +6173,10 @@ dollarButtonNameDict =
         , ( "GetFollowing", SendGetFollowing )
         , ( "GetStatuses", SendGetStatuses )
         , ( "GetRelationships", SendGetRelationships )
+        , ( "GetScheduledStatuses", SendGetScheduledStatuses )
+        , ( "GetScheduledStatus", SendGetScheduledStatus )
+        , ( "PutScheduledStatus", SendPutScheduledStatus )
+        , ( "DeleteScheduledStatus", SendDeleteScheduledStatus )
         , ( "GetSearchAccounts", SendGetSearchAccounts )
         , ( "PostFollow", SendPostFollow )
         , ( "PostUnfollow", SendPostUnfollow )
@@ -6194,6 +6273,10 @@ buttonNameAlist =
     , ( SendGetFollowing, ( "GetFollowing", "GET accounts/:id/following" ) )
     , ( SendGetStatuses, ( "GetStatuses", "GET accounts/:id/statuses" ) )
     , ( SendGetRelationships, ( "GetRelationships", "GET accounts/relationships" ) )
+    , ( SendGetScheduledStatuses, ( "GetScheduledStatuses", "GET scheduled_statuses" ) )
+    , ( SendGetScheduledStatus, ( "GetScheduledStatus", "GET scheduled_statuses/:id" ) )
+    , ( SendPutScheduledStatus, ( "PutScheduledStatus", "PUT scheduled_statuses/:id" ) )
+    , ( SendDeleteScheduledStatus, ( "DeleteScheduledStatus", "DELETE scheduled_statuses/:id" ) )
     , ( SendGetSearchAccounts, ( "GetSearchAccounts", "GET accounts/search" ) )
     , ( SendPostFollow, ( "PostFollow", "POST accounts/:id/follow" ) )
     , ( SendPostUnfollow, ( "PostUnfollow", "POST accounts/:id/unfollow" ) )

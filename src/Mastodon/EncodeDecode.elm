@@ -246,6 +246,9 @@ encodeEntity entity =
         ScheduledStatusEntity scheduledStatus ->
             encodeScheduledStatus scheduledStatus
 
+        ScheduledStatusListEntity scheduledStatuses ->
+            JE.list encodeScheduledStatus scheduledStatuses
+
         ConversationEntity conversation ->
             encodeConversation conversation
 
@@ -317,6 +320,7 @@ entityDecoder =
         , JD.list relationshipDecoder |> JD.map RelationshipListEntity
         , resultsDecoder |> JD.map ResultsEntity
         , scheduledStatusDecoder |> JD.map ScheduledStatusEntity
+        , JD.list scheduledStatusDecoder |> JD.map ScheduledStatusListEntity
         , conversationDecoder |> JD.map ConversationEntity
         , JD.list tagDecoder |> JD.map TagListEntity
         , JD.list JD.string |> JD.map StringListEntity
@@ -479,6 +483,9 @@ entityValue entity =
 
             else
                 scheduledStatus.v
+
+        ScheduledStatusListEntity scheduledStatuses ->
+            JE.list entityValue (List.map ScheduledStatusEntity scheduledStatuses)
 
         ConversationEntity conversation ->
             if conversation.v == JE.null then
@@ -1171,6 +1178,15 @@ visibilityDecoder =
             )
 
 
+maybeVisibilityDecoder : Decoder (Maybe Visibility)
+maybeVisibilityDecoder =
+    JD.oneOf
+        [ JD.null Nothing
+        , visibilityDecoder
+            |> JD.map Just
+        ]
+
+
 encodeMention : Mention -> Value
 encodeMention mention =
     JE.object
@@ -1737,7 +1753,7 @@ encodeStatusParams statusParams =
         , ( "media_ids", JE.list JE.string statusParams.media_ids )
         , ( "sensitive", JE.bool statusParams.sensitive )
         , ( "spoiler_text", encodeMaybe JE.string statusParams.spoiler_text )
-        , ( "visibility", encodeVisibility statusParams.visibility )
+        , ( "visibility", encodeMaybe encodeVisibility statusParams.visibility )
         , ( "scheduled_at", encodeMaybe JE.string statusParams.scheduled_at )
         , ( "application_id", JE.string statusParams.application_id )
         ]
@@ -1755,9 +1771,14 @@ statusParamsDecoder =
             []
         |> optional "sensitive" optionalBoolDecoder False
         |> optional "spoiler_text" (JD.nullable JD.string) Nothing
-        |> required "visibility" visibilityDecoder
+        |> optional "visibility" maybeVisibilityDecoder Nothing
         |> optional "scheduled_at" (JD.nullable JD.string) Nothing
-        |> required "application_id" JD.string
+        |> required "application_id"
+            (JD.oneOf
+                [ JD.string
+                , JD.int |> JD.andThen (\i -> JD.succeed <| String.fromInt i)
+                ]
+            )
 
 
 {-| Encoder for `ScheduledStatus`.
