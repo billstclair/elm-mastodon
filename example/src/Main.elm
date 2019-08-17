@@ -3294,6 +3294,7 @@ type SelectedRequest
     | CustomEmojisSelected
     | EndorsementsSelected
     | FavouritesSelected
+    | FiltersSelected
     | FollowRequestsSelected
     | GroupsSelected
     | ListsSelected
@@ -3332,6 +3333,9 @@ selectedRequestToString selectedRequest =
 
         FavouritesSelected ->
             "FavouritesRequest"
+
+        FiltersSelected ->
+            "FiltersRequest"
 
         FollowRequestsSelected ->
             "FollowRequestsRequest"
@@ -3388,6 +3392,9 @@ selectedRequestFromString s =
 
         "FavouritesRequest" ->
             FavouritesSelected
+
+        "FiltersRequest" ->
+            FiltersSelected
 
         "FollowRequestsRequest" ->
             FollowRequestsSelected
@@ -3613,6 +3620,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/favourites/"
                             model
                             favouritesSelectedUI
+                        , selectedRequestHtml FiltersSelected
+                            "https://docs.joinmastodon.org/api/rest/filters/"
+                            model
+                            filtersSelectedUI
                         , selectedRequestHtml FollowRequestsSelected
                             "https://docs.joinmastodon.org/api/rest/follow-requests/"
                             model
@@ -3913,6 +3924,8 @@ blocksSelectedUI model =
         , br
         , sendButton SendGetBlocks model
         , br
+        , text "-- writes below here --"
+        , br
         , textInput "account id: " 25 SetAccountId model.accountId
         , br
         , sendButton SendPostBlock model
@@ -3989,6 +4002,8 @@ endorsementsSelectedUI model =
         [ pspace
         , sendButton SendGetEndorsements model
         , br
+        , text "-- writes below here --"
+        , br
         , textInput "account id: " 25 SetAccountId model.accountId
         , br
         , sendButton SendPostPinAccount model
@@ -4014,6 +4029,14 @@ favouritesSelectedUI model =
         ]
 
 
+filtersSelectedUI : Model -> Html Msg
+filtersSelectedUI model =
+    p []
+        [ pspace
+        , text "GetFilters, PostFilter, GetFilter, PutFilter, DeleteFilter"
+        ]
+
+
 followRequestsSelectedUI : Model -> Html Msg
 followRequestsSelectedUI model =
     p []
@@ -4021,6 +4044,8 @@ followRequestsSelectedUI model =
         , textInput "limit: " 10 SetLimit model.pagingInput.limit
         , text " "
         , sendButton SendGetFollowRequests model
+        , br
+        , text "-- writes below here --"
         , br
         , textInput "account id: " 25 SetAccountId model.accountId
         , br
@@ -4137,6 +4162,8 @@ mutesSelectedUI model =
         , sendButton SendGetAccountMutes model
         , br
         , textInput "account id: " 25 SetAccountId model.accountId
+        , br
+        , text "-- writes below here --"
         , br
         , checkBox ToggleMuteNotifications model.muteNotifications "mute notifications"
         , text " "
