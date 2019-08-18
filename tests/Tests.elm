@@ -9,6 +9,7 @@ import Mastodon.EncodeDecode as ED exposing (encodeEntity, entityDecoder)
 import Mastodon.Entity as Entity
     exposing
         ( Account
+        , Activity
         , App
         , Application
         , Attachment
@@ -228,6 +229,9 @@ stripEntity entity =
                     , v = JE.null
                 }
 
+        ActivityEntity activity ->
+            ActivityEntity <| { activity | v = JE.null }
+
         AttachmentEntity attachment ->
             AttachmentEntity <| stripAttachment attachment
 
@@ -356,6 +360,8 @@ entityData =
     , FilterEntity filter2
     , InstanceEntity instance1
     , InstanceEntity instance2
+    , ActivityEntity activity1
+    , ActivityEntity activity2
     , ListEntityEntity { id = "id", title = "title" }
     , NotificationEntity notification1
     , NotificationEntity notification2
@@ -645,6 +651,21 @@ instance2 =
         , languages = []
         , contact_account = Nothing
     }
+
+
+activity1 : Activity
+activity1 =
+    { week = 1565568000
+    , statuses = 85012
+    , logins = Just 16446
+    , registrations = 2171
+    , v = JE.null
+    }
+
+
+activity2 : Activity
+activity2 =
+    { activity1 | logins = Nothing }
 
 
 urls : URLs

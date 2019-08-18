@@ -14,7 +14,7 @@ module Mastodon.Entity exposing
     ( Entity(..)
     , Datetime, UrlString, HtmlString, ISO6391, ISO6392, UnixTimestamp
     , Account, Source, Token, Application, App
-    , Card, Context, Error, Filter, Instance
+    , Card, Context, Error, Filter, Instance, Activity
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
     , Status, ScheduledStatus, Conversation
@@ -53,7 +53,7 @@ got over the wire. Code that creates these can set it to
 # Entities
 
 @docs Account, Source, Token, Application, App
-@docs Card, Context, Error, Filter, Instance
+@docs Card, Context, Error, Filter, Instance, Activity
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
 @docs Status, ScheduledStatus, Conversation
@@ -428,6 +428,20 @@ type alias Instance =
     }
 
 
+{-| `Activity` entity.
+
+Not documented. A list of these is returned by "GET instance/activity"
+
+-}
+type alias Activity =
+    { week : Int
+    , statuses : Int
+    , logins : Maybe Int
+    , registrations : Int
+    , v : Value
+    }
+
+
 {-| Value of `Instance.urls`.
 -}
 type alias URLs =
@@ -702,6 +716,9 @@ type Entity
     | FilterEntity Filter
     | FilterListEntity (List Filter)
     | InstanceEntity Instance
+    | ActivityEntity Activity
+    | ActivityListEntity (List Activity)
+    | PeersEntity (List String)
     | ListEntityEntity ListEntity
     | ListEntityListEntity (List ListEntity)
     | AttachmentEntity Attachment

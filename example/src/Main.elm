@@ -415,6 +415,8 @@ type Msg
       -- `buttonNameAlist` and `dollarButtonNameDict` values near the
       -- bottom of the file.
     | SendGetInstance
+    | SendGetActivity
+    | SendGetPeers
     | SendGetTrends
     | SendGetVerifyCredentials
     | SendGetAccountByUsername
@@ -2138,6 +2140,12 @@ updateInternal msg model =
         SendGetInstance ->
             sendRequest (InstanceRequest Request.GetInstance) model
 
+        SendGetActivity ->
+            sendRequest (InstanceRequest Request.GetActivity) model
+
+        SendGetPeers ->
+            sendRequest (InstanceRequest Request.GetPeers) model
+
         SendGetTrends ->
             sendRequest (TrendsRequest Request.GetTrends) model
 
@@ -3601,6 +3609,7 @@ type SelectedRequest
     | ScheduledStatusesSelected
     | StatusesSelected
     | TimelinesSelected
+    | TrendsSelected
 
 
 encodeSelectedRequest : SelectedRequest -> Value
@@ -3667,6 +3676,9 @@ selectedRequestToString selectedRequest =
 
         TimelinesSelected ->
             "TimelinesRequest"
+
+        TrendsSelected ->
+            "TrendsRequest"
 
 
 selectedRequestDecoder : Decoder SelectedRequest
@@ -3735,6 +3747,9 @@ selectedRequestFromString s =
 
         "TimelinesRequest" ->
             TimelinesSelected
+
+        "TrendsRequest" ->
+            TrendsSelected
 
         _ ->
             LoginSelected
@@ -3984,6 +3999,10 @@ view model =
                             "https://docs.joinmastodon.org/api/rest/timelines/"
                             model
                             timelinesSelectedUI
+                        , selectedRequestHtml TrendsSelected
+                            "https://docs.joinmastodon.com/api/rest/trends/"
+                            model
+                            trendsSelectedUI
                         ]
                     , p [ style "color" "red" ]
                         [ Maybe.withDefault "" model.msg |> text ]
@@ -4239,6 +4258,16 @@ renderJsonTree whichJson model value =
                 [ button (ExpandAll whichJson) "Expand All"
                 , text " "
                 , button (CollapseAll whichJson) "Collapse All"
+                , case root.value of
+                    TList nodes ->
+                        span []
+                            [ br
+                            , b "length: "
+                            , text (String.fromInt <| List.length nodes)
+                            ]
+
+                    _ ->
+                        text ""
                 , br
                 , JsonTree.view root config state
                 ]
@@ -4972,6 +5001,14 @@ timelinesSelectedUI model =
         ]
 
 
+trendsSelectedUI : Model -> Html Msg
+trendsSelectedUI model =
+    p []
+        [ pspace
+        , sendButton SendGetTrends model
+        ]
+
+
 renderChooseFile : String -> Maybe File -> (Bool -> Msg) -> Html Msg
 renderChooseFile label maybeFile getter =
     span []
@@ -5016,7 +5053,9 @@ instanceSelectedUI model =
         [ pspace
         , sendButton SendGetInstance model
         , text " "
-        , sendButton SendGetTrends model
+        , sendButton SendGetActivity model
+        , text " "
+        , sendButton SendGetPeers model
         ]
 
 
@@ -5291,7 +5330,9 @@ help model =
 
 The "$GetInstance" button fetches the `Instance` entity for the "Use API for" instance.
 
-The "$GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
+The "$GetActivity" button fetches a list of `Activity` entities.
+
+The "$GetPeers" button fetches a list of peer domain names.
                 """
 
                 AccountsSelected ->
@@ -5539,6 +5580,13 @@ The "$GetListTimeline" button returns posts for the list with the given "list id
 
 The "$GetGroupTimeline" button returns posts for the given "group id".
               """
+
+                TrendsSelected ->
+                    """
+** TrendsRequest Help**
+
+The "$GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
+                    """
 
                 _ ->
                     """
@@ -6163,6 +6211,8 @@ dollarButtonNameDict =
         , ( "GetListTimeline", SendGetListTimeline )
         , ( "GetGroupTimeline", SendGetGroupTimeline )
         , ( "GetInstance", SendGetInstance )
+        , ( "GetActivity", SendGetActivity )
+        , ( "GetPeers", SendGetPeers )
         , ( "GetTrends", SendGetTrends )
         , ( "GetVerifyCredentials", SendGetVerifyCredentials )
         , ( "GetAccountByUsername", SendGetAccountByUsername )
@@ -6263,6 +6313,8 @@ buttonNameAlist =
     , ( SendGetListTimeline, ( "GetListTimeline", "GET timeslines/list/:id" ) )
     , ( SendGetGroupTimeline, ( "GetGroupTimeline", "GET timelines/group/:id" ) )
     , ( SendGetInstance, ( "GetInstance", "GET instance" ) )
+    , ( SendGetActivity, ( "GetActivity", "GET instance/activity" ) )
+    , ( SendGetPeers, ( "GetPeers", "GET instance/peers" ) )
     , ( SendGetTrends, ( "GetTrends", "GET trends" ) )
     , ( SendGetVerifyCredentials, ( "GetVerifyCredentials", "GET accounts/verify_credentials" ) )
     , ( SendGetAccountByUsername, ( "GetAccountByUsername", "GET account_by_username/:username" ) )

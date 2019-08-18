@@ -476,6 +476,8 @@ type GroupsReq
 -}
 type InstanceReq
     = GetInstance
+    | GetActivity
+    | GetPeers
 
 
 {-| GET/POST/PUT/DELETE /api/v1/lists
@@ -1215,6 +1217,9 @@ decoders =
     , filter = ED.filterDecoder |> JD.map FilterEntity
     , filterList = JD.list ED.filterDecoder |> JD.map FilterListEntity
     , instance = ED.instanceDecoder |> JD.map InstanceEntity
+    , activity = ED.activityDecoder |> JD.map ActivityEntity
+    , activityList = JD.list ED.activityDecoder |> JD.map ActivityListEntity
+    , peers = JD.list JD.string |> JD.map PeersEntity
     , listEntity = ED.listEntityDecoder |> JD.map ListEntityEntity
     , listEntityList = JD.list ED.listEntityDecoder |> JD.map ListEntityListEntity
     , attachment = ED.attachmentDecoder |> JD.map AttachmentEntity
@@ -2008,6 +2013,20 @@ instanceReq req res =
                 | url =
                     relative [ r ] []
                 , decoder = decoders.instance
+            }
+
+        GetActivity ->
+            { res
+                | url =
+                    relative [ r, "activity" ] []
+                , decoder = decoders.activityList
+            }
+
+        GetPeers ->
+            { res
+                | url =
+                    relative [ r, "peers" ] []
+                , decoder = decoders.peers
             }
 
 

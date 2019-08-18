@@ -29,6 +29,7 @@ module Mastodon.EncodeDecode exposing
     , encodeFilter, filterDecoder
     , encodeFilterContext, filterContextDecoder
     , encodeInstance, instanceDecoder
+    , encodeActivity, activityDecoder
     , encodeListEntity, listEntityDecoder
     , encodeNotification, notificationDecoder
     , encodeNotificationType, notificationTypeDecoder
@@ -76,6 +77,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodeFilter, filterDecoder
 @docs encodeFilterContext, filterContextDecoder
 @docs encodeInstance, instanceDecoder
+@docs encodeActivity, activityDecoder
 @docs encodeListEntity, listEntityDecoder
 @docs encodeNotification, notificationDecoder
 @docs encodeNotificationType, notificationTypeDecoder
@@ -108,6 +110,7 @@ import Json.Encode as JE exposing (Value)
 import Mastodon.Entity as Entity
     exposing
         ( Account
+        , Activity
         , App
         , Application
         , Attachment
@@ -195,6 +198,9 @@ encodeEntity entity =
         EmojiListEntity emojis ->
             JE.list encodeEmoji emojis
 
+        ErrorEntity error ->
+            encodeError error
+
         StatusEntity status ->
             encodeStatus status
 
@@ -212,6 +218,15 @@ encodeEntity entity =
 
         InstanceEntity instance ->
             encodeInstance instance
+
+        ActivityEntity activity ->
+            encodeActivity activity
+
+        ActivityListEntity activities ->
+            JE.list encodeActivity activities
+
+        PeersEntity peers ->
+            JE.list JE.string peers
 
         ListEntityEntity list ->
             encodeListEntity list
@@ -276,9 +291,6 @@ encodeEntity entity =
         ValueEntity value ->
             value
 
-        _ ->
-            JE.string "TODO"
-
 
 {-| Decode an `Entity`.
 
@@ -306,6 +318,8 @@ entityDecoder =
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
         , instanceDecoder |> JD.map InstanceEntity
+        , activityDecoder |> JD.map ActivityEntity
+        , JD.list activityDecoder |> JD.map ActivityListEntity
         , groupDecoder |> JD.map GroupEntity -- Must come before ListEntity
         , JD.list groupDecoder |> JD.map GroupListEntity
         , groupRelationshipDecoder |> JD.map GroupRelationshipEntity
@@ -346,12 +360,12 @@ entityValue entity =
             else
                 account.v
 
-        AppEntity app ->
-            if app.v == JE.null then
-                encodeApp app
+        ActivityEntity activity ->
+            if activity.v == JE.null then
+                encodeActivity activity
 
             else
-                app.v
+                activity.v
 
         AccountListEntity accounts ->
             JE.list entityValue (List.map AccountEntity accounts)
@@ -393,6 +407,9 @@ entityValue entity =
         EmojiListEntity emojis ->
             JE.list encodeEmoji emojis
 
+        ErrorEntity error ->
+            encodeError error
+
         StatusEntity status ->
             if status.v == JE.null then
                 encodeStatus status
@@ -426,6 +443,19 @@ entityValue entity =
 
             else
                 instance.v
+
+        ActivityListEntity activities ->
+            JE.list entityValue (List.map ActivityEntity activities)
+
+        AppEntity app ->
+            if app.v == JE.null then
+                encodeApp app
+
+            else
+                app.v
+
+        PeersEntity peers ->
+            JE.list JE.string peers
 
         ListEntityEntity list ->
             encodeListEntity list
@@ -525,9 +555,6 @@ entityValue entity =
 
         ValueEntity value ->
             value
-
-        _ ->
-            JE.string "TODO"
 
 
 {-| Encode `Maybe x` to `Json.Encode.null` if it's Nothing,
@@ -1586,6 +1613,35 @@ instanceDecoder =
         |> required "stats" statsDecoder
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
+        |> custom JD.value
+
+
+{-| Encode an `Activity`.
+
+Mastodon encodes all the `Int` fields as strings, so we follow suit here.
+Pleroma and Gab don't support "GET instance/activity".
+
+-}
+encodeActivity : Activity -> Value
+encodeActivity { week, statuses, logins, registrations } =
+    JE.object
+        [ ( "week", JE.string <| String.fromInt week )
+        , ( "statuses", JE.string <| String.fromInt statuses )
+        , ( "logins", encodeMaybe (JE.string << String.fromInt) logins )
+        , ( "registrations", JE.string <| String.fromInt registrations )
+        , ( "value", JE.null )
+        ]
+
+
+{-| Decode an `Activity`
+-}
+activityDecoder : Decoder Activity
+activityDecoder =
+    JD.succeed Activity
+        |> required "week" stringToIntDecoder
+        |> required "statuses" stringToIntDecoder
+        |> optional "logins" (JD.nullable stringToIntDecoder) Nothing
+        |> required "registrations" stringToIntDecoder
         |> custom JD.value
 
 
