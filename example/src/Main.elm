@@ -4000,7 +4000,7 @@ view model =
                             model
                             timelinesSelectedUI
                         , selectedRequestHtml TrendsSelected
-                            "https://docs.joinmastodon.com/api/rest/trends/"
+                            ""
                             model
                             trendsSelectedUI
                         ]
@@ -4694,7 +4694,9 @@ reportsSelectedUI model =
         [ pspace
         , textInput "account id: " 25 SetAccountId model.accountId
         , br
-        , textInput "status ids: " 60 SetStatusIds model.statusIds
+        , textInput "status ids (a,b,...): " 60 SetStatusIds model.statusIds
+        , br
+        , b "comment:"
         , br
         , textarea
             [ onInput SetReportComment
@@ -5553,6 +5555,26 @@ The "$PostDismissNotification" button deletes the notification with the given "n
 The "$PostClearNotifications" button deletes all notifications for your account, after confirmation.
                    """
 
+                ReportsSelected ->
+                    """
+**ReportsRequest Help**
+
+The "$PostReports" button sends "comment" to the instance administrator about the comma-separated list of "status ids" from "account id".
+                    """
+
+                ScheduledStatusesSelected ->
+                    """
+**ScheduledStatusesRequest Help**
+
+The "$GetScheduledStatuses" button returns a list of `ScheduledStatus` entitities.
+
+The "$GetScheduledStatus" button fetches "scheduled status id".
+
+The "$DeleteScheduledStatus" button deletes "scheduled status id".
+
+The "$PutScheduledStatus" button changes the "scheduled at" timestamp for "scheduled status id".
+                    """
+
                 SearchSelected ->
                     """
 **SearchRequest Help**
@@ -5588,7 +5610,7 @@ The "$GetGroupTimeline" button returns posts for the given "group id".
 The "$GetTrends" button fetches a list of `Tag` entities, containing information about trending hashtags. Some servers always return an empty list for this.
                     """
 
-                _ ->
+                LoginSelected ->
                     """
 **General and Login Help**
 
