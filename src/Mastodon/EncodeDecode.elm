@@ -1321,35 +1321,51 @@ pollOptionDecoder =
 encodeStatus : Status -> Value
 encodeStatus status =
     JE.object
-        [ ( "id", JE.string status.id )
-        , ( "uri", JE.string status.uri )
-        , ( "url", encodeMaybe JE.string status.url )
-        , ( "account", encodeAccount status.account )
-        , ( "in_reply_to_id", encodeMaybe JE.string status.in_reply_to_id )
-        , ( "in_reply_to_account_id", encodeMaybe JE.string status.in_reply_to_account_id )
-        , ( "reblog", encodeMaybe encodeWrappedStatus status.reblog )
-        , ( "content", JE.string status.content )
-        , ( "created_at", JE.string status.created_at )
-        , ( "emojis", JE.list encodeEmoji status.emojis )
-        , ( "replies_count", JE.int status.replies_count )
-        , ( "reblogs_count", JE.int status.reblogs_count )
-        , ( "favourites_count", JE.int status.favourites_count )
-        , ( "reblogged", JE.bool status.reblogged )
-        , ( "favourited", JE.bool status.favourited )
-        , ( "muted", JE.bool status.muted )
-        , ( "sensitive", JE.bool status.sensitive )
-        , ( "spoiler_text", JE.string status.spoiler_text )
-        , ( "visibility", encodeVisibility status.visibility )
-        , ( "media_attachments", JE.list encodeAttachment status.media_attachments )
-        , ( "mentions", JE.list encodeMention status.mentions )
-        , ( "tags", JE.list encodeTag status.tags )
-        , ( "card", encodeMaybe encodeCard status.card )
-        , ( "poll", encodeMaybe encodePoll status.poll )
-        , ( "application", encodeMaybe encodeApplication status.application )
-        , ( "language", encodeMaybe JE.string status.language )
-        , ( "pinned", JE.bool status.pinned )
-        , ( "group_id", encodeMaybe JE.string status.group_id )
-        ]
+        (List.concat
+            [ [ ( "id", JE.string status.id )
+              , ( "uri", JE.string status.uri )
+              , ( "url", encodeMaybe JE.string status.url )
+              , ( "account", encodeAccount status.account )
+              , ( "in_reply_to_id", encodeMaybe JE.string status.in_reply_to_id )
+              , ( "in_reply_to_account_id", encodeMaybe JE.string status.in_reply_to_account_id )
+              , ( "reblog", encodeMaybe encodeWrappedStatus status.reblog )
+              , ( "content", JE.string status.content )
+              , ( "created_at", JE.string status.created_at )
+              , ( "emojis", JE.list encodeEmoji status.emojis )
+              , ( "replies_count", JE.int status.replies_count )
+              , ( "reblogs_count", JE.int status.reblogs_count )
+              , ( "favourites_count", JE.int status.favourites_count )
+              , ( "reblogged", JE.bool status.reblogged )
+              , ( "favourited", JE.bool status.favourited )
+              , ( "muted", JE.bool status.muted )
+              , ( "sensitive", JE.bool status.sensitive )
+              , ( "spoiler_text", JE.string status.spoiler_text )
+              , ( "visibility", encodeVisibility status.visibility )
+              , ( "media_attachments", JE.list encodeAttachment status.media_attachments )
+              , ( "mentions", JE.list encodeMention status.mentions )
+              , ( "tags", JE.list encodeTag status.tags )
+              , ( "card", encodeMaybe encodeCard status.card )
+              , ( "poll", encodeMaybe encodePoll status.poll )
+              , ( "application", encodeMaybe encodeApplication status.application )
+              , ( "language", encodeMaybe JE.string status.language )
+              , ( "pinned", JE.bool status.pinned )
+              ]
+            , case status.group_id of
+                Nothing ->
+                    []
+
+                Just gid ->
+                    [ ( "group_id", JE.string gid ) ]
+            , case status.quote of
+                Nothing ->
+                    []
+
+                Just (WrappedStatus quote) ->
+                    [ ( "quote_of_id", encodeMaybe JE.string status.quote_of_id )
+                    , ( "quote", encodeStatus quote )
+                    ]
+            ]
+        )
 
 
 {-| Decode a `Status`.
@@ -1392,6 +1408,17 @@ statusDecoder =
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
         |> optional "group_id" (JD.nullable JD.string) Nothing
+        |> optional "quote_of_id" (JD.nullable JD.string) Nothing
+        |> optional "quote"
+            (JD.nullable <|
+                JD.lazy
+                    (\_ ->
+                        statusDecoder
+                            |> JD.map
+                                (\s -> WrappedStatus s)
+                    )
+            )
+            Nothing
         |> custom JD.value
 
 

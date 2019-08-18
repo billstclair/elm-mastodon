@@ -163,6 +163,13 @@ stripStatus status =
 
                 Just application ->
                     Just { application | v = JE.null }
+        , quote =
+            case status.quote of
+                Nothing ->
+                    Nothing
+
+                Just (WrappedStatus qs) ->
+                    Just (WrappedStatus <| stripStatus qs)
         , v = JE.null
     }
 
@@ -475,7 +482,7 @@ statusParams1 =
     , media_ids = [ "id1", "id2", "id3" ]
     , sensitive = True
     , spoiler_text = Just "spoiler_text"
-    , visibility = PublicVisibility
+    , visibility = Just PublicVisibility
     , scheduled_at = Just "scheduled_at"
     , application_id = "application_id"
     }
@@ -488,19 +495,19 @@ statusParams2 =
         , media_ids = []
         , sensitive = False
         , spoiler_text = Nothing
-        , visibility = UnlistedVisibility
+        , visibility = Just UnlistedVisibility
         , scheduled_at = Nothing
     }
 
 
 statusParams3 : StatusParams
 statusParams3 =
-    { statusParams2 | visibility = PrivateVisibility }
+    { statusParams2 | visibility = Just PrivateVisibility }
 
 
 statusParams4 : StatusParams
 statusParams4 =
-    { statusParams2 | visibility = DirectVisibility }
+    { statusParams2 | visibility = Just DirectVisibility }
 
 
 scheduledStatus1 : ScheduledStatus
@@ -795,6 +802,8 @@ status1 =
     , language = Just "language"
     , pinned = True
     , group_id = Nothing
+    , quote_of_id = Nothing
+    , quote = Nothing
     , v = JE.null
     }
 
@@ -829,6 +838,8 @@ status2 =
     , language = Nothing
     , pinned = False
     , group_id = Just "group_id"
+    , quote_of_id = Nothing
+    , quote = Nothing
     , v = JE.null
     }
 
@@ -836,9 +847,12 @@ status2 =
 status3 : Status
 status3 =
     { status2
-        | visibility = PrivateVisibility
+        | id = "id3"
+        , visibility = PrivateVisibility
         , card = Nothing
         , application = Nothing
+        , quote_of_id = Just "id2"
+        , quote = Just <| WrappedStatus status2
     }
 
 

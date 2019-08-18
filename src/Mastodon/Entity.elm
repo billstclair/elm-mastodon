@@ -544,15 +544,6 @@ type alias Results =
     }
 
 
-
----
---- Gab is adding two fields to `Status`, for quoted posts:
----
----     quote_of_id : Maybe String
----     quote : Maybe Status
----
-
-
 {-| Status entity.
 -}
 type alias Status =
@@ -584,6 +575,8 @@ type alias Status =
     , language : Maybe String
     , pinned : Bool
     , group_id : Maybe String --GAB extension
+    , quote_of_id : Maybe String
+    , quote : Maybe WrappedStatus
     , v : Value
     }
 

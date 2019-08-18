@@ -3578,6 +3578,8 @@ theStyle =
 
 `MediaAttachmentsRequest` and `PollsRequest` are done as part of `StatusesSelected`.
 
+`TrendsRequest` is part of `InstanceSelected`.
+
 -}
 type SelectedRequest
     = LoginSelected
@@ -3599,10 +3601,6 @@ type SelectedRequest
     | ScheduledStatusesSelected
     | StatusesSelected
     | TimelinesSelected
-
-
-
--- TrendsSelected
 
 
 encodeSelectedRequest : SelectedRequest -> Value
