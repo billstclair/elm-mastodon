@@ -164,6 +164,13 @@ stripStatus status =
 
                 Just application ->
                     Just { application | v = JE.null }
+        , group =
+            case status.group of
+                Nothing ->
+                    Nothing
+
+                Just group ->
+                    Just { group | v = JE.null }
         , quote =
             case status.quote of
                 Nothing ->
@@ -822,7 +829,7 @@ status1 =
     , application = Just application1
     , language = Just "language"
     , pinned = True
-    , group_id = Nothing
+    , group = Nothing
     , quote_of_id = Nothing
     , quote = Nothing
     , v = JE.null
@@ -858,7 +865,7 @@ status2 =
     , application = Just application2
     , language = Nothing
     , pinned = False
-    , group_id = Just "group_id"
+    , group = Just group1
     , quote_of_id = Nothing
     , quote = Nothing
     , v = JE.null

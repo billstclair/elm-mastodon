@@ -588,7 +588,7 @@ type alias Status =
     , application : Maybe Application
     , language : Maybe String
     , pinned : Bool
-    , group_id : Maybe String --GAB extension
+    , group : Maybe Group --GAB extension
     , quote_of_id : Maybe String
     , quote : Maybe WrappedStatus
     , v : Value

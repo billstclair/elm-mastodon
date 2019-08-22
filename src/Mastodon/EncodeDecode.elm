@@ -1377,12 +1377,12 @@ encodeStatus status =
               , ( "language", encodeMaybe JE.string status.language )
               , ( "pinned", JE.bool status.pinned )
               ]
-            , case status.group_id of
+            , case status.group of
                 Nothing ->
                     []
 
-                Just gid ->
-                    [ ( "group_id", JE.string gid ) ]
+                Just group ->
+                    [ ( "group", encodeGroup group ) ]
             , case status.quote of
                 Nothing ->
                     []
@@ -1434,7 +1434,7 @@ statusDecoder =
         |> optional "application" (JD.nullable applicationDecoder) Nothing
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
-        |> optional "group_id" (JD.nullable JD.string) Nothing
+        |> optional "group" (JD.nullable groupDecoder) Nothing
         |> optional "quote_of_id" (JD.nullable JD.string) Nothing
         |> optional "quote"
             (JD.nullable <|

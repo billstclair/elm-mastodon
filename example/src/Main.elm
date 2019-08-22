@@ -4162,6 +4162,9 @@ view model =
                     , p []
                         [ text <| "Copyright " ++ special.copyright ++ " 2019, Bill St. Clair"
                         , br
+                        , link "@imacpr0n@mastodon.social"
+                            "https://mastodon.social/@imacpr0n"
+                        , br
                         , text "API Docs: "
                         , link "docs.joinmastodon.org"
                             "https://docs.joinmastodon.org/api/guidelines"
@@ -6229,6 +6232,7 @@ dollarButtonNameDict =
         , ( "PostMedia", SendPostMedia )
         , ( "PutMedia", SendPutMedia )
         , ( "PostStatus", SendPostStatus )
+        , ( "GetHomeTimeline", SendGetHomeTimeline )
         , ( "GetConversations", SendGetConversations )
         , ( "GetPublicTimeline", SendGetPublicTimeline )
         , ( "GetTagTimeline", SendGetTagTimeline )
