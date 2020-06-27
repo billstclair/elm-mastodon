@@ -1,4 +1,4 @@
-----------------------------------------------------------------------
+---------------------------------------------------------------------
 --
 -- Main.elm
 -- Example of using billstclair/elm-mastodon
@@ -1481,7 +1481,9 @@ updateInternal msg model =
                                 , request = Just response.rawRequest
                                 , metadata = Just response.metadata
                                 , response = Just instance.v
-                                , entity = Just response.entity
+                                , entity =
+                                    Just <|
+                                        Entity.fixInstanceEntity response.entity
                             }
                                 |> updateJsonTrees
                                 |> withNoCmd
@@ -3172,12 +3174,15 @@ receiveResponse result model =
             let
                 mdl =
                     applyResponseSideEffects response model
+
+                fixedEntity =
+                    Entity.fixInstanceEntity response.entity
             in
             { mdl
                 | msg = Nothing
                 , metadata = Just response.metadata
                 , response = Just <| ED.entityValue (Debug.log "entity" response.entity)
-                , entity = Just response.entity
+                , entity = Just fixedEntity
             }
                 |> updateJsonTrees
                 |> withNoCmd

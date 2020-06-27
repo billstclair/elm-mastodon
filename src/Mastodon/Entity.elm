@@ -26,6 +26,7 @@ module Mastodon.Entity exposing
     , Visibility(..), Mention, Tag, History, Poll, PollOption, StatusParams
     , Authorization
     , WrappedAccount(..), WrappedStatus(..)
+    , fixInstanceEntity
     )
 
 {-| The Mastodon API entities.
@@ -77,6 +78,11 @@ got over the wire. Code that creates these can set it to
 # Wrappers to prevent type recursion
 
 @docs WrappedAccount, WrappedStatus
+
+
+# Development
+
+@docs fixInstanceEntity
 
 -}
 
@@ -426,6 +432,48 @@ type alias Instance =
     , contact_account : Maybe Account
     , v : Value
     }
+
+
+{-| Fix an instance entity resulting from {},
+
+so that it will not encode again as {}.
+Should be used only for debugging, as the filled-in urls and stats are bogus.
+
+-}
+fixInstanceEntity : Entity -> Entity
+fixInstanceEntity entity =
+    case entity of
+        InstanceEntity instance ->
+            let
+                urls =
+                    case instance.urls of
+                        Just us ->
+                            Just us
+
+                        Nothing ->
+                            Just { streaming_api = "unknown" }
+
+                stats =
+                    case instance.stats of
+                        Just st ->
+                            Just st
+
+                        Nothing ->
+                            Just
+                                { user_count = 0
+                                , status_count = 0
+                                , domain_count = 0
+                                }
+            in
+            if urls == instance.urls && stats == instance.stats then
+                entity
+
+            else
+                InstanceEntity
+                    { instance | urls = urls, stats = stats }
+
+        _ ->
+            entity
 
 
 {-| `Activity` entity.

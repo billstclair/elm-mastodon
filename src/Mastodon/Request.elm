@@ -1087,7 +1087,7 @@ requestToRawRequest headers serverInfo request =
                     groupsReq req raw
 
                 InstanceRequest req ->
-                    instanceReq req raw
+                    instanceReq req raw serverInfo
 
                 ListsRequest req ->
                     listsReq req raw
@@ -1217,8 +1217,8 @@ decoders =
     , filter = ED.filterDecoder |> JD.map FilterEntity
     , filterList = JD.list ED.filterDecoder |> JD.map FilterListEntity
     , instance =
-        \maybeUrlString ->
-            ED.instanceDecoder maybeUrlString |> JD.map InstanceEntity
+        \urlString ->
+            ED.instanceDecoder urlString |> JD.map InstanceEntity
     , activity = ED.activityDecoder |> JD.map ActivityEntity
     , activityList = JD.list ED.activityDecoder |> JD.map ActivityListEntity
     , peers = JD.list JD.string |> JD.map PeersEntity
@@ -2003,18 +2003,22 @@ groupsReq req res =
             }
 
 
-instanceReq : InstanceReq -> RawRequest -> RawRequest
-instanceReq req res =
+instanceReq : InstanceReq -> RawRequest -> ServerInfo -> RawRequest
+instanceReq req res serverInfo =
     let
         r =
             apiReq.instance
     in
     case req of
         GetInstance ->
+            let
+                urlString =
+                    "https://" ++ serverInfo.server
+            in
             { res
                 | url =
                     relative [ r ] []
-                , decoder = decoders.instance res.url
+                , decoder = decoders.instance urlString
             }
 
         GetActivity ->
