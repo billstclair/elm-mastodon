@@ -158,6 +158,7 @@ import Mastodon.Entity as Entity
         , WrappedAccount(..)
         , WrappedStatus(..)
         )
+import Url exposing (Protocol(..))
 
 
 {-| Encode an `Entity` into a `Value`.
@@ -297,9 +298,13 @@ encodeEntity entity =
 You'll usually know which entity you're looking for, and will use
 its decoder explicitly. In case you don't...
 
+The urlString is used only to decode an Instance.
+It is used to default fields when the server returns {}
+(which it shouldn't, but some do).
+
 -}
-entityDecoder : Decoder Entity
-entityDecoder =
+entityDecoder : String -> Decoder Entity
+entityDecoder urlString =
     JD.oneOf
         [ JD.null NoEntity
         , accountDecoder |> JD.map AccountEntity
@@ -317,7 +322,6 @@ entityDecoder =
         , JD.list statusDecoder |> JD.map StatusListEntity
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
-        , instanceDecoder |> JD.map InstanceEntity
         , activityDecoder |> JD.map ActivityEntity
         , JD.list activityDecoder |> JD.map ActivityListEntity
         , groupDecoder |> JD.map GroupEntity -- Must come before ListEntity
@@ -338,6 +342,7 @@ entityDecoder =
         , conversationDecoder |> JD.map ConversationEntity
         , JD.list tagDecoder |> JD.map TagListEntity
         , JD.list JD.string |> JD.map StringListEntity
+        , instanceDecoder urlString |> JD.map InstanceEntity
         ]
 
 
@@ -1584,24 +1589,83 @@ statsDecoder =
 -}
 encodeInstance : Instance -> Value
 encodeInstance instance =
-    JE.object
-        [ ( "uri", JE.string instance.uri )
-        , ( "title", JE.string instance.title )
-        , ( "description", JE.string instance.description )
-        , ( "email", JE.string instance.email )
-        , ( "version", JE.string instance.version )
-        , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
-        , ( "urls", encodeUrls instance.urls )
-        , ( "stats", encodeStats instance.stats )
-        , ( "languages", JE.list JE.string instance.languages )
-        , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
-        ]
+    case instance.urls of
+        Nothing ->
+            JE.object []
+
+        Just urls ->
+            case instance.stats of
+                Nothing ->
+                    JE.object []
+
+                Just stats ->
+                    JE.object
+                        [ ( "uri", JE.string instance.uri )
+                        , ( "title", JE.string instance.title )
+                        , ( "description", JE.string instance.description )
+                        , ( "email", JE.string instance.email )
+                        , ( "version", JE.string instance.version )
+                        , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
+                        , ( "urls", encodeUrls urls )
+                        , ( "stats", encodeStats stats )
+                        , ( "languages", JE.list JE.string instance.languages )
+                        , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
+                        ]
 
 
 {-| Decode an `Instance`.
 -}
-instanceDecoder : Decoder Instance
-instanceDecoder =
+instanceDecoder : String -> Decoder Instance
+instanceDecoder urlString =
+    JD.value
+        |> JD.andThen
+            (\value ->
+                if value /= JE.object [] then
+                    realInstanceDecoder
+
+                else
+                    let
+                        url =
+                            case Url.fromString urlString of
+                                Just u ->
+                                    u
+
+                                Nothing ->
+                                    { protocol = Https
+                                    , host = urlString
+                                    , port_ = Nothing
+                                    , path = ""
+                                    , query = Nothing
+                                    , fragment = Nothing
+                                    }
+                    in
+                    JD.succeed
+                        { uri = urlString
+                        , title = url.host
+                        , description = url.host
+                        , email = url.host
+                        , version = "unknown"
+                        , thumbnail = Nothing
+                        , urls = Nothing
+                        , stats = Nothing
+                        , languages = []
+                        , contact_account = Nothing
+                        , v = value
+                        }
+            )
+
+
+justDecoder : Decoder a -> Decoder (Maybe a)
+justDecoder decoder =
+    decoder
+        |> JD.andThen
+            (\res ->
+                JD.succeed (Just res)
+            )
+
+
+realInstanceDecoder : Decoder Instance
+realInstanceDecoder =
     JD.succeed Instance
         |> required "uri" JD.string
         |> required "title" JD.string
@@ -1609,8 +1673,8 @@ instanceDecoder =
         |> required "email" JD.string
         |> required "version" JD.string
         |> optional "thumbnail" (JD.nullable JD.string) Nothing
-        |> required "urls" urlsDecoder
-        |> required "stats" statsDecoder
+        |> required "urls" (justDecoder urlsDecoder)
+        |> required "stats" (justDecoder statsDecoder)
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value

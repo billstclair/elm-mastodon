@@ -5,7 +5,7 @@ import Expect exposing (Expectation)
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 import List
-import Mastodon.EncodeDecode as ED exposing (encodeEntity, entityDecoder)
+import Mastodon.EncodeDecode as ED exposing (encodeEntity)
 import Mastodon.Entity as Entity
     exposing
         ( Account
@@ -67,11 +67,32 @@ testMap test data =
     List.map2 test data numbers
 
 
+testEmptyInstance : Test
+testEmptyInstance =
+    test "emptyInstanceTest"
+        (\_ ->
+            let
+                value =
+                    JE.object []
+
+                result =
+                    case JD.decodeValue entityDecoder value of
+                        Err e ->
+                            Err e
+
+                        Ok en ->
+                            Ok <| stripEntity en
+            in
+            expectResult (Ok <| InstanceEntity emptyInstance) result
+        )
+
+
 all : Test
 all =
     Test.concat <|
         List.concat
             [ testMap entityTest entityData
+            , [ testEmptyInstance ]
             ]
 
 
@@ -311,6 +332,37 @@ stripEntity entity =
 
         _ ->
             entity
+
+
+unnamedHost : String
+unnamedHost =
+    "the-server-that-shall-remain-unnamed.com"
+
+
+unnamedUrl : String
+unnamedUrl =
+    "https://" ++ unnamedHost
+
+
+entityDecoder : Decoder Entity
+entityDecoder =
+    ED.entityDecoder unnamedUrl
+
+
+emptyInstance : Instance
+emptyInstance =
+    { uri = unnamedUrl
+    , title = unnamedHost
+    , description = unnamedHost
+    , email = unnamedHost
+    , version = "unknown"
+    , thumbnail = Nothing
+    , urls = Nothing
+    , stats = Nothing
+    , languages = []
+    , contact_account = Nothing
+    , v = JE.null
+    }
 
 
 entityTest : Entity -> String -> Test
@@ -643,8 +695,8 @@ instance1 =
     , email = "email"
     , version = "version"
     , thumbnail = Just "thumbnail"
-    , urls = urls
-    , stats = stats
+    , urls = Just urls
+    , stats = Just stats
     , languages = [ "l1", "l2", "l3" ]
     , contact_account = Just account1
     , v = JE.null

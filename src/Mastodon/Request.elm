@@ -1216,7 +1216,9 @@ decoders =
     , ignore = JD.succeed NoEntity
     , filter = ED.filterDecoder |> JD.map FilterEntity
     , filterList = JD.list ED.filterDecoder |> JD.map FilterListEntity
-    , instance = ED.instanceDecoder |> JD.map InstanceEntity
+    , instance =
+        \maybeUrlString ->
+            ED.instanceDecoder maybeUrlString |> JD.map InstanceEntity
     , activity = ED.activityDecoder |> JD.map ActivityEntity
     , activityList = JD.list ED.activityDecoder |> JD.map ActivityListEntity
     , peers = JD.list JD.string |> JD.map PeersEntity
@@ -2012,7 +2014,7 @@ instanceReq req res =
             { res
                 | url =
                     relative [ r ] []
-                , decoder = decoders.instance
+                , decoder = decoders.instance res.url
             }
 
         GetActivity ->

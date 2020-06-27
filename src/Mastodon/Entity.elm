@@ -420,8 +420,8 @@ type alias Instance =
     , email : String
     , version : String
     , thumbnail : Maybe UrlString
-    , urls : URLs
-    , stats : Stats
+    , urls : Maybe URLs
+    , stats : Maybe Stats
     , languages : List ISO6391
     , contact_account : Maybe Account
     , v : Value
