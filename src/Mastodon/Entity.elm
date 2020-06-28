@@ -281,6 +281,8 @@ type AttachmentType
     | ImageAttachment
     | GifvAttachment
     | VideoAttachment
+    | AudioAttachment
+    | UnrecognizedAttachment String
 
 
 {-| Value for `Attachment.meta`

@@ -885,6 +885,12 @@ encodeAttachmentType attachmentType =
         VideoAttachment ->
             JE.string "video"
 
+        AudioAttachment ->
+            JE.string "audio"
+
+        UnrecognizedAttachment t ->
+            JE.string t
+
 
 attachmentTypeDecoder : Decoder AttachmentType
 attachmentTypeDecoder =
@@ -904,8 +910,11 @@ attachmentTypeDecoder =
                     "video" ->
                         JD.succeed VideoAttachment
 
+                    "audio" ->
+                        JD.succeed AudioAttachment
+
                     _ ->
-                        JD.fail <| "Unknown AttachmentType: " ++ s
+                        JD.succeed <| UnrecognizedAttachment s
             )
 
 
