@@ -611,7 +611,7 @@ type alias Results =
 
 {-| Status entity.
 
-The `plain_markdown` and `plain_text` fields are gab-mastodon additions.
+The `plain_markdown` and `plain_text` fields are elm-mastodon additions.
 
 `content` is the HTML to display.
 `plain_markdown` is the markdown the user entered, if it is available.
