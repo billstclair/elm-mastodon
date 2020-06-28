@@ -1666,24 +1666,19 @@ encodeInstance instance =
             JE.object []
 
         Just urls ->
-            case instance.stats of
-                Nothing ->
-                    JE.object []
-
-                Just stats ->
-                    JE.object <|
-                        [ ( "uri", JE.string instance.uri )
-                        , ( "title", JE.string instance.title )
-                        , ( "description", JE.string instance.description )
-                        , ( "email", JE.string instance.email )
-                        , ( "version", JE.string instance.version )
-                        , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
-                        , ( "urls", encodeUrls urls )
-                        , ( "stats", encodeStats stats )
-                        , ( "max_toot_chars", JE.int instance.max_toot_chars )
-                        , ( "languages", JE.list JE.string instance.languages )
-                        , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
-                        ]
+            JE.object <|
+                [ ( "uri", JE.string instance.uri )
+                , ( "title", JE.string instance.title )
+                , ( "description", JE.string instance.description )
+                , ( "email", JE.string instance.email )
+                , ( "version", JE.string instance.version )
+                , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
+                , ( "urls", encodeUrls urls )
+                , ( "stats", encodeStats instance.stats )
+                , ( "max_toot_chars", JE.int instance.max_toot_chars )
+                , ( "languages", JE.list JE.string instance.languages )
+                , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
+                ]
 
 
 default_max_toot_chars : Int
@@ -1724,14 +1719,27 @@ instanceDecoder urlString =
                         , email = url.host
                         , version = "unknown"
                         , thumbnail = Nothing
-                        , urls = Nothing
-                        , stats = Nothing
-                        , max_toot_chars = default_max_toot_chars
+                        , urls = Just <| defaultUrls url.host
+                        , stats = defaultStats
+                        , max_toot_chars = 3000 --magic number
                         , languages = []
                         , contact_account = Nothing
                         , v = value
                         }
             )
+
+
+defaultUrls : String -> URLs
+defaultUrls host =
+    { streaming_api = "wss://" ++ host }
+
+
+defaultStats : Stats
+defaultStats =
+    { domain_count = 0
+    , status_count = 0
+    , user_count = 0
+    }
 
 
 justDecoder : Decoder a -> Decoder (Maybe a)
@@ -1752,8 +1760,8 @@ realInstanceDecoder =
         |> required "email" JD.string
         |> required "version" JD.string
         |> optional "thumbnail" (JD.nullable JD.string) Nothing
-        |> required "urls" (justDecoder urlsDecoder)
-        |> required "stats" (justDecoder statsDecoder)
+        |> optional "urls" (JD.nullable urlsDecoder) Nothing
+        |> optional "stats" statsDecoder defaultStats
         |> optional "max_toot_chars" JD.int default_max_toot_chars
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing

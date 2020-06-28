@@ -357,8 +357,13 @@ emptyInstance =
     , email = unnamedHost
     , version = "unknown"
     , thumbnail = Nothing
-    , urls = Nothing
-    , stats = Nothing
+    , urls = Just { streaming_api = "wss://" ++ unnamedHost }
+    , stats =
+        Just
+            { domain_count = 0
+            , status_count = 0
+            , user_count = 0
+            }
     , max_toot_chars = 300
     , languages = []
     , contact_account = Nothing
