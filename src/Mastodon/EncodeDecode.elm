@@ -1423,7 +1423,11 @@ statusDecoder =
                                     | content =
                                         case rawStatus.rich_content of
                                             Just rich_content ->
-                                                rich_content
+                                                if rich_content /= "" then
+                                                    rich_content
+
+                                                else
+                                                    status.content
 
                                             Nothing ->
                                                 status.content
