@@ -1461,7 +1461,13 @@ rawStatusDecoder =
         -- Three fields special to RawStatus
         |> optional "plain_markdown" (JD.nullable JD.string) Nothing
         |> optional "rich_content" (JD.nullable JD.string) Nothing
-        |> optional "pleroma" (JD.nullable pleromaStatusContentDecoder) Nothing
+        |> optional "pleroma"
+            (JD.oneOf
+                [ JD.nullable pleromaStatusContentDecoder
+                , JD.succeed Nothing
+                ]
+            )
+            Nothing
         |> custom JD.value
 
 
