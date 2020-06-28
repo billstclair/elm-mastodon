@@ -336,7 +336,7 @@ stripEntity entity =
 
 unnamedHost : String
 unnamedHost =
-    "the-server-that-shall-remain-unnamed.com"
+    "the-server-that-shall-not-be-named.com"
 
 
 unnamedUrl : String
@@ -359,6 +359,7 @@ emptyInstance =
     , thumbnail = Nothing
     , urls = Nothing
     , stats = Nothing
+    , max_toot_chars = 300
     , languages = []
     , contact_account = Nothing
     , v = JE.null
@@ -697,6 +698,7 @@ instance1 =
     , thumbnail = Just "thumbnail"
     , urls = Just urls
     , stats = Just stats
+    , max_toot_chars = 300
     , languages = [ "l1", "l2", "l3" ]
     , contact_account = Just account1
     , v = JE.null

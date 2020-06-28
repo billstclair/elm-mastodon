@@ -1599,7 +1599,7 @@ encodeInstance instance =
                     JE.object []
 
                 Just stats ->
-                    JE.object
+                    JE.object <|
                         [ ( "uri", JE.string instance.uri )
                         , ( "title", JE.string instance.title )
                         , ( "description", JE.string instance.description )
@@ -1608,9 +1608,15 @@ encodeInstance instance =
                         , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
                         , ( "urls", encodeUrls urls )
                         , ( "stats", encodeStats stats )
+                        , ( "max_toot_chars", JE.int instance.max_toot_chars )
                         , ( "languages", JE.list JE.string instance.languages )
                         , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
                         ]
+
+
+default_max_toot_chars : Int
+default_max_toot_chars =
+    300
 
 
 {-| Decode an `Instance`.
@@ -1648,6 +1654,7 @@ instanceDecoder urlString =
                         , thumbnail = Nothing
                         , urls = Nothing
                         , stats = Nothing
+                        , max_toot_chars = default_max_toot_chars
                         , languages = []
                         , contact_account = Nothing
                         , v = value
@@ -1675,6 +1682,7 @@ realInstanceDecoder =
         |> optional "thumbnail" (JD.nullable JD.string) Nothing
         |> required "urls" (justDecoder urlsDecoder)
         |> required "stats" (justDecoder statsDecoder)
+        |> optional "max_toot_chars" JD.int default_max_toot_chars
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value
