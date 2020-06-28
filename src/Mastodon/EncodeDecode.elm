@@ -23,7 +23,7 @@ module Mastodon.EncodeDecode exposing
     , contextDecoder, encodeContext
     , visibilityDecoder, encodeVisibility
     , emojiDecoder, encodeEmoji
-    , encodeStatus, statusDecoder
+    , encodeStatus, statusDecoder, rawStatusDecoder, simpleStatusDecoder
     , encodeError, errorDecoder
     , encodePoll, pollDecoder
     , encodeFilter, filterDecoder
@@ -71,7 +71,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs contextDecoder, encodeContext
 @docs visibilityDecoder, encodeVisibility
 @docs emojiDecoder, encodeEmoji
-@docs encodeStatus, statusDecoder
+@docs encodeStatus, statusDecoder, rawStatusDecoder, simpleStatusDecoder
 @docs encodeError, errorDecoder
 @docs encodePoll, pollDecoder
 @docs encodeFilter, filterDecoder
@@ -138,10 +138,12 @@ import Mastodon.Entity as Entity
         , Meta(..)
         , Notification
         , NotificationType(..)
+        , PleromaStatusContent
         , Poll
         , PollOption
         , Privacy(..)
         , PushSubscription
+        , RawStatus
         , Relationship
         , Results
         , ScheduledStatus
@@ -1362,6 +1364,8 @@ encodeStatus status =
               , ( "in_reply_to_account_id", encodeMaybe JE.string status.in_reply_to_account_id )
               , ( "reblog", encodeMaybe encodeWrappedStatus status.reblog )
               , ( "content", JE.string status.content )
+              , ( "plain_markdown", encodeMaybe JE.string status.plain_markdown )
+              , ( "plain_text", encodeMaybe JE.string status.plain_text )
               , ( "created_at", JE.string status.created_at )
               , ( "emojis", JE.list encodeEmoji status.emojis )
               , ( "replies_count", JE.int status.replies_count )
@@ -1401,9 +1405,74 @@ encodeStatus status =
 
 
 {-| Decode a `Status`.
+
+This integrates the non-standard fields, so that you can just use `content`
+for the full HTML to actually display.
+
 -}
 statusDecoder : Decoder Status
 statusDecoder =
+    simpleStatusDecoder
+        |> JD.andThen
+            (\status ->
+                rawStatusDecoder
+                    |> JD.andThen
+                        (\rawStatus ->
+                            JD.succeed
+                                { status
+                                    | content =
+                                        case rawStatus.rich_content of
+                                            Just rich_content ->
+                                                rich_content
+
+                                            Nothing ->
+                                                status.content
+                                    , plain_text =
+                                        case rawStatus.pleroma of
+                                            Just { content } ->
+                                                Just content.plain_text
+
+                                            Nothing ->
+                                                status.plain_text
+                                }
+                        )
+            )
+
+
+{-| Decode a `PleromaStatusContent`.
+-}
+pleromaStatusContentDecoder : Decoder PleromaStatusContent
+pleromaStatusContentDecoder =
+    JD.succeed PleromaStatusContent
+        |> required "content" pleromaPlainTextDecoder
+
+
+pleromaPlainTextDecoder : Decoder { plain_text : String }
+pleromaPlainTextDecoder =
+    JD.succeed (\plain_text -> { plain_text = plain_text })
+        |> required "text/plain" JD.string
+
+
+{-| Decode a `RawStatus`.
+-}
+rawStatusDecoder : Decoder RawStatus
+rawStatusDecoder =
+    JD.succeed RawStatus
+        -- Three fields special to RawStatus
+        |> optional "plain_markdown" (JD.nullable JD.string) Nothing
+        |> optional "rich_content" (JD.nullable JD.string) Nothing
+        |> optional "pleroma" (JD.nullable pleromaStatusContentDecoder) Nothing
+        |> custom JD.value
+
+
+{-| Just decode the fields that are supported by all servers.
+
+The `content` field means different things on some servers, so use
+`statusDecoder` if you want it to have the full HTML for the post.
+
+-}
+simpleStatusDecoder : Decoder Status
+simpleStatusDecoder =
     JD.succeed Status
         |> required "id" JD.string
         |> required "uri" JD.string
@@ -1420,6 +1489,9 @@ statusDecoder =
             )
             Nothing
         |> required "content" JD.string
+        |> optional "plain_markdown" (JD.nullable JD.string) Nothing
+        |> optional "plain_text" (JD.nullable JD.string) Nothing
+        -- plain_text
         |> required "created_at" JD.string
         |> required "emojis" (JD.list emojiDecoder)
         |> required "replies_count" JD.int

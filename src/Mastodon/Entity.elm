@@ -17,13 +17,14 @@ module Mastodon.Entity exposing
     , Card, Context, Error, Filter, Instance, Activity
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, ScheduledStatus, Conversation
+    , Status, RawStatus, ScheduledStatus, Conversation
     , Group, GroupRelationship
     , Emoji, Field, Privacy(..), Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
     , CardType(..), FilterContext(..), URLs, Stats, NotificationType(..)
     , Visibility(..), Mention, Tag, History, Poll, PollOption, StatusParams
+    , PleromaStatusContent
     , Authorization
     , WrappedAccount(..), WrappedStatus(..)
     , fixInstanceEntity
@@ -57,7 +58,7 @@ got over the wire. Code that creates these can set it to
 @docs Card, Context, Error, Filter, Instance, Activity
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, ScheduledStatus, Conversation
+@docs Status, RawStatus, ScheduledStatus, Conversation
 @docs Group, GroupRelationship
 
 
@@ -68,6 +69,7 @@ got over the wire. Code that creates these can set it to
 @docs ImageMetaInfo, VideoMetaInfo, Focus
 @docs CardType, FilterContext, URLs, Stats, NotificationType
 @docs Visibility, Mention, Tag, History, Poll, PollOption, StatusParams
+@docs PleromaStatusContent
 
 
 # Authorization parameters
@@ -608,6 +610,13 @@ type alias Results =
 
 
 {-| Status entity.
+
+The `plain_markdown` and `plain_text` fields are gab-mastodon additions.
+
+`content` is the HTML to display.
+`plain_markdown` is the markdown the user entered, if it is available.
+`plain_text` is the unformatted text, if it is available.
+
 -}
 type alias Status =
     { id : String
@@ -618,6 +627,8 @@ type alias Status =
     , in_reply_to_account_id : Maybe String
     , reblog : Maybe WrappedStatus
     , content : HtmlString
+    , plain_markdown : Maybe String
+    , plain_text : Maybe String
     , created_at : Datetime
     , emojis : List Emoji
     , replies_count : Int
@@ -640,6 +651,25 @@ type alias Status =
     , group : Maybe Group --GAB extension
     , quote_of_id : Maybe String
     , quote : Maybe WrappedStatus
+    , v : Value
+    }
+
+
+{-| The `pleroma` field of a `RawStatus` entity (Pleroma only).
+-}
+type alias PleromaStatusContent =
+    { content : { plain_text : String } }
+
+
+{-| RawStatus entity.
+
+Extra Status fields that are not returned by all servers.
+
+-}
+type alias RawStatus =
+    { plain_markdown : Maybe String
+    , rich_content : Maybe String
+    , pleroma : Maybe PleromaStatusContent
     , v : Value
     }
 
