@@ -1904,6 +1904,55 @@ encodeNotification notification =
         ]
 
 
+{-| Decode an Account that might be blank.
+
+Pleroma sometimes returns these in Notifications, perhaps when the
+account no longer exists.
+
+-}
+possiblyBlankAccountDecoder : Decoder Account
+possiblyBlankAccountDecoder =
+    JD.value
+        |> JD.andThen
+            (\value ->
+                if value == JE.object [] then
+                    JD.succeed emptyAccount
+
+                else
+                    accountDecoder
+            )
+
+
+emptyAccount : Account
+emptyAccount =
+    { id = ""
+    , username = ""
+    , acct = ""
+    , display_name = "Deleted Account"
+    , locked = True
+    , created_at = ""
+    , followers_count = 0
+    , following_count = 0
+    , statuses_count = 0
+    , note = ""
+    , url = ""
+    , avatar = ""
+    , avatar_static = ""
+    , header = ""
+    , header_static = ""
+    , emojis = []
+    , moved = Nothing
+    , fields = []
+    , bot = False
+    , source = Nothing
+    , is_pro = False
+    , is_verified = False
+    , is_donor = False
+    , is_investor = False
+    , v = JE.object []
+    }
+
+
 {-| Decode a `Notification`.
 -}
 notificationDecoder : Decoder Notification
@@ -1912,7 +1961,7 @@ notificationDecoder =
         |> required "id" JD.string
         |> required "type" notificationTypeDecoder
         |> required "created_at" JD.string
-        |> required "account" accountDecoder
+        |> required "account" possiblyBlankAccountDecoder
         |> optional "status" (JD.nullable statusDecoder) Nothing
         |> custom JD.value
 
