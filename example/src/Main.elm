@@ -268,6 +268,7 @@ type alias Model =
     , status : String
     , in_reply_to_id : String
     , quote_of_id : String
+    , media_sensitive : Bool
     , spoiler_text : String
     , visibility : Maybe Visibility
     , scheduled_at : String
@@ -387,6 +388,7 @@ type Msg
     | SetStatus String
     | SetInReplyToId String
     | SetInQuoteOfId String
+    | ToggleMediaSensitive
     | SetSpoilerText String
     | SetVisibility (Maybe Visibility)
     | SetScheduledAt String
@@ -730,6 +732,7 @@ init value url key =
     , status = ""
     , in_reply_to_id = ""
     , quote_of_id = ""
+    , media_sensitive = False
     , spoiler_text = ""
     , visibility = Nothing
     , scheduled_at = ""
@@ -2028,6 +2031,10 @@ updateInternal msg model =
             { model | quote_of_id = quote_of_id }
                 |> withNoCmd
 
+        ToggleMediaSensitive ->
+            { model | media_sensitive = not model.media_sensitive }
+                |> withNoCmd
+
         SetSpoilerText spoiler_text ->
             { model | spoiler_text = spoiler_text }
                 |> withNoCmd
@@ -2797,6 +2804,7 @@ updateInternal msg model =
                         , media_ids =
                             splitMediaIds model.media_ids
                         , poll = Debug.log "poll" <| pollDefinition model
+                        , sensitive = model.media_sensitive
                         , spoiler_text = nothingIfBlank model.spoiler_text
                         , visibility = model.visibility
                         , scheduled_at = nothingIfBlank model.scheduled_at
@@ -4776,6 +4784,8 @@ statusesSelectedUI model =
                 , textInput "quote of id: " 25 SetInQuoteOfId model.quote_of_id
                 , br
                 , textInput "spoiler text: " 40 SetSpoilerText model.spoiler_text
+                , text " "
+                , checkBox ToggleMediaSensitive model.media_sensitive "sensitive"
                 , br
                 , b "visibility: "
                 , visibilityRadio Nothing model

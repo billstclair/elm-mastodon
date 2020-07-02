@@ -690,8 +690,7 @@ type StatusesReq
         , quote_of_id : Maybe String
         , media_ids : List String
         , poll : Maybe PollDefinition
-
-        -- If included, then sensitive will be passed as true
+        , sensitive : Bool
         , spoiler_text : Maybe String
         , visibility : Maybe Entity.Visibility
         , scheduled_at : Maybe Entity.Datetime
@@ -731,8 +730,13 @@ simplePostStatus status in_reply_to_id spoiler_text =
             , quote_of_id = Nothing
             , media_ids = []
             , poll = Nothing
+            , sensitive =
+                case spoiler_text of
+                    Nothing ->
+                        False
 
-            -- If included, then sensitive will be passed as true
+                    Just _ ->
+                        True
             , spoiler_text = spoiler_text
             , visibility = Nothing
             , scheduled_at = Nothing
@@ -2540,8 +2544,7 @@ statusesReq req res =
                 , decoder = decoders.accountList
             }
 
-        PostStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, spoiler_text, visibility, scheduled_at, language, idempotencyKey } ->
-            -- If spoiler_text is included, then sensitive will be passed as true
+        PostStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, sensitive, spoiler_text, visibility, scheduled_at, language, idempotencyKey } ->
             let
                 jsonBody =
                     JE.object
@@ -2589,13 +2592,17 @@ statusesReq req res =
                                             ]
                                       )
                                     ]
+                            , if sensitive then
+                                [ ( "sensitive", JE.bool sensitive ) ]
+
+                              else
+                                []
                             , case spoiler_text of
                                 Nothing ->
                                     []
 
                                 Just text ->
-                                    [ ( "sensitive", JE.bool True )
-                                    , ( "spoiler_text", JE.string text )
+                                    [ ( "spoiler_text", JE.string text )
                                     ]
                             , case visibility of
                                 Nothing ->
