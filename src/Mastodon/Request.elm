@@ -2551,7 +2551,7 @@ statusesReq req res =
                         (List.concat
                             [ case status of
                                 Nothing ->
-                                    []
+                                    [ ( "status", JE.string "" ) ]
 
                                 Just s ->
                                     [ ( "status", JE.string s ) ]
