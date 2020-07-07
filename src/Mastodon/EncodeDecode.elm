@@ -658,7 +658,7 @@ accountDecoder =
         |> required "avatar_static" JD.string
         |> required "header" JD.string
         |> required "header_static" JD.string
-        |> required "emojis" (JD.list emojiDecoder)
+        |> optional "emojis" (JD.list emojiDecoder) []
         |> optional "moved"
             (JD.lazy
                 (\() ->
