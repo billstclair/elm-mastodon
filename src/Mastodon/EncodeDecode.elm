@@ -658,7 +658,7 @@ accountDecoder =
         |> required "avatar_static" JD.string
         |> required "header" JD.string
         |> required "header_static" JD.string
-        |> optional "emojis" (JD.list emojiDecoder) []
+        |> required "emojis" (JD.list emojiDecoder)
         |> optional "moved"
             (JD.lazy
                 (\() ->
@@ -1496,7 +1496,7 @@ simpleStatusDecoder =
         |> required "id" JD.string
         |> required "uri" JD.string
         |> optional "url" (JD.nullable JD.string) Nothing
-        |> required "account" accountDecoder
+        |> required "account" possiblyBlankAccountDecoder
         |> optional "in_reply_to_id" (JD.nullable JD.string) Nothing
         |> optional "in_reply_to_account_id" (JD.nullable JD.string) Nothing
         |> optional "reblog"
