@@ -747,7 +747,7 @@ simplePostStatus status in_reply_to_id spoiler_text =
 
 {-| GET/POST /api/v1/timelines
 
-`GetHomeTimeline`, `GetPublicTimeline`, `GetTagTimeline`, and `GetListTimeline` result in a `StatusListEntity`.
+`GetHomeTimeline`, `GetPublicTimeline`, `GetProTimeline`, `GetTagTimeline`, and `GetListTimeline` result in a `StatusListEntity`.
 
 `GetConversations` results in a `ConversationListEntity`.
 
@@ -764,6 +764,10 @@ type TimelinesReq
     | GetPublicTimeline
         { local : Bool
         , only_media : Bool
+        , paging : Maybe Paging
+        }
+    | GetProTimeline
+        { only_media : Bool
         , paging : Maybe Paging
         }
     | GetTagTimeline
@@ -2722,6 +2726,19 @@ timelinesReq req res =
                             [ qps
                                 [ bp "local" local
                                 , bp "only_media" only_media
+                                ]
+                            , pagingParameters paging
+                            ]
+                , decoder = decoders.statusList
+            }
+
+        GetProTimeline { only_media, paging } ->
+            { res
+                | url =
+                    relative [ r, "pro" ] <|
+                        List.concat
+                            [ qps
+                                [ bp "only_media" only_media
                                 ]
                             , pagingParameters paging
                             ]

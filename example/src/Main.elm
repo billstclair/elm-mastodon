@@ -504,6 +504,7 @@ type Msg
     | SendGetHomeTimeline
     | SendGetConversations
     | SendGetPublicTimeline
+    | SendGetProTimeline
     | SendGetTagTimeline
     | SendGetListTimeline
     | SendGetGroupTimeline
@@ -2874,6 +2875,16 @@ updateInternal msg model =
                 )
                 model
 
+        SendGetProTimeline ->
+            sendRequest
+                (TimelinesRequest <|
+                    Request.GetProTimeline
+                        { only_media = model.onlyMedia
+                        , paging = pagingInputToPaging model.pagingInput
+                        }
+                )
+                model
+
         SendGetTagTimeline ->
             sendRequest
                 (TimelinesRequest <|
@@ -3345,6 +3356,9 @@ applyResponseSideEffects response model =
                             model
 
                 Request.GetPublicTimeline { paging } ->
+                    statusSmartPaging response.entity paging model
+
+                Request.GetProTimeline { paging } ->
                     statusSmartPaging response.entity paging model
 
                 Request.GetTagTimeline { paging } ->
@@ -5001,6 +5015,8 @@ timelinesSelectedUI model =
         , checkBox ToggleLocal model.local "local "
         , checkBox ToggleOnlyMedia model.onlyMedia "media only "
         , sendButton SendGetPublicTimeline model
+        , text " "
+        , sendButton SendGetProTimeline model
         , br
         , textInput "hashtag: " 30 SetHashtag model.hashtag
         , text " "
@@ -5608,6 +5624,8 @@ The "$GetHomeTimeline" button returns the statuses for those you follow.
 The "$GetConversations" button returns a list of conversations. I don't know what a conversation is, possibly the PM feature.
 
 The "$GetPublicTimeline" button returns the public timeline, with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
+
+The "$GetProTimeline" button returns the pro timeline (Gab-only), with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
 
 The "$GetTagTimeline" button returns posts containing the given "hashtag", with local posts only if "local" is checked, and with only posts containing media if "media only" is checked.
 
@@ -6245,6 +6263,7 @@ dollarButtonNameDict =
         , ( "GetHomeTimeline", SendGetHomeTimeline )
         , ( "GetConversations", SendGetConversations )
         , ( "GetPublicTimeline", SendGetPublicTimeline )
+        , ( "GetPublicTimeline", SendGetProTimeline )
         , ( "GetTagTimeline", SendGetTagTimeline )
         , ( "GetListTimeline", SendGetListTimeline )
         , ( "GetGroupTimeline", SendGetGroupTimeline )
@@ -6347,6 +6366,7 @@ buttonNameAlist =
     , ( SendGetHomeTimeline, ( "GetHomeTimeline", "GET timelines/home" ) )
     , ( SendGetConversations, ( "GetConversations", "GET conversations" ) )
     , ( SendGetPublicTimeline, ( "GetPublicTimeline", "GET timelines/public" ) )
+    , ( SendGetProTimeline, ( "GetProTimeline", "GET timelines/pro" ) )
     , ( SendGetTagTimeline, ( "GetTagTimeline", "GET timelines/tag/:tag" ) )
     , ( SendGetListTimeline, ( "GetListTimeline", "GET timeslines/list/:id" ) )
     , ( SendGetGroupTimeline, ( "GetGroupTimeline", "GET timelines/group/:id" ) )
