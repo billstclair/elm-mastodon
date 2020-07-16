@@ -1042,7 +1042,7 @@ encodeAttachment attachment =
         , ( "type", encodeAttachmentType attachment.type_ )
         , ( "url", JE.string attachment.url )
         , ( "remote_url", encodeMaybe JE.string attachment.remote_url )
-        , ( "preview_url", JE.string attachment.preview_url )
+        , ( "preview_url", encodeMaybe JE.string attachment.preview_url )
         , ( "text_url", encodeMaybe JE.string attachment.text_url )
         , ( "meta", encodeMaybe encodeMeta attachment.meta )
         , ( "description", encodeMaybe JE.string attachment.description )
@@ -1061,7 +1061,7 @@ attachmentDecoder =
                     |> custom (JD.succeed type_)
                     |> required "url" JD.string
                     |> optional "remote_url" (JD.nullable JD.string) Nothing
-                    |> required "preview_url" JD.string
+                    |> optional "preview_url" (JD.nullable JD.string) Nothing
                     |> optional "text_url" (JD.nullable JD.string) Nothing
                     |> optional "meta" (metaDecoder type_) Nothing
                     |> optional "description" (JD.nullable JD.string) Nothing

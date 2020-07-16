@@ -266,7 +266,7 @@ type alias Attachment =
     , type_ : AttachmentType
     , url : UrlString
     , remote_url : Maybe UrlString
-    , preview_url : UrlString
+    , preview_url : Maybe UrlString
     , text_url : Maybe UrlString
     , meta : Maybe Meta
     , description : Maybe String
