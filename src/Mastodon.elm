@@ -22,7 +22,7 @@ This module contains re-exposed versions of the most-used parts of
 
 To authorize access, you need to call the functions in `Mastodon.Login`.
 
-For API documentation, see <https://docs.joinmastodon.org/api/guidelines/>
+For API documentation, see <https://docs.joinmastodon.org/client/>
 
 
 # Types
