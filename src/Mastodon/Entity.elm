@@ -559,6 +559,7 @@ type alias Results =
     { accounts : List Account
     , statuses : List Status
     , hashtags : List String
+    , groups : List Group
     , v : Value
     }
 

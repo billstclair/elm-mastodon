@@ -2034,6 +2034,7 @@ encodeResults results =
         [ ( "accounts", JE.list encodeAccount results.accounts )
         , ( "statuses", JE.list encodeStatus results.statuses )
         , ( "hashtags", JE.list JE.string results.hashtags )
+        , ( "groups", JE.list encodeGroup results.groups )
         ]
 
 
@@ -2045,6 +2046,7 @@ resultsDecoder =
         |> required "accounts" (JD.list accountDecoder)
         |> required "statuses" (JD.list statusDecoder)
         |> required "hashtags" (JD.list JD.string)
+        |> optional "groups" (JD.list groupDecoder) []
         |> custom JD.value
 
 
