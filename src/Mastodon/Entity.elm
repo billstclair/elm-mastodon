@@ -642,6 +642,7 @@ type Visibility
     | UnlistedVisibility
     | PrivateVisibility
     | DirectVisibility
+    | PrivateGroupVisibility
 
 
 {-| ScheduledStatus entity.

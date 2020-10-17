@@ -482,7 +482,7 @@ type InstanceReq
 
 {-| GET/POST/PUT/DELETE /api/v1/lists
 
-`GetLists` and `GetAccountLists` result in a `ListEntityEntity`.
+`GetLists` and `GetAccountLists` result in a `ListEntityListEntity`.
 
 `GetListAccounts` results in an `AccountListEntity`.
 

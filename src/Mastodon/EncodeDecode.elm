@@ -1195,6 +1195,9 @@ encodeVisibility visibility =
             DirectVisibility ->
                 "direct"
 
+            PrivateGroupVisibility ->
+                "private_group"
+
 
 {-| Decode a `Visibility`.
 -}
@@ -1215,6 +1218,9 @@ visibilityDecoder =
 
                     "direct" ->
                         JD.succeed DirectVisibility
+
+                    "private_group" ->
+                        JD.succeed PrivateGroupVisibility
 
                     _ ->
                         JD.fail <| "Unknown Visibility: " ++ v

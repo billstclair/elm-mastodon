@@ -4807,6 +4807,7 @@ statusesSelectedUI model =
                 , visibilityRadio (Just UnlistedVisibility) model
                 , visibilityRadio (Just PrivateVisibility) model
                 , visibilityRadio (Just DirectVisibility) model
+                , visibilityRadio (Just PrivateGroupVisibility) model
                 , br
                 , textInput "scheduled at: " 40 SetScheduledAt model.scheduled_at
                 , br
@@ -4977,6 +4978,9 @@ visibilityToString visibility =
 
                 DirectVisibility ->
                     "direct "
+
+                PrivateGroupVisibility ->
+                    "private_group "
 
 
 visibilityRadio : Maybe Visibility -> Model -> Html Msg
