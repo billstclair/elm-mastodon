@@ -28,7 +28,7 @@ module Mastodon.EncodeDecode exposing
     , encodePoll, pollDecoder
     , encodeFilter, filterDecoder
     , encodeFilterContext, filterContextDecoder
-    , encodeInstance, instanceDecoder
+    , encodeInstance, instanceDecoder, defaultedInstance
     , encodeActivity, activityDecoder
     , encodeListEntity, listEntityDecoder
     , encodeNotification, notificationDecoder
@@ -76,7 +76,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodePoll, pollDecoder
 @docs encodeFilter, filterDecoder
 @docs encodeFilterContext, filterContextDecoder
-@docs encodeInstance, instanceDecoder
+@docs encodeInstance, instanceDecoder, defaultedInstance
 @docs encodeActivity, activityDecoder
 @docs encodeListEntity, listEntityDecoder
 @docs encodeNotification, notificationDecoder
@@ -1722,36 +1722,45 @@ instanceDecoder urlString =
                     realInstanceDecoder
 
                 else
-                    let
-                        url =
-                            case Url.fromString urlString of
-                                Just u ->
-                                    u
-
-                                Nothing ->
-                                    { protocol = Https
-                                    , host = urlString
-                                    , port_ = Nothing
-                                    , path = ""
-                                    , query = Nothing
-                                    , fragment = Nothing
-                                    }
-                    in
-                    JD.succeed
-                        { uri = urlString
-                        , title = url.host
-                        , description = url.host
-                        , email = url.host
-                        , version = "unknown"
-                        , thumbnail = Nothing
-                        , urls = Just <| defaultUrls url.host
-                        , stats = defaultStats
-                        , max_toot_chars = 3000 --magic number
-                        , languages = []
-                        , contact_account = Nothing
-                        , v = value
-                        }
+                    defaultedInstance urlString value |> JD.succeed
             )
+
+
+{-| Return the default instance for a URL string.
+
+Used for servers that return a malformed Instance or no JSON at all.
+
+-}
+defaultedInstance : String -> Value -> Instance
+defaultedInstance urlString value =
+    let
+        url =
+            case Url.fromString urlString of
+                Just u ->
+                    u
+
+                Nothing ->
+                    { protocol = Https
+                    , host = urlString
+                    , port_ = Nothing
+                    , path = ""
+                    , query = Nothing
+                    , fragment = Nothing
+                    }
+    in
+    { uri = urlString
+    , title = url.host
+    , description = url.host
+    , email = url.host
+    , version = "unknown"
+    , thumbnail = Nothing
+    , urls = Just <| defaultUrls url.host
+    , stats = defaultStats
+    , max_toot_chars = 3000 --magic number
+    , languages = []
+    , contact_account = Nothing
+    , v = value
+    }
 
 
 defaultUrls : String -> URLs

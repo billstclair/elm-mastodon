@@ -2,7 +2,7 @@
 --
 -- Request.elm
 -- Mastodon API requests.
--- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2019-2020 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE
@@ -981,7 +981,22 @@ processResponse rawRequest response =
         Http.GoodStatus_ metadata body ->
             case JD.decodeString rawRequest.decoder body of
                 Err err ->
-                    Err <| BadBody metadata err body
+                    case rawRequest.request of
+                        InstanceRequest GetInstance ->
+                            let
+                                entity =
+                                    ED.defaultedInstance rawRequest.url JE.null
+                                        |> InstanceEntity
+                            in
+                            Ok
+                                { request = rawRequest.request
+                                , rawRequest = rawRequest
+                                , metadata = metadata
+                                , entity = entity
+                                }
+
+                        _ ->
+                            Err <| BadBody metadata err body
 
                 Ok entity ->
                     Ok
