@@ -1692,23 +1692,25 @@ encodeInstance instance =
 
         Just urls ->
             JE.object <|
-                [ ( "uri", JE.string instance.uri )
-                , ( "title", JE.string instance.title )
-                , ( "description", JE.string instance.description )
-                , ( "email", JE.string instance.email )
-                , ( "version", JE.string instance.version )
-                , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
-                , ( "urls", encodeUrls urls )
-                , ( "stats", encodeStats instance.stats )
-                , ( "max_toot_chars", JE.int instance.max_toot_chars )
-                , ( "languages", JE.list JE.string instance.languages )
-                , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
-                ]
+                List.concat
+                    [ [ ( "uri", JE.string instance.uri )
+                      , ( "title", JE.string instance.title )
+                      , ( "description", JE.string instance.description )
+                      , ( "email", JE.string instance.email )
+                      , ( "version", JE.string instance.version )
+                      , ( "thumbnail", encodeMaybe JE.string instance.thumbnail )
+                      , ( "urls", encodeUrls urls )
+                      , ( "stats", encodeStats instance.stats )
+                      , ( "languages", JE.list JE.string instance.languages )
+                      , ( "contact_account", encodeMaybe encodeAccount instance.contact_account )
+                      ]
+                    , case instance.max_toot_chars of
+                        Nothing ->
+                            []
 
-
-default_max_toot_chars : Int
-default_max_toot_chars =
-    300
+                        Just max_toot_chars ->
+                            [ ( "max_toot_chars", JE.int max_toot_chars ) ]
+                    ]
 
 
 {-| Decode an `Instance`.
@@ -1756,7 +1758,7 @@ defaultedInstance urlString value =
     , thumbnail = Nothing
     , urls = Just <| defaultUrls url.host
     , stats = defaultStats
-    , max_toot_chars = 3000 --magic number
+    , max_toot_chars = Just 3000 --magic number
     , languages = []
     , contact_account = Nothing
     , v = value
@@ -1796,7 +1798,7 @@ realInstanceDecoder =
         |> optional "thumbnail" (JD.nullable JD.string) Nothing
         |> optional "urls" (JD.nullable urlsDecoder) Nothing
         |> optional "stats" statsDecoder defaultStats
-        |> optional "max_toot_chars" JD.int default_max_toot_chars
+        |> optional "max_toot_chars" (JD.nullable JD.int) Nothing
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value

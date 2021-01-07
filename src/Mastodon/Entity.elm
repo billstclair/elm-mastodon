@@ -426,7 +426,7 @@ type alias Instance =
     , thumbnail : Maybe UrlString
     , urls : Maybe URLs
     , stats : Stats
-    , max_toot_chars : Int
+    , max_toot_chars : Maybe Int
     , languages : List ISO6391
     , contact_account : Maybe Account
     , v : Value
