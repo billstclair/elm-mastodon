@@ -1,16 +1,18 @@
 module Mastodon.Login exposing
     ( FetchAccountOrRedirect(..), loginTask, getTokenTask
-    , encodeStateString, decodeStateString, appToAuthorizeUrl
+    , appToAuthorizeUrl
     )
 
 {-| Support for creating an `App` and logging in to a server.
+
+See <https://docs.joinmastodon.org/client/authorized/>
 
 @docs FetchAccountOrRedirect, loginTask, getTokenTask
 
 
 # Internal functions.
 
-@docs encodeStateString, decodeStateString, appToAuthorizeUrl
+@docs appToAuthorizeUrl
 
 -}
 
@@ -48,12 +50,13 @@ Returns a `Task` to either fetch an `Account` for a known authorization token,
 or to redirect to the authentication server to create a code with which
 to mint the token.
 
-If `maybeToken` is not `Nothing`, will attempt to get an
-`Account` using that token. If that fails, will
-return an error. If `maybeToken` is `Nothing`, will create a new `App`, and
-redirect to do authentication. When the application is restarted, with
-a `code` and `state` in the URL query, call `getTokenTask` to
-use those to mint a new token, and to use that to get an `Account`.
+If `maybeToken` is not `Nothing`, will attempt to get an `Account`
+using that token. If that fails, will return an error. If `maybeToken`
+is `Nothing`, will create a new `App`, and redirect to do
+authentication. When the application is restarted, with a `code` in
+the URL query, call `getTokenTask` to use that code and the saved
+`App` instance to mint a new token, and to use that to get an
+`Account`.
 
 Usually, you will get a `Token` from persistent
 `localStorage`, pass that here, and successfully receive the `Account`
@@ -67,31 +70,37 @@ be passed as a parameter.
 
 The full login procedure is as follows:
 
-1.  Send "POST /api/v1/apps" to the Mastodon server, via a `PostApp` request.
+1.  Send "POST /api/v1/apps" to the Mastodon server, via a `PostApp` request,
 
-2.  Receive the returned `client_id` and `client_secret`
+2.  Receive the returned App, including `client_id` and `client_secret`.
+    Save it in localStorage, keyed with the Mastodon server's host name
+    (from `applicationUri`).
 
-3.  Redirect to `<server_url>/oauth/authorize?client_id=<client_id>&redirect_uri=<client_uri>&response_type=code&scope=<scopes>&state=<state>`
+3.  Redirect to `<server_url>/oauth/authorize?client_id=<client_id>&redirect_uri=<applicationUri>&response_type=code&scope=<scopes>`
 
 4.  The user enters login authorization information to the server web site.
 
-5.  The server web site redirects to `<redirect_uri>?code=<code>&state=<state>`
+5.  The server web site redirects to `<applicationUri>?code=<code>`
 
-6.  The `<state>` encodes the server uri, `<client_id>`, `<client_secret>`, and `<scopes>`.
+6.  Lookup the saved `App` instance using the Mastodon server's host name
+    (which your top-level application must persist somewhere).
     Use that to POST to `<server_url>/oauth/token`:
 
         POST /oauth/token HTTP/1.1
         Host: <server_url>
         Authorization: Basic `(Base64.encode (<client_id> ++ ":" ++ <client_secret>))`
         Content-Type: application/x-www-form-urlencoded
+        grant_type=authorization_code&code=<code>&redirect_uri=<applicationUri>&client_id=<client_id>&client_secret=<client_secret>
 
-        grant_type=authorization_code&code=<code>&redirect_uri=<client_uri>
+    The `Authorization` header isn't needed for new Mastodon API servers,
+    but that's how it was done for old ones, so I'm hoping this will give
+    some backward compatibility.
 
 7.  Receive back token information, JSON-encoded:
 
         { "access_token":"cptLSO8ff7zKbBXlTTyH15bnxQS5b9erVUWi_n0_EGd",
           "token_type":"Bearer",
-          "scope":"write,read,follow,push"
+          "scope":"write,read,follow,push",
           "created_at":1561845912
         }
 
@@ -196,10 +205,9 @@ Returns:
        &redirect_uri=<app.redirect_uri>
        &response_type=code
        &scope=<all scopes>
-       &state=<encodeStateString server app>
 
-You will call this only when a token expires, and you need to mint a new one
-from a previously created `App`:
+You will call this explicitly only when a token expires, and you need
+to mint a new one from a previously created `App`:
 
     appToAuthorizeUrl server app
         |> Browser.Navigation.load
@@ -214,50 +222,7 @@ appToAuthorizeUrl server app =
         , Builder.string "redirect_uri" app.redirect_uri
         , Builder.string "response_type" "code"
         , Builder.string "scope" <| String.join " " scopes
-        , Builder.string "state" <| encodeStateString server app
         ]
-
-
-{-| Convert a server domain and a `Mastodon.Entity.App` into a `state` string.
-
-You will rarely, if ever, call this explicitly. It is exposed for debugging.
-
--}
-encodeStateString : String -> App -> String
-encodeStateString server app =
-    JE.object
-        [ ( "server", JE.string server )
-        , ( "app", ED.encodeApp app )
-        ]
-        |> JE.encode 0
-        |> Base64.encode
-
-
-{-| Decode the string created by `encodeStateString`.
-
-You will rarely, if ever, call this explicitly. It is exposed for debugging.
-
--}
-decodeStateString : String -> Result String ( String, App )
-decodeStateString string =
-    case Base64.decode string of
-        Err err ->
-            Err err
-
-        Ok s ->
-            case JD.decodeString stateStringDecoder s of
-                Err err ->
-                    Err <| JD.errorToString err
-
-                Ok res ->
-                    Ok res
-
-
-stateStringDecoder : Decoder ( String, App )
-stateStringDecoder =
-    JD.map2 (\server app -> ( server, app ))
-        (JD.field "server" JD.string)
-        (JD.field "app" ED.appDecoder)
 
 
 {-| Continue after being restarted with a `code` and `state` in the URL query.
@@ -271,68 +236,63 @@ the next time the user starts the application, as a parameter to `loginTask`.
 The `String` in the `Task` is the server name, e.g. "mastodon.social".
 
 -}
-getTokenTask : { code : String, state : String } -> Task ( String, Error ) ( String, Authorization, Account )
-getTokenTask { code, state } =
-    case decodeStateString state of
-        Err _ ->
-            Task.fail
-                ( "", BadUrl "Cannot decode <state> from authentication server." )
+getTokenTask : { code : String, server : String, app : App } -> Task ( String, Error ) ( String, Authorization, Account )
+getTokenTask { code, server, app } =
+    let
+        { client_id, client_secret, redirect_uri } =
+            app
+    in
+    Http.task
+        { method = "POST"
+        , headers =
+            [ Http.header "Authorization" <|
+                "Basic "
+                    ++ (Base64.encode <| client_id ++ ":" ++ client_secret)
+            ]
+        , url =
+            Builder.crossOrigin ("https://" ++ server)
+                [ "oauth", "token" ]
+                []
+        , body =
+            Http.stringBody "application/x-www-form-urlencoded" <|
+                ([ Builder.string "grant_type" "authorization_code"
+                 , Builder.string "client_id" client_id
+                 , Builder.string "client_secret" client_secret
+                 , Builder.string "redirect_uri" redirect_uri
+                 , Builder.string "code" code
+                 ]
+                    |> Builder.toQuery
+                    |> String.dropLeft 1
+                )
+        , resolver =
+            Http.stringResolver <|
+                receiveAuthorization client_id client_secret
+        , timeout = Nothing
+        }
+        |> Task.mapError (\err -> ( server, err ))
+        |> Task.andThen
+            (\authorization ->
+                AccountsRequest GetVerifyCredentials
+                    |> Request.requestToRawRequest []
+                        { server = server
+                        , token = Just authorization.token
+                        }
+                    |> Request.rawRequestToTask
+                    |> Task.mapError (\err -> ( server, err ))
+                    |> Task.andThen
+                        (\response ->
+                            case response.entity of
+                                AccountEntity account ->
+                                    Task.succeed
+                                        ( server, authorization, account )
 
-        Ok ( server, app ) ->
-            let
-                { client_id, client_secret, redirect_uri } =
-                    app
-            in
-            Http.task
-                { method = "POST"
-                , headers =
-                    [ Http.header "Authorization" <|
-                        "Basic "
-                            ++ (Base64.encode <| client_id ++ ":" ++ client_secret)
-                    ]
-                , url =
-                    Builder.crossOrigin ("https://" ++ server)
-                        [ "oauth", "token" ]
-                        []
-                , body =
-                    Http.stringBody "application/x-www-form-urlencoded" <|
-                        ([ Builder.string "grant_type" "authorization_code"
-                         , Builder.string "client_id" client_id
-                         , Builder.string "redirect_uri" redirect_uri
-                         , Builder.string "code" code
-                         ]
-                            |> Builder.toQuery
-                            |> String.dropLeft 1
+                                _ ->
+                                    Task.fail
+                                        ( server
+                                        , BadUrl "Wrong entity type."
+                                        )
                         )
-                , resolver =
-                    Http.stringResolver <|
-                        receiveAuthorization client_id client_secret
-                , timeout = Nothing
-                }
-                |> Task.mapError (\err -> ( server, err ))
-                |> Task.andThen
-                    (\authorization ->
-                        AccountsRequest GetVerifyCredentials
-                            |> Request.requestToRawRequest []
-                                { server = server
-                                , token = Just authorization.token
-                                }
-                            |> Request.rawRequestToTask
-                            |> Task.mapError (\err -> ( server, err ))
-                            |> Task.andThen
-                                (\response ->
-                                    case response.entity of
-                                        AccountEntity account ->
-                                            Task.succeed
-                                                ( server, authorization, account )
-
-                                        _ ->
-                                            Task.fail
-                                                ( server
-                                                , BadUrl "Wrong entity type."
-                                                )
-                                )
-                    )
+            )
 
 
 type alias RawToken =

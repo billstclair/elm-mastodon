@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Main exposing (dollarButtonNameToMsg, dollarButtonNameToSendName, emptyUrl, main, parseQuery, receiveCodeAndState, replaceSendButtonNames, sendButtonName)
+module Main exposing (dollarButtonNameToMsg, dollarButtonNameToSendName, emptyUrl, main, parseQuery, receiveCodeOrError, replaceSendButtonNames, sendButtonName)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Dom as Dom
@@ -235,6 +235,7 @@ type alias Model =
     , scheduledStatusId : String
 
     -- Non-persistent below here
+    , code : Maybe String
     , dialog : Dialog
     , altKeyDown : Bool
     , request : Maybe RawRequest
@@ -596,39 +597,34 @@ parseQuery queryString =
         |> Maybe.withDefault (CodeErrorState Nothing Nothing Nothing)
 
 
-type CodeAndState
-    = CodeAndState String (Maybe String)
-    | CodeErrorAndState String (Maybe String)
+type CodeOrError
+    = CodeCode String
+    | CodeError String
     | NoCode
 
 
-{-| This recognizes `?code=<code>&state=<state>` or `?error=<error>&state=<state>`
+{-| This recognizes `?code=<code>` or `?error=<error>`
 
 in the URL from the redirect from authentication.
 
 -}
-receiveCodeAndState : Url -> CodeAndState
-receiveCodeAndState url =
+receiveCodeOrError : Url -> CodeOrError
+receiveCodeOrError url =
     case url.query of
         Nothing ->
             NoCode
 
         Just q ->
             case parseQuery q of
-                { code, error, state } ->
+                { code, error } ->
                     case code of
                         Just cod ->
-                            case state of
-                                Just st ->
-                                    CodeAndState cod state
-
-                                Nothing ->
-                                    CodeErrorAndState "Missing state with code" code
+                            CodeCode cod
 
                         Nothing ->
                             case error of
                                 Just err ->
-                                    CodeErrorAndState err state
+                                    CodeError err
 
                                 Nothing ->
                                     NoCode
@@ -645,16 +641,16 @@ init value url key =
                 Ok hide ->
                     hide
 
-        ( code, state, msg ) =
-            case receiveCodeAndState url of
-                CodeAndState cod stat ->
-                    ( Just cod, stat, Nothing )
+        ( code, msg ) =
+            case receiveCodeOrError url of
+                CodeCode cod ->
+                    ( Just cod, Nothing )
 
-                CodeErrorAndState m stat ->
-                    ( Nothing, stat, Just m )
+                CodeError m ->
+                    ( Nothing, Just m )
 
                 NoCode ->
-                    ( Nothing, Nothing, Nothing )
+                    ( Nothing, Nothing )
     in
     { token = Nothing
     , server = ""
@@ -700,6 +696,7 @@ init value url key =
     , scheduledStatusId = ""
 
     -- Non-persistent below here
+    , code = code
     , dialog = NoDialog
     , altKeyDown = False
     , request = Nothing
@@ -761,15 +758,12 @@ init value url key =
         -- we'll load the saved model,
         -- and then all the saved tokens.
         -- See `storageHandler` below, `get pk.model`.
+        -- If there was a `code`, receiving the saved model will
+        -- load the saved `App` (saved by the `putApp` call in the
+        -- `ReceiveRedirect` message handler), and receiving that will
+        -- do `Login.getTokenTask`.
         |> withCmds
             [ Navigation.replaceUrl key url.path
-            , case ( code, state ) of
-                ( Just cod, Just st ) ->
-                    Login.getTokenTask { code = cod, state = st }
-                        |> Task.attempt ReceiveAuthorization
-
-                _ ->
-                    Cmd.none
             ]
 
 
@@ -897,11 +891,17 @@ handleGetModel maybeValue model =
                         , msg = Nothing
                     }
                         |> withCmd
-                            (if mdl.loginServer == Nothing then
-                                Task.perform SetServer <| Task.succeed mdl.server
+                            (case model.loginServer of
+                                Nothing ->
+                                    Task.perform SetServer <| Task.succeed mdl.server
 
-                             else
-                                getVerifyCredentials mdl
+                                Just server ->
+                                    case model.code of
+                                        Nothing ->
+                                            getVerifyCredentials mdl
+
+                                        Just code ->
+                                            getApp server
                             )
 
 
@@ -928,6 +928,30 @@ handleGetToken key value model =
                 |> withNoCmd
 
 
+handleGetApp : String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetApp key value model =
+    case JD.decodeValue ED.appDecoder value of
+        Err err ->
+            let
+                ignore =
+                    Debug.log ("Error Decoding " ++ key) err
+            in
+            model |> withNoCmd
+
+        Ok app ->
+            { model | code = Nothing }
+                |> withCmd
+                    (case ( model.code, model.loginServer ) of
+                        ( Just code, Just server ) ->
+                            Login.getTokenTask
+                                { code = code, server = server, app = app }
+                                |> Task.attempt ReceiveAuthorization
+
+                        _ ->
+                            Cmd.none
+                    )
+
+
 handleGetResponse : Maybe String -> String -> Maybe Value -> Model -> ( Model, Cmd Msg )
 handleGetResponse maybeLabel key maybeValue model =
     case maybeLabel of
@@ -946,6 +970,9 @@ handleGetResponse maybeLabel key maybeValue model =
                 Just value ->
                     if label == pk.token then
                         handleGetToken key value model
+
+                    else if label == pk.app then
+                        handleGetApp key value model
 
                     else
                         model |> withNoCmd
@@ -1396,8 +1423,14 @@ updateInternal msg model =
                     )
 
                 Ok ( server, app, cmd ) ->
-                    { model | msg = Nothing }
-                        |> withCmd cmd
+                    { model
+                        | msg = Nothing
+                        , loginServer = Just server
+                    }
+                        |> withCmds
+                            [ cmd
+                            , putApp server <| Just app
+                            ]
 
         ReceiveAuthorization result ->
             case result of
@@ -6119,6 +6152,32 @@ putToken server token =
                 Just <| JE.string tok
 
 
+appStorageKey : String -> String
+appStorageKey server =
+    pk.app ++ "." ++ server
+
+
+appStorageKeyServer : String -> String
+appStorageKeyServer key =
+    String.dropLeft (String.length pk.app + 1) key
+
+
+getApp : String -> Cmd Msg
+getApp server =
+    getLabeled pk.app <| appStorageKey server
+
+
+putApp : String -> Maybe App -> Cmd Msg
+putApp server maybeApp =
+    put (appStorageKey server) <|
+        case maybeApp of
+            Nothing ->
+                Nothing
+
+            Just app ->
+                Just <| ED.encodeApp app
+
+
 clear : Cmd Msg
 clear =
     localStorageSend (LocalStorage.clear "")
@@ -6168,6 +6227,7 @@ funnelDict =
 pk =
     { model = "model"
     , token = "token"
+    , app = "app"
     }
 
 
