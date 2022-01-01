@@ -642,15 +642,16 @@ init value url key =
                     hide
 
         ( code, msg ) =
-            case receiveCodeOrError url of
-                CodeCode cod ->
-                    ( Just cod, Nothing )
+            Debug.log "receiveCodeOrError" <|
+                case receiveCodeOrError (Debug.log "url" url) of
+                    CodeCode cod ->
+                        ( Just cod, Nothing )
 
-                CodeError m ->
-                    ( Nothing, Just m )
+                    CodeError m ->
+                        ( Nothing, Just m )
 
-                NoCode ->
-                    ( Nothing, Nothing )
+                    NoCode ->
+                        ( Nothing, Nothing )
     in
     { token = Nothing
     , server = ""
@@ -891,17 +892,17 @@ handleGetModel maybeValue model =
                         , msg = Nothing
                     }
                         |> withCmd
-                            (case model.loginServer of
+                            (case model.code of
+                                Just code ->
+                                    getApp mdl.server
+
                                 Nothing ->
-                                    Task.perform SetServer <| Task.succeed mdl.server
-
-                                Just server ->
-                                    case model.code of
+                                    case model.loginServer of
                                         Nothing ->
-                                            getVerifyCredentials mdl
+                                            Task.perform SetServer <| Task.succeed mdl.server
 
-                                        Just code ->
-                                            getApp server
+                                        Just server ->
+                                            getVerifyCredentials mdl
                             )
 
 
@@ -939,17 +940,22 @@ handleGetApp key value model =
             model |> withNoCmd
 
         Ok app ->
-            { model | code = Nothing }
-                |> withCmd
-                    (case ( model.code, model.loginServer ) of
-                        ( Just code, Just server ) ->
+            case model.code of
+                Just code ->
+                    let
+                        server =
+                            appStorageKeyServer key
+
+                        cmd =
                             Login.getTokenTask
                                 { code = code, server = server, app = app }
                                 |> Task.attempt ReceiveAuthorization
+                    in
+                    { model | code = Nothing }
+                        |> withCmd cmd
 
-                        _ ->
-                            Cmd.none
-                    )
+                _ ->
+                    model |> withNoCmd
 
 
 handleGetResponse : Maybe String -> String -> Maybe Value -> Model -> ( Model, Cmd Msg )
@@ -1694,7 +1700,13 @@ updateInternal msg model =
                         , msg = Nothing
                     }
                         |> updatePatchCredentialsInputs
-                        |> withCmd (putToken server Nothing)
+                        |> withCmds
+                            [ putToken server Nothing
+
+                            -- Maybe should keep this and use it at next login
+                            -- instead of minting a new one.
+                            , putApp server Nothing
+                            ]
 
         ClearAll ->
             let
