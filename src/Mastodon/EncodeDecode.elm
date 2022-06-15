@@ -1789,7 +1789,12 @@ justDecoder decoder =
 
 realInstanceDecoder : Decoder Instance
 realInstanceDecoder =
-    JD.succeed Instance
+    ( JD.oneOf
+        [ JD.at [ "configuration", "statuses", "max_characters" ] JD.int
+            |> JD.map Just
+        , JD.succeed Nothing
+        ]
+    , JD.succeed Instance
         |> required "uri" JD.string
         |> required "title" JD.string
         |> required "description" JD.string
@@ -1802,6 +1807,24 @@ realInstanceDecoder =
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value
+    )
+        |> (\( mcd, instanced ) ->
+                instanced
+                    |> JD.andThen
+                        (\instance ->
+                            case instance.max_toot_chars of
+                                Just _ ->
+                                    JD.succeed instance
+
+                                Nothing ->
+                                    mcd
+                                        |> JD.andThen
+                                            (\mc ->
+                                                JD.succeed
+                                                    { instance | max_toot_chars = mc }
+                                            )
+                        )
+           )
 
 
 {-| Encode an `Activity`.
