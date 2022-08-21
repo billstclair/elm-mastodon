@@ -1895,6 +1895,9 @@ notificationTypeToString notificationType =
         PollNotification ->
             "poll"
 
+        FollowRequestNotification ->
+            "follow_request"
+
         UnknownNotification name ->
             name
 
@@ -1928,6 +1931,9 @@ notificationTypeDecoder =
 
                     "poll" ->
                         JD.succeed PollNotification
+
+                    "follow_request" ->
+                        JD.succeed FollowRequestNotification
 
                     _ ->
                         JD.succeed <| UnknownNotification t

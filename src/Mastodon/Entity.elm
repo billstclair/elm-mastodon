@@ -501,6 +501,7 @@ type NotificationType
     | ReblogNotification
     | FavouriteNotification
     | PollNotification
+    | FollowRequestNotification
     | UnknownNotification String
 
 
