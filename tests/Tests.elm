@@ -431,6 +431,9 @@ entityData =
     , NotificationEntity notification2
     , NotificationEntity notification3
     , NotificationEntity notification4
+    , NotificationEntity notification5
+    , NotificationEntity notification6
+    , NotificationEntity notification7
     , PushSubscriptionEntity pushSubscription1
     , RelationshipEntity relationship1
     , RelationshipEntity relationship2
@@ -690,6 +693,27 @@ notification4 : Notification
 notification4 =
     { notification2
         | type_ = FavouriteNotification
+    }
+
+
+notification5 : Notification
+notification5 =
+    { notification2
+        | type_ = PollNotification
+    }
+
+
+notification6 : Notification
+notification6 =
+    { notification2
+        | type_ = FollowRequestNotification
+    }
+
+
+notification7 : Notification
+notification7 =
+    { notification2
+        | type_ = UnknownNotification "foo"
     }
 
 
