@@ -501,6 +501,7 @@ type NotificationType
     | ReblogNotification
     | FavouriteNotification
     | PollNotification
+    | UnknownNotification String
 
 
 {-| Value for `Status.poll`, and an `Entity` in its own right.

@@ -1895,6 +1895,9 @@ notificationTypeToString notificationType =
         PollNotification ->
             "poll"
 
+        UnknownNotification name ->
+            name
+
 
 {-| Encode a `NotificationType`.
 -}
@@ -1927,7 +1930,7 @@ notificationTypeDecoder =
                         JD.succeed PollNotification
 
                     _ ->
-                        JD.fail <| "Unknown NotificationType: " ++ t
+                        JD.succeed <| UnknownNotification t
             )
 
 
