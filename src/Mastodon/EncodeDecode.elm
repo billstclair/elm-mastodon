@@ -319,9 +319,9 @@ entityDecoder urlString =
         , contextDecoder |> JD.map ContextEntity
         , emojiDecoder |> JD.map EmojiEntity
         , JD.list emojiDecoder |> JD.map EmojiListEntity
-        , statusDecoder |> JD.map StatusEntity
+        , canFailStatusDecoder |> JD.map StatusEntity
         , pollDecoder |> JD.map PollEntity
-        , JD.list statusDecoder |> JD.map StatusListEntity
+        , JD.list canFailStatusDecoder |> JD.map StatusListEntity
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
         , activityDecoder |> JD.map ActivityEntity
@@ -1490,6 +1490,60 @@ rawStatusDecoder =
         |> custom JD.value
 
 
+canFailStatusDecoder : Decoder Status
+canFailStatusDecoder =
+    let
+        defaultStatus id uri url account =
+            { id = id
+            , uri = uri
+            , url = url
+            , account = account
+            , in_reply_to_id = Nothing
+            , in_reply_to_account_id = Nothing
+            , reblog = Nothing
+            , content = "*** This status was malformed, id: " ++ id ++ " ***"
+            , plain_markdown = Nothing
+            , plain_text = Nothing
+            , created_at = ""
+            , emojis = []
+            , replies_count = 0
+            , reblogs_count = 0
+            , favourites_count = 0
+            , reblogged = False
+            , favourited = False
+            , muted = False
+            , sensitive = False
+            , spoiler_text = ""
+            , visibility = PublicVisibility
+            , media_attachments = []
+            , mentions = []
+            , tags = []
+            , card = Nothing
+            , poll = Nothing
+            , application = Nothing
+            , language = Nothing
+            , pinned = False
+            , group = Nothing
+            , quote_of_id = Nothing
+            , quote = Nothing
+            , v = JE.null
+            }
+    in
+    JD.oneOf
+        [ statusDecoder
+        , JD.succeed defaultStatus
+            |> required "ID" JD.string
+            |> optional "uri" JD.string ""
+            |> optional "url" (JD.nullable JD.string) Nothing
+            |> required "account"
+                (JD.oneOf
+                    [ possiblyBlankAccountDecoder
+                    , JD.succeed emptyAccount
+                    ]
+                )
+        ]
+
+
 {-| Just decode the fields that are supported by all servers.
 
 The `content` field means different things on some servers, so use
@@ -1509,7 +1563,7 @@ simpleStatusDecoder =
             (JD.lazy
                 (\() ->
                     JD.nullable
-                        (statusDecoder |> JD.map WrappedStatus)
+                        (canFailStatusDecoder |> JD.map WrappedStatus)
                 )
             )
             Nothing
@@ -1542,7 +1596,7 @@ simpleStatusDecoder =
             (JD.nullable <|
                 JD.lazy
                     (\_ ->
-                        statusDecoder
+                        canFailStatusDecoder
                             |> JD.map
                                 (\s -> WrappedStatus s)
                     )
@@ -2011,7 +2065,7 @@ notificationDecoder =
         |> required "type" notificationTypeDecoder
         |> required "created_at" JD.string
         |> required "account" possiblyBlankAccountDecoder
-        |> optional "status" (JD.nullable statusDecoder) Nothing
+        |> optional "status" (JD.nullable canFailStatusDecoder) Nothing
         |> custom JD.value
 
 
@@ -2093,7 +2147,7 @@ resultsDecoder : Decoder Results
 resultsDecoder =
     JD.succeed Results
         |> required "accounts" (JD.list accountDecoder)
-        |> required "statuses" (JD.list statusDecoder)
+        |> required "statuses" (JD.list canFailStatusDecoder)
         |> required "hashtags" (JD.list JD.string)
         |> optional "groups" (JD.list groupDecoder) []
         |> custom JD.value
@@ -2178,7 +2232,7 @@ conversationDecoder =
     JD.succeed Conversation
         |> required "id" JD.string
         |> required "accounts" (JD.list accountDecoder)
-        |> optional "last_status" (JD.nullable statusDecoder) Nothing
+        |> optional "last_status" (JD.nullable canFailStatusDecoder) Nothing
         |> required "unread" JD.bool
         |> custom JD.value
 
