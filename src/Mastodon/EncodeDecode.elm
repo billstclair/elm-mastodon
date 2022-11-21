@@ -1272,7 +1272,7 @@ tagDecoder : Decoder Tag
 tagDecoder =
     JD.succeed Tag
         |> required "name" JD.string
-        |> required "url" JD.string
+        |> optional "url" JD.string ""
         |> optional "history" (JD.list historyDecoder) []
 
 
