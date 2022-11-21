@@ -3,7 +3,7 @@
     "name": "billstclair/elm-mastodon",
     "summary": "Elm client for the Mastodon social network.",
     "license": "MIT",
-    "version": "13.0.1",
+    "version": "13.0.2",
     "exposed-modules": [
         "Mastodon",
         "Mastodon.Entity",
