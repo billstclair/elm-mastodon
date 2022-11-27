@@ -638,6 +638,23 @@ encodeAccount account =
             ]
 
 
+jsIntDecoder : Decoder Int
+jsIntDecoder =
+    JD.oneOf
+        [ JD.int
+        , JD.string
+            |> JD.andThen
+                (\s ->
+                    case String.toInt s of
+                        Nothing ->
+                            JD.fail <| "Not an integer string: " ++ s
+
+                        Just i ->
+                            JD.succeed i
+                )
+        ]
+
+
 {-| Decode an `Account`.
 -}
 accountDecoder : Decoder Account
@@ -649,9 +666,9 @@ accountDecoder =
         |> required "display_name" JD.string
         |> required "locked" JD.bool
         |> required "created_at" JD.string
-        |> required "followers_count" JD.int
-        |> required "following_count" JD.int
-        |> required "statuses_count" JD.int
+        |> required "followers_count" jsIntDecoder
+        |> required "following_count" jsIntDecoder
+        |> required "statuses_count" jsIntDecoder
         |> required "note" JD.string
         |> required "url" JD.string
         |> required "avatar" JD.string
@@ -846,7 +863,7 @@ tokenDecoder =
         |> required "access_token" JD.string
         |> required "token_type" JD.string
         |> required "scope" JD.string
-        |> required "created_at" JD.int
+        |> required "created_at" jsIntDecoder
         |> custom JD.value
 
 
@@ -974,8 +991,8 @@ encodeImageMetaInfo { width, height, size, aspect } =
 imageMetaInfoDecoder : Decoder ImageMetaInfo
 imageMetaInfoDecoder =
     JD.succeed ImageMetaInfo
-        |> optional "width" (JD.nullable JD.int) Nothing
-        |> optional "height" (JD.nullable JD.int) Nothing
+        |> optional "width" (JD.nullable jsIntDecoder) Nothing
+        |> optional "height" (JD.nullable jsIntDecoder) Nothing
         |> optional "size" (JD.nullable JD.string) Nothing
         |> optional "aspect" (JD.nullable JD.float) Nothing
 
@@ -1011,11 +1028,11 @@ encodeVideoMetaInfo { width, height, frame_rate, duration, bitrate } =
 videoMetaInfoDecoder : Decoder VideoMetaInfo
 videoMetaInfoDecoder =
     JD.succeed VideoMetaInfo
-        |> optional "width" (JD.nullable JD.int) Nothing
-        |> optional "height" (JD.nullable JD.int) Nothing
+        |> optional "width" (JD.nullable jsIntDecoder) Nothing
+        |> optional "height" (JD.nullable jsIntDecoder) Nothing
         |> optional "frame_rate" (JD.nullable JD.string) Nothing
         |> optional "duration" (JD.nullable JD.float) Nothing
-        |> optional "bitrate" (JD.nullable JD.int) Nothing
+        |> optional "bitrate" (JD.nullable jsIntDecoder) Nothing
 
 
 encodeFocus : Focus -> Value
@@ -1148,8 +1165,8 @@ cardDecoder =
         |> optional "provider_name" (JD.nullable JD.string) Nothing
         |> optional "provider_url" (JD.nullable JD.string) Nothing
         |> optional "html" (JD.nullable JD.string) Nothing
-        |> optional "width" (JD.nullable JD.int) Nothing
-        |> optional "height" (JD.nullable JD.int) Nothing
+        |> optional "width" (JD.nullable jsIntDecoder) Nothing
+        |> optional "height" (JD.nullable jsIntDecoder) Nothing
         |> custom JD.value
 
 
@@ -1340,7 +1357,7 @@ pollDecoder =
         |> optional "expires_at" (JD.nullable JD.string) Nothing
         |> required "expired" JD.bool
         |> required "multiple" JD.bool
-        |> required "votes_count" JD.int
+        |> required "votes_count" jsIntDecoder
         |> required "options" (JD.list pollOptionDecoder)
         |> optional "voted" optionalBoolDecoder False
         |> custom JD.value
@@ -1359,7 +1376,7 @@ pollOptionDecoder =
     JD.succeed PollOption
         |> required "title" JD.string
         |> optional "votes_count"
-            (JD.nullable JD.int
+            (JD.nullable jsIntDecoder
                 |> JD.andThen (Maybe.withDefault 0 >> JD.succeed)
             )
             0
@@ -1573,9 +1590,9 @@ simpleStatusDecoder =
         -- plain_text
         |> required "created_at" JD.string
         |> required "emojis" (JD.list emojiDecoder)
-        |> required "replies_count" JD.int
-        |> required "reblogs_count" JD.int
-        |> required "favourites_count" JD.int
+        |> required "replies_count" jsIntDecoder
+        |> required "reblogs_count" jsIntDecoder
+        |> required "favourites_count" jsIntDecoder
         |> optional "reblogged" optionalBoolDecoder False
         |> optional "favourited" optionalBoolDecoder False
         |> optional "muted" optionalBoolDecoder False
@@ -1731,9 +1748,9 @@ encodeStats { user_count, status_count, domain_count } =
 statsDecoder : Decoder Stats
 statsDecoder =
     JD.succeed Stats
-        |> required "user_count" JD.int
-        |> required "status_count" JD.int
-        |> required "domain_count" JD.int
+        |> required "user_count" jsIntDecoder
+        |> required "status_count" jsIntDecoder
+        |> required "domain_count" jsIntDecoder
 
 
 {-| Encode an `Instance`.
@@ -1844,7 +1861,7 @@ justDecoder decoder =
 realInstanceDecoder : Decoder Instance
 realInstanceDecoder =
     ( JD.oneOf
-        [ JD.at [ "configuration", "statuses", "max_characters" ] JD.int
+        [ JD.at [ "configuration", "statuses", "max_characters" ] jsIntDecoder
             |> JD.map Just
         , JD.succeed Nothing
         ]
@@ -1857,7 +1874,7 @@ realInstanceDecoder =
         |> optional "thumbnail" (JD.nullable JD.string) Nothing
         |> optional "urls" (JD.nullable urlsDecoder) Nothing
         |> optional "stats" statsDecoder defaultStats
-        |> optional "max_toot_chars" (JD.nullable JD.int) Nothing
+        |> optional "max_toot_chars" (JD.nullable jsIntDecoder) Nothing
         |> required "languages" (JD.list JD.string)
         |> optional "contact_account" (JD.nullable accountDecoder) Nothing
         |> custom JD.value
@@ -2184,7 +2201,7 @@ statusParamsDecoder =
         |> required "application_id"
             (JD.oneOf
                 [ JD.string
-                , JD.int |> JD.andThen (\i -> JD.succeed <| String.fromInt i)
+                , jsIntDecoder |> JD.andThen (\i -> JD.succeed <| String.fromInt i)
                 ]
             )
 
@@ -2261,7 +2278,7 @@ groupDecoder =
         |> required "description" JD.string
         |> required "cover_image_url" JD.string
         |> required "is_archived" JD.bool
-        |> required "member_count" JD.int
+        |> required "member_count" jsIntDecoder
         |> custom JD.value
 
 
@@ -2285,7 +2302,7 @@ groupRelationshipDecoder =
         |> required "id" JD.string
         |> required "member" JD.bool
         |> required "admin" JD.bool
-        |> required "unread_count" JD.int
+        |> required "unread_count" jsIntDecoder
         |> custom JD.value
 
 
