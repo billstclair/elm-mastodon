@@ -730,12 +730,20 @@ appDecoder =
 -}
 encodeEmoji : Emoji -> Value
 encodeEmoji emoji =
-    JE.object
-        [ ( "shortcode", JE.string emoji.shortcode )
-        , ( "static_url", JE.string emoji.static_url )
-        , ( "url", JE.string emoji.url )
-        , ( "visible_in_picker", JE.bool emoji.visible_in_picker )
-        ]
+    JE.object <|
+        List.concat
+            [ [ ( "shortcode", JE.string emoji.shortcode )
+              , ( "static_url", JE.string emoji.static_url )
+              , ( "url", JE.string emoji.url )
+              , ( "visible_in_picker", JE.bool emoji.visible_in_picker )
+              ]
+            , case emoji.category of
+                Nothing ->
+                    []
+
+                Just category ->
+                    [ ( "category", JE.string category ) ]
+            ]
 
 
 {-| Decode an `Emoji`.
@@ -747,6 +755,7 @@ emojiDecoder =
         |> required "static_url" JD.string
         |> required "url" JD.string
         |> required "visible_in_picker" JD.bool
+        |> optional "category" (JD.nullable JD.string) Nothing
 
 
 {-| Encode a `Field`.
@@ -1337,8 +1346,11 @@ encodePoll poll =
         , ( "expired", JE.bool poll.expired )
         , ( "multiple", JE.bool poll.multiple )
         , ( "votes_count", JE.int poll.votes_count )
+        , ( "voters_count", encodeMaybe JE.int poll.voters_count )
         , ( "options", JE.list encodePollOption poll.options )
+        , ( "emojis", JE.list encodeEmoji poll.emojis )
         , ( "voted", JE.bool poll.voted )
+        , ( "own_votes", JE.list JE.int poll.own_votes )
         ]
 
 
@@ -1358,8 +1370,11 @@ pollDecoder =
         |> required "expired" JD.bool
         |> required "multiple" JD.bool
         |> required "votes_count" jsIntDecoder
+        |> optional "voters_count" (JD.nullable jsIntDecoder) Nothing
         |> required "options" (JD.list pollOptionDecoder)
+        |> optional "emojis" (JD.list emojiDecoder) []
         |> optional "voted" optionalBoolDecoder False
+        |> optional "own_votes" (JD.list jsIntDecoder) []
         |> custom JD.value
 
 

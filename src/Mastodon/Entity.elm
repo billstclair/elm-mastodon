@@ -382,6 +382,7 @@ type alias Emoji =
     , static_url : UrlString
     , url : UrlString
     , visible_in_picker : Bool
+    , category : Maybe String
     }
 
 
@@ -513,8 +514,11 @@ type alias Poll =
     , expired : Bool
     , multiple : Bool
     , votes_count : Int
+    , voters_count : Maybe Int
     , options : List PollOption
+    , emojis : List Emoji
     , voted : Bool
+    , own_votes : List Int
     , v : Value
     }
 

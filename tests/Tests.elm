@@ -986,8 +986,11 @@ poll1 =
     , expired = False
     , multiple = False
     , votes_count = 10
+    , voters_count = Nothing
     , options = [ pollOption1, pollOption2 ]
+    , emojis = []
     , voted = False
+    , own_votes = []
     , v = JE.null
     }
 
@@ -999,8 +1002,11 @@ poll2 =
     , expired = True
     , multiple = True
     , votes_count = 100
+    , voters_count = Just 12
     , options = [ pollOption1, pollOption2 ]
+    , emojis = [ emoji1, emoji2 ]
     , voted = True
+    , own_votes = [ 0 ]
     , v = JE.null
     }
 
@@ -1280,6 +1286,7 @@ emoji1 =
     , static_url = "static_url"
     , url = "url2"
     , visible_in_picker = False
+    , category = Nothing
     }
 
 
@@ -1289,6 +1296,7 @@ emoji2 =
     , static_url = "static_url 2"
     , url = "url3"
     , visible_in_picker = True
+    , category = Just "foo"
     }
 
 
