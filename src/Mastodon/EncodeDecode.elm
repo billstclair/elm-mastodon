@@ -319,6 +319,7 @@ entityDecoder urlString =
         , contextDecoder |> JD.map ContextEntity
         , emojiDecoder |> JD.map EmojiEntity
         , JD.list emojiDecoder |> JD.map EmojiListEntity
+        , notificationDecoder |> JD.map NotificationEntity --must be before StatusEntity, don't know why
         , canFailStatusDecoder |> JD.map StatusEntity
         , pollDecoder |> JD.map PollEntity
         , JD.list canFailStatusDecoder |> JD.map StatusListEntity
@@ -334,7 +335,6 @@ entityDecoder urlString =
         , JD.list listEntityDecoder |> JD.map ListEntityListEntity
         , attachmentDecoder |> JD.map AttachmentEntity
         , JD.list attachmentDecoder |> JD.map AttachmentListEntity
-        , notificationDecoder |> JD.map NotificationEntity
         , pushSubscriptionDecoder |> JD.map PushSubscriptionEntity
         , relationshipDecoder |> JD.map RelationshipEntity
         , JD.list relationshipDecoder |> JD.map RelationshipListEntity
@@ -1174,9 +1174,17 @@ cardDecoder =
         |> optional "provider_name" (JD.nullable JD.string) Nothing
         |> optional "provider_url" (JD.nullable JD.string) Nothing
         |> optional "html" (JD.nullable JD.string) Nothing
-        |> optional "width" (JD.nullable jsIntDecoder) Nothing
-        |> optional "height" (JD.nullable jsIntDecoder) Nothing
+        |> optional "width" malformedJsIntDecoder Nothing
+        |> optional "height" malformedJsIntDecoder Nothing
         |> custom JD.value
+
+
+malformedJsIntDecoder : Decoder (Maybe Int)
+malformedJsIntDecoder =
+    JD.oneOf
+        [ jsIntDecoder |> JD.map Just
+        , JD.succeed Nothing
+        ]
 
 
 {-| Encode a `Context`.
@@ -1194,8 +1202,8 @@ encodeContext context =
 contextDecoder : Decoder Context
 contextDecoder =
     JD.succeed Context
-        |> required "ancestors" (JD.list statusDecoder)
-        |> required "descendants" (JD.list statusDecoder)
+        |> required "ancestors" (JD.list canFailStatusDecoder)
+        |> required "descendants" (JD.list canFailStatusDecoder)
 
 
 encodeWrappedStatus : WrappedStatus -> Value
@@ -1564,7 +1572,7 @@ canFailStatusDecoder =
     JD.oneOf
         [ statusDecoder
         , JD.succeed defaultStatus
-            |> required "ID" JD.string
+            |> required "id" JD.string
             |> optional "uri" JD.string ""
             |> optional "url" (JD.nullable JD.string) Nothing
             |> required "account"
