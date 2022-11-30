@@ -1226,8 +1226,8 @@ pagingParameters paging =
 decoders =
     { account = ED.accountDecoder |> JD.map AccountEntity
     , accountList = JD.list ED.accountDecoder |> JD.map AccountListEntity
-    , status = ED.statusDecoder |> JD.map StatusEntity
-    , statusList = JD.list ED.statusDecoder |> JD.map StatusListEntity
+    , status = ED.canFailStatusDecoder |> JD.map StatusEntity
+    , statusList = JD.list ED.canFailStatusDecoder |> JD.map StatusListEntity
     , relationship = ED.relationshipDecoder |> JD.map RelationshipEntity
     , relationshipList =
         JD.list ED.relationshipDecoder

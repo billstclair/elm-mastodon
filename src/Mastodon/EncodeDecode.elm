@@ -23,7 +23,8 @@ module Mastodon.EncodeDecode exposing
     , contextDecoder, encodeContext
     , visibilityDecoder, encodeVisibility
     , emojiDecoder, encodeEmoji
-    , encodeStatus, statusDecoder, rawStatusDecoder, simpleStatusDecoder
+    , encodeStatus
+    , statusDecoder, rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
     , encodeError, errorDecoder
     , encodePoll, pollDecoder
     , encodeFilter, filterDecoder
@@ -71,7 +72,8 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs contextDecoder, encodeContext
 @docs visibilityDecoder, encodeVisibility
 @docs emojiDecoder, encodeEmoji
-@docs encodeStatus, statusDecoder, rawStatusDecoder, simpleStatusDecoder
+@docs encodeStatus
+@docs statusDecoder, rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
 @docs encodeError, errorDecoder
 @docs encodePoll, pollDecoder
 @docs encodeFilter, filterDecoder
@@ -1237,28 +1239,32 @@ encodeVisibility visibility =
 -}
 visibilityDecoder : Decoder Visibility
 visibilityDecoder =
-    JD.string
-        |> JD.andThen
-            (\v ->
-                case v of
-                    "public" ->
-                        JD.succeed PublicVisibility
+    JD.oneOf
+        [ -- Truth Social was doing this on 221130
+          JD.null PublicVisibility
+        , JD.string
+            |> JD.andThen
+                (\v ->
+                    case v of
+                        "public" ->
+                            JD.succeed PublicVisibility
 
-                    "unlisted" ->
-                        JD.succeed UnlistedVisibility
+                        "unlisted" ->
+                            JD.succeed UnlistedVisibility
 
-                    "private" ->
-                        JD.succeed PrivateVisibility
+                        "private" ->
+                            JD.succeed PrivateVisibility
 
-                    "direct" ->
-                        JD.succeed DirectVisibility
+                        "direct" ->
+                            JD.succeed DirectVisibility
 
-                    "private_group" ->
-                        JD.succeed PrivateGroupVisibility
+                        "private_group" ->
+                            JD.succeed PrivateGroupVisibility
 
-                    _ ->
-                        JD.fail <| "Unknown Visibility: " ++ v
-            )
+                        _ ->
+                            JD.fail <| "Unknown Visibility: " ++ v
+                )
+        ]
 
 
 maybeVisibilityDecoder : Decoder (Maybe Visibility)
@@ -1530,6 +1536,15 @@ rawStatusDecoder =
         |> custom JD.value
 
 
+{-| Same as `statusDecoder`, except if it fails, falls back to a
+mostly defaulted `Status`, with only the `id`, `uri`, `url`, and
+`account` fields filled in.
+
+The `content` property will be:
+
+    "*** This status was malformed, id: <id> ***"
+
+-}
 canFailStatusDecoder : Decoder Status
 canFailStatusDecoder =
     let
