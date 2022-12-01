@@ -489,6 +489,7 @@ type alias Notification =
     , type_ : NotificationType
     , created_at : Datetime
     , account : Account
+    , emoji : Maybe String
     , status : Maybe Status
     , v : Value
     }
@@ -503,6 +504,10 @@ type NotificationType
     | FavouriteNotification
     | PollNotification
     | FollowRequestNotification
+    | UpdateNotification
+    | Admin_SignupNotification
+    | Admin_ReportNotification
+    | Pleroma_EmojiReactionNotification
     | UnknownNotification String
 
 

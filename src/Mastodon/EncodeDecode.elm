@@ -2007,6 +2007,18 @@ notificationTypeToString notificationType =
         FollowRequestNotification ->
             "follow_request"
 
+        UpdateNotification ->
+            "update"
+
+        Admin_SignupNotification ->
+            "admin.signup"
+
+        Admin_ReportNotification ->
+            "admin.report"
+
+        Pleroma_EmojiReactionNotification ->
+            "pleroma:emoji_reaction"
+
         UnknownNotification name ->
             name
 
@@ -2044,6 +2056,18 @@ notificationTypeDecoder =
                     "follow_request" ->
                         JD.succeed FollowRequestNotification
 
+                    "update" ->
+                        JD.succeed UpdateNotification
+
+                    "admin.signup" ->
+                        JD.succeed Admin_SignupNotification
+
+                    "admin.report" ->
+                        JD.succeed Admin_ReportNotification
+
+                    "pleroma:emoji_reaction" ->
+                        JD.succeed Pleroma_EmojiReactionNotification
+
                     _ ->
                         JD.succeed <| UnknownNotification t
             )
@@ -2053,13 +2077,21 @@ notificationTypeDecoder =
 -}
 encodeNotification : Notification -> Value
 encodeNotification notification =
-    JE.object
-        [ ( "id", JE.string notification.id )
-        , ( "type", encodeNotificationType notification.type_ )
-        , ( "created_at", JE.string notification.created_at )
-        , ( "account", encodeAccount notification.account )
-        , ( "status", encodeMaybe encodeStatus notification.status )
-        ]
+    JE.object <|
+        List.concat
+            [ [ ( "id", JE.string notification.id )
+              , ( "type", encodeNotificationType notification.type_ )
+              , ( "created_at", JE.string notification.created_at )
+              , ( "account", encodeAccount notification.account )
+              ]
+            , case notification.emoji of
+                Nothing ->
+                    []
+
+                Just emoji ->
+                    [ ( "emoji", JE.string emoji ) ]
+            , [ ( "status", encodeMaybe encodeStatus notification.status ) ]
+            ]
 
 
 {-| Decode an Account that might be blank.
@@ -2120,6 +2152,7 @@ notificationDecoder =
         |> required "type" notificationTypeDecoder
         |> required "created_at" JD.string
         |> required "account" possiblyBlankAccountDecoder
+        |> optional "emoji" (JD.maybe JD.string) Nothing
         |> optional "status" (JD.nullable canFailStatusDecoder) Nothing
         |> custom JD.value
 

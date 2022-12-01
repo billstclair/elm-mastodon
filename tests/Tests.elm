@@ -450,6 +450,7 @@ entityData =
     , GroupEntity group2 --45
     , GroupRelationshipEntity groupRelationship1 --46
     , GroupRelationshipEntity groupRelationship2 --47
+    , NotificationEntity notification8 --48
     ]
 
 
@@ -671,6 +672,7 @@ notification1 =
     , type_ = FollowNotification
     , created_at = "created_at"
     , account = account1
+    , emoji = Nothing
     , status = Just status1
     , v = JE.null
     }
@@ -716,6 +718,14 @@ notification7 : Notification
 notification7 =
     { notification2
         | type_ = UnknownNotification "foo"
+    }
+
+
+notification8 : Notification
+notification8 =
+    { notification2
+        | type_ = Pleroma_EmojiReactionNotification
+        , emoji = Just "X"
     }
 
 
