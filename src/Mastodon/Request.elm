@@ -18,7 +18,7 @@ module Mastodon.Request exposing
     , FollowSuggestionsReq(..), GroupsReq(..), InstanceReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..), TrendsReq(..)
-    , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..)
+    , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..), PartialContext(..)
     , userAgentHeader, idempotencyKeyHeader, emptyPaging, simplePostStatus
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
@@ -52,7 +52,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Non-atomic data in requests
 
-@docs Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups
+@docs Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups, PartialContext
 
 
 # Utility
@@ -585,7 +585,7 @@ type NotificationsReq
 
 {-| GET/POST /api/v1/polls
 
-`GetPoll` and `PostVotes` result in a `PollInstance`.
+`GetPoll` and `PostVotes` result in a `PollEntity`.
 
 `GetPoll` does not require an authentication token.
 
@@ -656,11 +656,20 @@ type alias PollDefinition =
     }
 
 
+{-| Which context should GetStatusPartialContext return?
+-}
+type PartialContext
+    = AncestorsContext
+    | DescendantsContext
+
+
 {-| GET/POST /api/v1/statuses
 
 `GetStatus`, `PostStatus`, `PostReblogStatus`, `PostUnreblogStatus`, `PostPinStatus`, and `PostUnpinStatus` result in a `StatusEntity`.
 
 `GetStatusContext` results in a `ContextEntity`.
+
+`GetStatusPartialContext` results in a `StatusListEntity`. It is supported only by TruthSocial.com.
 
 `GetStatusCard` results in a `CardEntity`.
 
@@ -674,6 +683,7 @@ The `GetXxx` requests require no authentication token.
 type StatusesReq
     = GetStatus { id : String }
     | GetStatusContext { id : String }
+    | GetStatusPartialContext { which : PartialContext, id : String }
     | GetStatusCard { id : String }
     | GetStatusRebloggedBy
         { id : String
@@ -2538,6 +2548,22 @@ statusesReq req res =
                 | url =
                     relative [ r, id, "context" ] []
                 , decoder = decoders.context
+            }
+
+        GetStatusPartialContext { which, id } ->
+            let
+                context =
+                    case which of
+                        AncestorsContext ->
+                            "ancestors"
+
+                        DescendantsContext ->
+                            "descendants"
+            in
+            { res
+                | url =
+                    relative [ r, id, "context", context ] []
+                , decoder = decoders.statusList
             }
 
         GetStatusCard { id } ->
