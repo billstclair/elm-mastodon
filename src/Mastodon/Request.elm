@@ -669,7 +669,7 @@ type PartialContext
 
 `GetStatusContext` results in a `ContextEntity`.
 
-`GetStatusPartialContext` results in a `StatusListEntity`. It is supported only by TruthSocial.com.
+`GetStatusPartialContext` results in a `StatusListEntity`. It is supported only by TruthSocial.com. The `offset` parameter is for `DescendantsContext` only. It is used to page through responses.
 
 `GetStatusCard` results in a `CardEntity`.
 
@@ -683,7 +683,7 @@ The `GetXxx` requests require no authentication token.
 type StatusesReq
     = GetStatus { id : String }
     | GetStatusContext { id : String }
-    | GetStatusPartialContext { which : PartialContext, id : String }
+    | GetStatusPartialContext { which : PartialContext, id : String, offset : Maybe Int }
     | GetStatusCard { id : String }
     | GetStatusRebloggedBy
         { id : String
@@ -2550,7 +2550,7 @@ statusesReq req res =
                 , decoder = decoders.context
             }
 
-        GetStatusPartialContext { which, id } ->
+        GetStatusPartialContext { which, id, offset } ->
             let
                 context =
                     case which of
@@ -2562,7 +2562,8 @@ statusesReq req res =
             in
             { res
                 | url =
-                    relative [ r, id, "context", context ] []
+                    relative [ r, id, "context", context ] <|
+                        qps [ ip "offset" offset ]
                 , decoder = decoders.statusList
             }
 
