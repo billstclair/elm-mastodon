@@ -13,11 +13,13 @@
 module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
     , serverRequest
+    , PostedStatus
+    , StatusesReq(..), TimelinesReq(..)
     , AccountsReq(..), AppsReq(..), BlocksReq(..), CustomEmojisReq(..), DomainBlocksReq(..)
     , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowRequestsReq(..)
     , FollowSuggestionsReq(..), GroupsReq(..), InstanceReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
-    , ScheduledStatusesReq(..), SearchReq(..), StatusesReq(..), TimelinesReq(..), TrendsReq(..)
+    , ScheduledStatusesReq(..), SearchReq(..), TrendsReq(..)
     , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..), PartialContext(..)
     , userAgentHeader, idempotencyKeyHeader, emptyPaging, simplePostStatus
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
@@ -43,11 +45,13 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Request details
 
+@docs PostedStatus
+@docs StatusesReq, TimelinesReq
 @docs AccountsReq, AppsReq, BlocksReq, CustomEmojisReq, DomainBlocksReq
 @docs EndorsementsReq, FavouritesReq, FiltersReq, FollowRequestsReq
 @docs FollowSuggestionsReq, GroupsReq, InstanceReq, ListsReq, MediaAttachmentsReq
 @docs MutesReq, NotificationsReq, PollsReq, ReportsReq
-@docs ScheduledStatusesReq, SearchReq, StatusesReq, TimelinesReq, TrendsReq
+@docs ScheduledStatusesReq, SearchReq, TrendsReq
 
 
 # Non-atomic data in requests
@@ -693,25 +697,31 @@ type StatusesReq
         { id : String
         , limit : Maybe Int
         }
-    | PostStatus
-        { status : Maybe String
-        , in_reply_to_id : Maybe String
-        , group_id : Maybe String
-        , quote_of_id : Maybe String
-        , media_ids : List String
-        , poll : Maybe PollDefinition
-        , sensitive : Bool
-        , spoiler_text : Maybe String
-        , visibility : Maybe Entity.Visibility
-        , scheduled_at : Maybe Entity.Datetime
-        , language : Maybe Entity.ISO6391
-        , idempotencyKey : Maybe String
-        }
+    | PostStatus PostedStatus
+    | PutStatus { id : String, status : PostedStatus }
     | DeleteStatus { id : String }
     | PostReblogStatus { id : String }
     | PostUnreblogStatus { id : String }
     | PostPinStatus { id : String }
     | PostUnpinStatus { id : String }
+
+
+{-| Fields for a new or edited `Status`
+-}
+type alias PostedStatus =
+    { status : Maybe String
+    , in_reply_to_id : Maybe String
+    , group_id : Maybe String
+    , quote_of_id : Maybe String
+    , media_ids : List String
+    , poll : Maybe PollDefinition
+    , sensitive : Bool
+    , spoiler_text : Maybe String
+    , visibility : Maybe Entity.Visibility
+    , scheduled_at : Maybe Entity.Datetime
+    , language : Maybe Entity.ISO6391
+    , idempotencyKey : Maybe String
+    }
 
 
 nothingIfBlank : String -> Maybe String
@@ -2590,90 +2600,50 @@ statusesReq req res =
                 , decoder = decoders.accountList
             }
 
-        PostStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, sensitive, spoiler_text, visibility, scheduled_at, language, idempotencyKey } ->
+        PostStatus postedStatus ->
             let
+                { scheduled_at, idempotencyKey } =
+                    postedStatus
+
                 jsonBody =
-                    JE.object
-                        (List.concat
-                            [ case status of
-                                Nothing ->
-                                    [ ( "status", JE.string "" ) ]
-
-                                Just s ->
-                                    [ ( "status", JE.string s ) ]
-                            , case in_reply_to_id of
-                                Nothing ->
-                                    []
-
-                                Just id ->
-                                    [ ( "in_reply_to_id", JE.string id ) ]
-                            , case group_id of
-                                Nothing ->
-                                    []
-
-                                Just id ->
-                                    [ ( "group_id", JE.string id ) ]
-                            , case quote_of_id of
-                                Nothing ->
-                                    []
-
-                                Just id ->
-                                    [ ( "quote_of_id", JE.string id ) ]
-                            , if media_ids == [] then
-                                []
-
-                              else
-                                [ ( "media_ids", JE.list JE.string media_ids ) ]
-                            , case poll of
-                                Nothing ->
-                                    []
-
-                                Just p ->
-                                    [ ( "poll"
-                                      , JE.object
-                                            [ ( "options", JE.list JE.string p.options )
-                                            , ( "expires_in", JE.int p.expires_in )
-                                            , ( "multiple", JE.bool p.multiple )
-                                            , ( "hide_totals", JE.bool p.hide_totals )
-                                            ]
-                                      )
-                                    ]
-                            , if sensitive then
-                                [ ( "sensitive", JE.bool sensitive ) ]
-
-                              else
-                                []
-                            , case spoiler_text of
-                                Nothing ->
-                                    []
-
-                                Just text ->
-                                    [ ( "spoiler_text", JE.string text )
-                                    ]
-                            , case visibility of
-                                Nothing ->
-                                    []
-
-                                Just vis ->
-                                    [ ( "visibility", ED.encodeVisibility vis ) ]
-                            , case scheduled_at of
-                                Nothing ->
-                                    []
-
-                                Just timestamp ->
-                                    [ ( "scheduled_at", JE.string timestamp ) ]
-                            , case language of
-                                Nothing ->
-                                    []
-
-                                Just lang ->
-                                    [ ( "language", JE.string lang ) ]
-                            ]
-                        )
+                    encodePostedStatus postedStatus
 
                 res2 =
                     { res
                         | method = m.post
+                        , url = relative [ r ] []
+                        , body =
+                            Http.jsonBody jsonBody
+                        , jsonBody =
+                            Just jsonBody
+                        , decoder =
+                            if scheduled_at == Nothing then
+                                decoders.status
+
+                            else
+                                decoders.scheduledStatus
+                    }
+            in
+            case idempotencyKey of
+                Nothing ->
+                    res2
+
+                Just key ->
+                    { res2
+                        | headers = idempotencyKeyHeader key :: res2.headers
+                    }
+
+        PutStatus { id, status } ->
+            let
+                { scheduled_at, idempotencyKey } =
+                    status
+
+                jsonBody =
+                    encodePostedStatus status
+
+                res2 =
+                    { res
+                        | method = m.put
                         , url = relative [ r ] []
                         , body =
                             Http.jsonBody jsonBody
@@ -2735,6 +2705,90 @@ statusesReq req res =
                     relative [ r, id, "unpin" ] []
                 , decoder = decoders.status
             }
+
+
+encodePostedStatus : PostedStatus -> Value
+encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, sensitive, spoiler_text, visibility, scheduled_at, language, idempotencyKey } =
+    JE.object
+        (List.concat
+            [ case status of
+                Nothing ->
+                    [ ( "status", JE.string "" ) ]
+
+                Just s ->
+                    [ ( "status", JE.string s ) ]
+            , case in_reply_to_id of
+                Nothing ->
+                    []
+
+                Just id ->
+                    [ ( "in_reply_to_id", JE.string id ) ]
+            , case group_id of
+                Nothing ->
+                    []
+
+                Just id ->
+                    [ ( "group_id", JE.string id ) ]
+            , case quote_of_id of
+                Nothing ->
+                    []
+
+                Just id ->
+                    -- Gab: quote_of_id, Rebased: quote_id
+                    [ ( "quote_of_id", JE.string id )
+                    , ( "quote_id", JE.string id )
+                    ]
+            , if media_ids == [] then
+                []
+
+              else
+                [ ( "media_ids", JE.list JE.string media_ids ) ]
+            , case poll of
+                Nothing ->
+                    []
+
+                Just p ->
+                    [ ( "poll"
+                      , JE.object
+                            [ ( "options", JE.list JE.string p.options )
+                            , ( "expires_in", JE.int p.expires_in )
+                            , ( "multiple", JE.bool p.multiple )
+                            , ( "hide_totals", JE.bool p.hide_totals )
+                            ]
+                      )
+                    ]
+            , if sensitive then
+                [ ( "sensitive", JE.bool sensitive ) ]
+
+              else
+                []
+            , case spoiler_text of
+                Nothing ->
+                    []
+
+                Just text ->
+                    [ ( "spoiler_text", JE.string text )
+                    ]
+            , case visibility of
+                Nothing ->
+                    []
+
+                Just vis ->
+                    [ ( "visibility", ED.encodeVisibility vis ) ]
+            , case scheduled_at of
+                Nothing ->
+                    []
+
+                Just timestamp ->
+                    [ ( "scheduled_at", JE.string timestamp ) ]
+            , case language of
+                Nothing ->
+                    []
+
+                Just lang ->
+                    [ ( "language", JE.string lang ) ]
+            ]
+        )
 
 
 timelinesReq : TimelinesReq -> RawRequest -> RawRequest

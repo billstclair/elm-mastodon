@@ -1458,7 +1458,13 @@ encodeStatus status =
                     []
 
                 Just (WrappedStatus quote) ->
-                    [ ( "quote_of_id", encodeMaybe JE.string status.quote_of_id )
+                    let
+                        idJson =
+                            encodeMaybe JE.string status.quote_of_id
+                    in
+                    -- Gab: quote_of_id, Rebased: quote_id
+                    [ ( "quote_of_id", idJson )
+                    , ( "quote_id", idJson )
                     , ( "quote", encodeStatus quote )
                     ]
             ]
@@ -1646,7 +1652,14 @@ simpleStatusDecoder =
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
         |> optional "group" (JD.nullable groupDecoder) Nothing
-        |> optional "quote_of_id" (JD.nullable JD.string) Nothing
+        |> custom
+            (JD.oneOf
+                -- Gab: quote_of_id, Rebased: quote_id
+                [ JD.field "quote_of_id" (JD.nullable JD.string)
+                , JD.field "quote_id" (JD.nullable JD.string)
+                , JD.succeed Nothing
+                ]
+            )
         |> optional "quote"
             (JD.nullable <|
                 JD.lazy
