@@ -2644,7 +2644,7 @@ statusesReq req res =
                 res2 =
                     { res
                         | method = m.put
-                        , url = relative [ r ] []
+                        , url = relative [ r, id ] []
                         , body =
                             Http.jsonBody jsonBody
                         , jsonBody =
