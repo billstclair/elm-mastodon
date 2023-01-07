@@ -17,13 +17,14 @@ module Mastodon.Entity exposing
     , Card, Context, Error, Filter, Instance, Activity
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, RawStatus, ScheduledStatus, Conversation
+    , Status, PutStatus, RawStatus, ScheduledStatus, Conversation
     , Group, GroupRelationship
     , Emoji, Field, Privacy(..), Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
     , ImageMetaInfo, VideoMetaInfo, Focus
     , CardType(..), FilterContext(..), URLs, Stats, NotificationType(..)
-    , Visibility(..), Mention, Tag, History, Poll, PollOption, StatusParams
+    , Visibility(..), Mention, Tag, History
+    , Poll, PollOption, PollDefinition, StatusParams
     , PleromaStatusContent
     , Authorization
     , WrappedAccount(..), WrappedStatus(..)
@@ -57,7 +58,7 @@ got over the wire. Code that creates these can set it to
 @docs Card, Context, Error, Filter, Instance, Activity
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, RawStatus, ScheduledStatus, Conversation
+@docs Status, PutStatus, RawStatus, ScheduledStatus, Conversation
 @docs Group, GroupRelationship
 
 
@@ -67,7 +68,8 @@ got over the wire. Code that creates these can set it to
 @docs Meta, ImageMetaFields, VideoMetaFields
 @docs ImageMetaInfo, VideoMetaInfo, Focus
 @docs CardType, FilterContext, URLs, Stats, NotificationType
-@docs Visibility, Mention, Tag, History, Poll, PollOption, StatusParams
+@docs Visibility, Mention, Tag, History
+@docs Poll, PollOption, PollDefinition, StatusParams
 @docs PleromaStatusContent
 
 
@@ -621,6 +623,37 @@ type alias Status =
     }
 
 
+{-| Define a Poll as part of a posted new or updated Status
+-}
+type alias PollDefinition =
+    { options : List String
+    , expires_in : Int
+    , multiple : Bool
+    , hide_totals : Bool
+    }
+
+
+{-| Fields for an edited `Status`.
+
+Parameter to `Request.PutStatus`.
+
+A list of these is returned from `Request.GetStatusHistory`,
+inside a `StatusHistoryEntity`.
+
+-}
+type alias PutStatus =
+    { status : Maybe String
+    , in_reply_to_id : Maybe String
+    , group_id : Maybe String
+    , quote_of_id : Maybe String
+    , media_ids : Maybe (List String)
+    , poll : Maybe PollDefinition
+    , sensitive : Maybe Bool
+    , spoiler_text : Maybe String
+    , language : Maybe ISO6391
+    }
+
+
 {-| The `pleroma` field of a `RawStatus` entity (Pleroma only).
 -}
 type alias PleromaStatusContent =
@@ -778,6 +811,7 @@ type Entity
     | StatusEntity Status
     | PollEntity Poll
     | StatusListEntity (List Status)
+    | StatusHistoryEntity (List PutStatus)
     | ScheduledStatusEntity ScheduledStatus
     | ScheduledStatusListEntity (List ScheduledStatus)
     | ConversationEntity Conversation

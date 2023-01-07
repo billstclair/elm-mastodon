@@ -35,9 +35,11 @@ import Mastodon.Entity as Entity
         , Notification
         , NotificationType(..)
         , Poll
+        , PollDefinition
         , PollOption
         , Privacy(..)
         , PushSubscription
+        , PutStatus
         , Relationship
         , Results
         , ScheduledStatus
@@ -417,6 +419,7 @@ entityData =
     , StatusEntity status2 --16
     , StatusEntity status3 --17
     , StatusEntity status4 --18
+    , StatusHistoryEntity [ putStatus1, putStatus2 ]
     , ContextEntity
         --19
         { ancestors = [ status1 ]
@@ -988,6 +991,43 @@ status4 =
     { status2
         | visibility = DirectVisibility
         , card = Nothing
+    }
+
+
+putStatus1 : PutStatus
+putStatus1 =
+    { status = Just "foo"
+    , in_reply_to_id = Nothing
+    , group_id = Nothing
+    , quote_of_id = Nothing
+    , media_ids = Nothing
+    , poll = Nothing
+    , sensitive = Nothing
+    , spoiler_text = Nothing
+    , language = Nothing
+    }
+
+
+putStatus2 : PutStatus
+putStatus2 =
+    { status = Just "bar"
+    , in_reply_to_id = Just "in_reply_to_id"
+    , group_id = Just "group"
+    , quote_of_id = Just "quote_of_id"
+    , media_ids = Just [ "id1", "id2" ]
+    , poll = Just pollDefinition
+    , sensitive = Just True
+    , spoiler_text = Just "spoiler_text"
+    , language = Just "language"
+    }
+
+
+pollDefinition : PollDefinition
+pollDefinition =
+    { options = [ "Yes", "No" ]
+    , expires_in = 1000
+    , multiple = False
+    , hide_totals = False
     }
 
 

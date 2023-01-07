@@ -20,7 +20,7 @@ module Mastodon.Request exposing
     , FollowSuggestionsReq(..), GroupsReq(..), InstanceReq(..), ListsReq(..), MediaAttachmentsReq(..)
     , MutesReq(..), NotificationsReq(..), PollsReq(..), ReportsReq(..)
     , ScheduledStatusesReq(..), SearchReq(..), TrendsReq(..)
-    , Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups(..), PartialContext(..)
+    , Paging, SourceUpdate, FieldUpdate, WhichGroups(..), PartialContext(..)
     , userAgentHeader, idempotencyKeyHeader, emptyPaging, simplePostStatus
     , RawRequest, requestToRawRequest, rawRequestToCmd, rawRequestToTask
     , emptyRawRequest, emptyServerInfo
@@ -56,7 +56,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Non-atomic data in requests
 
-@docs Paging, SourceUpdate, FieldUpdate, PollDefinition, WhichGroups, PartialContext
+@docs Paging, SourceUpdate, FieldUpdate, WhichGroups, PartialContext
 
 
 # Utility
@@ -85,7 +85,9 @@ import Mastodon.Entity as Entity
         ( Entity(..)
         , FilterContext(..)
         , HtmlString
+        , PollDefinition
         , Privacy(..)
+        , PutStatus
         , UnixTimestamp
         )
 import Task exposing (Task)
@@ -650,16 +652,6 @@ type SearchReq
         }
 
 
-{-| Define a Poll as part of a posted new Status
--}
-type alias PollDefinition =
-    { options : List String
-    , expires_in : Int
-    , multiple : Bool
-    , hide_totals : Bool
-    }
-
-
 {-| Which context should GetStatusPartialContext return?
 -}
 type PartialContext
@@ -697,8 +689,9 @@ type StatusesReq
         { id : String
         , limit : Maybe Int
         }
+    | GetStatusHistory { id : String }
     | PostStatus PostedStatus
-    | PutStatus { id : String, status : PostedStatus }
+    | PutStatus { id : String, status : PutStatus }
     | DeleteStatus { id : String }
     | PostReblogStatus { id : String }
     | PostUnreblogStatus { id : String }
@@ -706,7 +699,7 @@ type StatusesReq
     | PostUnpinStatus { id : String }
 
 
-{-| Fields for a new or edited `Status`
+{-| Fields for a new `Status`
 -}
 type alias PostedStatus =
     { status : Maybe String
@@ -1283,6 +1276,7 @@ decoders =
     , conversationList =
         JD.list ED.conversationDecoder
             |> JD.map ConversationListEntity
+    , history = JD.list ED.putStatusDecoder |> JD.map StatusHistoryEntity
     , group = ED.groupDecoder |> JD.map GroupEntity
     , groupList = JD.list ED.groupDecoder |> JD.map GroupListEntity
     , groupRelationship =
@@ -2635,36 +2629,26 @@ statusesReq req res =
 
         PutStatus { id, status } ->
             let
-                { scheduled_at, idempotencyKey } =
-                    status
-
                 jsonBody =
-                    encodePostedStatus status
-
-                res2 =
-                    { res
-                        | method = m.put
-                        , url = relative [ r, id ] []
-                        , body =
-                            Http.jsonBody jsonBody
-                        , jsonBody =
-                            Just jsonBody
-                        , decoder =
-                            if scheduled_at == Nothing then
-                                decoders.status
-
-                            else
-                                decoders.scheduledStatus
-                    }
+                    ED.encodePutStatus status
             in
-            case idempotencyKey of
-                Nothing ->
-                    res2
+            { res
+                | method = m.put
+                , url = relative [ r, id ] []
+                , body =
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
+                , decoder = decoders.status
+            }
 
-                Just key ->
-                    { res2
-                        | headers = idempotencyKeyHeader key :: res2.headers
-                    }
+        GetStatusHistory { id } ->
+            { res
+                | method = m.get
+                , url =
+                    relative [ apiReq.accounts, id, "history" ] []
+                , decoder = decoders.history
+            }
 
         DeleteStatus { id } ->
             { res
@@ -2749,12 +2733,7 @@ encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, p
 
                 Just p ->
                     [ ( "poll"
-                      , JE.object
-                            [ ( "options", JE.list JE.string p.options )
-                            , ( "expires_in", JE.int p.expires_in )
-                            , ( "multiple", JE.bool p.multiple )
-                            , ( "hide_totals", JE.bool p.hide_totals )
-                            ]
+                      , ED.encodePollDefinition p
                       )
                     ]
             , if sensitive then

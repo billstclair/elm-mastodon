@@ -23,10 +23,12 @@ module Mastodon.EncodeDecode exposing
     , contextDecoder, encodeContext
     , visibilityDecoder, encodeVisibility
     , emojiDecoder, encodeEmoji
-    , encodeStatus
-    , statusDecoder, rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
+    , encodeStatus, statusDecoder
+    , rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
+    , encodePutStatus, putStatusDecoder
     , encodeError, errorDecoder
     , encodePoll, pollDecoder
+    , encodePollDefinition, pollDefinitionDecoder
     , encodeFilter, filterDecoder
     , encodeFilterContext, filterContextDecoder
     , encodeInstance, instanceDecoder, defaultedInstance
@@ -43,7 +45,7 @@ module Mastodon.EncodeDecode exposing
     , encodeGroupRelationship, groupRelationshipDecoder
     , encodeTag, tagDecoder
     , encodeAuthorization, authorizationDecoder
-    , encodeMaybe
+    , encodeMaybe, encodePropertyAsList
     , privacyToString, notificationTypeToString, filterContextToString
     )
 
@@ -72,10 +74,12 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs contextDecoder, encodeContext
 @docs visibilityDecoder, encodeVisibility
 @docs emojiDecoder, encodeEmoji
-@docs encodeStatus
-@docs statusDecoder, rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
+@docs encodeStatus, statusDecoder
+@docs rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
+@docs encodePutStatus, putStatusDecoder
 @docs encodeError, errorDecoder
 @docs encodePoll, pollDecoder
+@docs encodePollDefinition, pollDefinitionDecoder
 @docs encodeFilter, filterDecoder
 @docs encodeFilterContext, filterContextDecoder
 @docs encodeInstance, instanceDecoder, defaultedInstance
@@ -101,7 +105,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 
 # Utilities
 
-@docs encodeMaybe
+@docs encodeMaybe, encodePropertyAsList
 @docs privacyToString, notificationTypeToString, filterContextToString
 
 -}
@@ -142,9 +146,11 @@ import Mastodon.Entity as Entity
         , NotificationType(..)
         , PleromaStatusContent
         , Poll
+        , PollDefinition
         , PollOption
         , Privacy(..)
         , PushSubscription
+        , PutStatus
         , RawStatus
         , Relationship
         , Results
@@ -214,6 +220,9 @@ encodeEntity entity =
 
         StatusListEntity statuses ->
             JE.list encodeStatus statuses
+
+        StatusHistoryEntity statuses ->
+            JE.list encodePutStatus statuses
 
         FilterEntity filter ->
             encodeFilter filter
@@ -325,6 +334,7 @@ entityDecoder urlString =
         , canFailStatusDecoder |> JD.map StatusEntity
         , pollDecoder |> JD.map PollEntity
         , JD.list canFailStatusDecoder |> JD.map StatusListEntity
+        , JD.list putStatusDecoder |> JD.map StatusHistoryEntity
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
         , activityDecoder |> JD.map ActivityEntity
@@ -435,6 +445,9 @@ entityValue entity =
 
         StatusListEntity statuses ->
             JE.list entityValue (List.map StatusEntity statuses)
+
+        StatusHistoryEntity statuses ->
+            JE.list encodePutStatus statuses
 
         FilterEntity filter ->
             if filter.v == JE.null then
@@ -579,6 +592,26 @@ encodeMaybe encoder mx =
 
         Just x ->
             encoder x
+
+
+{-| Useful for omitting encoded properties with a default value.
+
+    encodePropertyAsList name property encode default
+
+Returns `[]`, if `property == default`.
+
+Otherwise, returns:
+
+    [ ( name, encoder property ) ]
+
+-}
+encodePropertyAsList : String -> property -> (property -> Value) -> property -> List ( String, Value )
+encodePropertyAsList name property encoder default =
+    if default == property then
+        []
+
+    else
+        [ ( name, encoder property ) ]
 
 
 unwrapAccount : WrappedAccount -> Account
@@ -1411,6 +1444,29 @@ pollOptionDecoder =
             0
 
 
+{-| Encode a `PollDefinition`.
+-}
+encodePollDefinition : PollDefinition -> Value
+encodePollDefinition { options, expires_in, multiple, hide_totals } =
+    JE.object
+        [ ( "options", JE.list JE.string options )
+        , ( "expires_in", JE.int expires_in )
+        , ( "multiple", JE.bool multiple )
+        , ( "hide_totals", JE.bool hide_totals )
+        ]
+
+
+{-| Decode a `PollDefinition`.
+-}
+pollDefinitionDecoder : Decoder PollDefinition
+pollDefinitionDecoder =
+    JD.succeed PollDefinition
+        |> required "options" (JD.list JD.string)
+        |> required "expires_in" JD.int
+        |> optional "multiple" JD.bool False
+        |> optional "hide_totals" JD.bool False
+
+
 {-| Encode a `Status`.
 -}
 encodeStatus : Status -> Value
@@ -1508,6 +1564,81 @@ statusDecoder =
                                 }
                         )
             )
+
+
+{-| Encode a `PutStatus`
+-}
+encodePutStatus : PutStatus -> Value
+encodePutStatus status =
+    JE.object
+        (List.concat
+            [ [ ( "status", encodeMaybe JE.string status.status ) ]
+            , encodePropertyAsList "in_reply_to_id"
+                status.in_reply_to_id
+                (encodeMaybe JE.string)
+                Nothing
+            , encodePropertyAsList "group_id"
+                status.group_id
+                (encodeMaybe JE.string)
+                Nothing
+            , case status.quote_of_id of
+                Nothing ->
+                    []
+
+                quote_of_id ->
+                    let
+                        json =
+                            encodeMaybe JE.string quote_of_id
+                    in
+                    -- Gab: quote_of_id, Rebased: quote_id
+                    [ ( "quote_of_id", json )
+                    , ( "quote_id", json )
+                    ]
+            , encodePropertyAsList "media_ids"
+                status.media_ids
+                (encodeMaybe <| JE.list JE.string)
+                Nothing
+            , encodePropertyAsList "poll"
+                status.poll
+                (encodeMaybe encodePollDefinition)
+                Nothing
+            , encodePropertyAsList "sensitive"
+                status.sensitive
+                (encodeMaybe JE.bool)
+                Nothing
+            , encodePropertyAsList "spoiler_text"
+                status.spoiler_text
+                (encodeMaybe JE.string)
+                Nothing
+            , encodePropertyAsList "language"
+                status.language
+                (encodeMaybe JE.string)
+                Nothing
+            ]
+        )
+
+
+{-| Decode a `PutStatus`.
+-}
+putStatusDecoder : Decoder PutStatus
+putStatusDecoder =
+    JD.succeed PutStatus
+        |> optional "status" (JD.nullable JD.string) Nothing
+        |> optional "in_reply_to_id" (JD.nullable JD.string) Nothing
+        |> optional "group_id" (JD.nullable JD.string) Nothing
+        |> custom
+            (JD.oneOf
+                -- Gab: quote_of_id, Rebased: quote_id
+                [ JD.field "quote_of_id" (JD.nullable JD.string)
+                , JD.field "quote_id" (JD.nullable JD.string)
+                , JD.succeed Nothing
+                ]
+            )
+        |> optional "media_ids" (JD.nullable <| JD.list JD.string) Nothing
+        |> optional "poll" (JD.nullable pollDefinitionDecoder) Nothing
+        |> optional "sensitive" (JD.nullable JD.bool) Nothing
+        |> optional "spoiler_text" (JD.nullable JD.string) Nothing
+        |> optional "language" (JD.nullable JD.string) Nothing
 
 
 {-| Decode a `PleromaStatusContent`.
