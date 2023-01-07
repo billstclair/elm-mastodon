@@ -661,7 +661,9 @@ type PartialContext
 
 {-| GET/POST /api/v1/statuses
 
-`GetStatus`, `PostStatus`, `PostReblogStatus`, `PostUnreblogStatus`, `PostPinStatus`, and `PostUnpinStatus` result in a `StatusEntity`.
+`GetStatus`, `PostStatus`, `PutStatus`, `PostReblogStatus`, `PostUnreblogStatus`, `PostPinStatus`, and `PostUnpinStatus` result in a `StatusEntity`.
+
+`GetStatusHistory` results in a `StatusHistoryEntity`
 
 `GetStatusContext` results in a `ContextEntity`.
 
@@ -2646,7 +2648,7 @@ statusesReq req res =
             { res
                 | method = m.get
                 , url =
-                    relative [ apiReq.accounts, id, "history" ] []
+                    relative [ r, id, "history" ] []
                 , decoder = decoders.history
             }
 
