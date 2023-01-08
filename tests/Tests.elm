@@ -952,7 +952,6 @@ status1 =
     , group = Nothing
     , quote_of_id = Nothing
     , quote = Nothing
-    , quotes_count = Nothing
     , v = JE.null
     }
 
@@ -992,7 +991,6 @@ status2 =
     , group = Just group1
     , quote_of_id = Nothing
     , quote = Nothing
-    , quotes_count = Just 1
     , v = JE.null
     }
 

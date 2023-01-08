@@ -620,7 +620,6 @@ type alias Status =
     , group : Maybe Group --GAB extension
     , quote_of_id : Maybe String
     , quote : Maybe WrappedStatus
-    , quotes_count : Maybe Int
     , v : Value
     }
 

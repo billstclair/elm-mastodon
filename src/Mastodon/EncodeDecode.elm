@@ -1503,7 +1503,6 @@ encodeStatus status =
               , ( "application", encodeMaybe encodeApplication status.application )
               , ( "language", encodeMaybe JE.string status.language )
               , ( "pinned", JE.bool status.pinned )
-              , ( "quotes_count", encodeMaybe JE.int status.quotes_count )
               ]
             , case status.group of
                 Nothing ->
@@ -1520,9 +1519,8 @@ encodeStatus status =
                         idJson =
                             encodeMaybe JE.string status.quote_of_id
                     in
-                    -- Gab: quote_of_id, Rebased: quote_id
+                    -- Gab: quote_of_id
                     [ ( "quote_of_id", idJson )
-                    , ( "quote_id", idJson )
                     , ( "quote", encodeStatus quote )
                     ]
             ]
@@ -1681,7 +1679,6 @@ canFailStatusDecoder =
             , group = Nothing
             , quote_of_id = Nothing
             , quote = Nothing
-            , quotes_count = Nothing
             , v = JE.null
             }
     in
@@ -1748,14 +1745,7 @@ simpleStatusDecoder =
         |> optional "language" (JD.nullable JD.string) Nothing
         |> optional "pinned" optionalBoolDecoder False
         |> optional "group" (JD.nullable groupDecoder) Nothing
-        |> custom
-            (JD.oneOf
-                -- Gab: quote_of_id, Rebased: quote_id
-                [ JD.field "quote_of_id" (JD.nullable JD.string)
-                , JD.field "quote_id" (JD.nullable JD.string)
-                , JD.succeed Nothing
-                ]
-            )
+        |> optional "quote_of_id" (JD.nullable JD.string) Nothing
         |> optional "quote"
             (JD.nullable <|
                 JD.lazy
@@ -1766,7 +1756,6 @@ simpleStatusDecoder =
                     )
             )
             Nothing
-        |> optional "quotes_count" (JD.nullable JD.int) Nothing
         |> custom JD.value
 
 
