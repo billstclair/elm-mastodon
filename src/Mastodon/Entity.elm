@@ -17,7 +17,7 @@ module Mastodon.Entity exposing
     , Card, Context, Error, Filter, Instance, Activity
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, PutStatus, RawStatus, ScheduledStatus, Conversation
+    , Status, HistoryStatus, RawStatus, ScheduledStatus, Conversation
     , Group, GroupRelationship
     , Emoji, Field, Privacy(..), Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
@@ -58,7 +58,7 @@ got over the wire. Code that creates these can set it to
 @docs Card, Context, Error, Filter, Instance, Activity
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, PutStatus, RawStatus, ScheduledStatus, Conversation
+@docs Status, HistoryStatus, RawStatus, ScheduledStatus, Conversation
 @docs Group, GroupRelationship
 
 
@@ -598,6 +598,7 @@ type alias Status =
     , plain_markdown : Maybe String
     , plain_text : Maybe String
     , created_at : Datetime
+    , edited_at : Maybe Datetime
     , emojis : List Emoji
     , replies_count : Int
     , reblogs_count : Int
@@ -619,6 +620,22 @@ type alias Status =
     , group : Maybe Group --GAB extension
     , quote_of_id : Maybe String
     , quote : Maybe WrappedStatus
+    , quotes_count : Maybe Int
+    , v : Value
+    }
+
+
+{-| A subset of `Status`, returned by `Request.GetHistoryStatus`.
+-}
+type alias HistoryStatus =
+    { account : Account
+    , content : String
+    , created_at : String
+    , emojis : List Emoji
+    , media_attachments : List Attachment
+    , poll : Maybe Poll
+    , sensitive : Bool
+    , spoiler_text : String
     , v : Value
     }
 
@@ -630,27 +647,6 @@ type alias PollDefinition =
     , expires_in : Int
     , multiple : Bool
     , hide_totals : Bool
-    }
-
-
-{-| Fields for an edited `Status`.
-
-Parameter to `Request.PutStatus`.
-
-A list of these is returned from `Request.GetStatusHistory`,
-inside a `StatusHistoryEntity`.
-
--}
-type alias PutStatus =
-    { status : Maybe String
-    , in_reply_to_id : Maybe String
-    , group_id : Maybe String
-    , quote_of_id : Maybe String
-    , media_ids : Maybe (List String)
-    , poll : Maybe PollDefinition
-    , sensitive : Maybe Bool
-    , spoiler_text : Maybe String
-    , language : Maybe ISO6391
     }
 
 
@@ -811,7 +807,7 @@ type Entity
     | StatusEntity Status
     | PollEntity Poll
     | StatusListEntity (List Status)
-    | StatusHistoryEntity (List PutStatus)
+    | HistoryStatusListEntity (List HistoryStatus)
     | ScheduledStatusEntity ScheduledStatus
     | ScheduledStatusListEntity (List ScheduledStatus)
     | ConversationEntity Conversation

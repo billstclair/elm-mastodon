@@ -27,6 +27,7 @@ import Mastodon.Entity as Entity
         , Group
         , GroupRelationship
         , History
+        , HistoryStatus
         , ImageMetaFields
         , ImageMetaInfo
         , Instance
@@ -39,7 +40,6 @@ import Mastodon.Entity as Entity
         , PollOption
         , Privacy(..)
         , PushSubscription
-        , PutStatus
         , Relationship
         , Results
         , ScheduledStatus
@@ -212,6 +212,22 @@ stripContext { ancestors, descendants } =
     }
 
 
+stripHistoryStatus : HistoryStatus -> HistoryStatus
+stripHistoryStatus status =
+    { status
+        | account = stripAccount status.account
+        , media_attachments = List.map stripAttachment status.media_attachments
+        , poll =
+            case status.poll of
+                Nothing ->
+                    Nothing
+
+                Just poll ->
+                    Just { poll | v = JE.null }
+        , v = JE.null
+    }
+
+
 stripEntity : Entity -> Entity
 stripEntity entity =
     case entity of
@@ -238,6 +254,9 @@ stripEntity entity =
 
         StatusEntity status ->
             StatusEntity <| stripStatus status
+
+        HistoryStatusListEntity statuses ->
+            HistoryStatusListEntity <| List.map stripHistoryStatus statuses
 
         FilterEntity filter ->
             FilterEntity { filter | v = JE.null }
@@ -419,7 +438,7 @@ entityData =
     , StatusEntity status2 --16
     , StatusEntity status3 --17
     , StatusEntity status4 --18
-    , StatusHistoryEntity [ putStatus1, putStatus2 ]
+    , HistoryStatusListEntity [ historyStatus1, historyStatus2 ]
     , ContextEntity
         --19
         { ancestors = [ status1 ]
@@ -911,6 +930,7 @@ status1 =
     , plain_markdown = Nothing
     , plain_text = Nothing
     , created_at = "created_at"
+    , edited_at = Nothing
     , emojis = [ emoji1, emoji2 ]
     , replies_count = 100
     , reblogs_count = 10
@@ -932,6 +952,7 @@ status1 =
     , group = Nothing
     , quote_of_id = Nothing
     , quote = Nothing
+    , quotes_count = Nothing
     , v = JE.null
     }
 
@@ -949,6 +970,7 @@ status2 =
     , plain_markdown = Just "**content2**"
     , plain_text = Just "content2"
     , created_at = "created_at2"
+    , edited_at = Just "edited_at2"
     , emojis = []
     , replies_count = 0
     , reblogs_count = 0
@@ -970,6 +992,7 @@ status2 =
     , group = Just group1
     , quote_of_id = Nothing
     , quote = Nothing
+    , quotes_count = Just 1
     , v = JE.null
     }
 
@@ -994,31 +1017,31 @@ status4 =
     }
 
 
-putStatus1 : PutStatus
-putStatus1 =
-    { status = Just "foo"
-    , in_reply_to_id = Nothing
-    , group_id = Nothing
-    , quote_of_id = Nothing
-    , media_ids = Nothing
+historyStatus1 : HistoryStatus
+historyStatus1 =
+    { account = account1
+    , content = "foo"
+    , created_at = "yesterday"
+    , emojis = []
+    , media_attachments = []
     , poll = Nothing
-    , sensitive = Nothing
-    , spoiler_text = Nothing
-    , language = Nothing
+    , sensitive = False
+    , spoiler_text = ""
+    , v = JE.null
     }
 
 
-putStatus2 : PutStatus
-putStatus2 =
-    { status = Just "bar"
-    , in_reply_to_id = Just "in_reply_to_id"
-    , group_id = Just "group"
-    , quote_of_id = Just "quote_of_id"
-    , media_ids = Just [ "id1", "id2" ]
-    , poll = Just pollDefinition
-    , sensitive = Just True
-    , spoiler_text = Just "spoiler_text"
-    , language = Just "language"
+historyStatus2 : HistoryStatus
+historyStatus2 =
+    { account = account2
+    , content = "bar"
+    , created_at = "today"
+    , emojis = [ emoji1, emoji2 ]
+    , media_attachments = [ attachment1, attachment2 ]
+    , poll = Just poll1
+    , sensitive = True
+    , spoiler_text = "Betcha you'll look"
+    , v = JE.null
     }
 
 

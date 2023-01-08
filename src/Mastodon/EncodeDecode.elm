@@ -25,7 +25,7 @@ module Mastodon.EncodeDecode exposing
     , emojiDecoder, encodeEmoji
     , encodeStatus, statusDecoder
     , rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
-    , encodePutStatus, putStatusDecoder
+    , encodeHistoryStatus, historyStatusDecoder
     , encodeError, errorDecoder
     , encodePoll, pollDecoder
     , encodePollDefinition, pollDefinitionDecoder
@@ -76,7 +76,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs emojiDecoder, encodeEmoji
 @docs encodeStatus, statusDecoder
 @docs rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
-@docs encodePutStatus, putStatusDecoder
+@docs encodeHistoryStatus, historyStatusDecoder
 @docs encodeError, errorDecoder
 @docs encodePoll, pollDecoder
 @docs encodePollDefinition, pollDefinitionDecoder
@@ -136,6 +136,7 @@ import Mastodon.Entity as Entity
         , Group
         , GroupRelationship
         , History
+        , HistoryStatus
         , ImageMetaFields
         , ImageMetaInfo
         , Instance
@@ -150,7 +151,6 @@ import Mastodon.Entity as Entity
         , PollOption
         , Privacy(..)
         , PushSubscription
-        , PutStatus
         , RawStatus
         , Relationship
         , Results
@@ -221,8 +221,8 @@ encodeEntity entity =
         StatusListEntity statuses ->
             JE.list encodeStatus statuses
 
-        StatusHistoryEntity statuses ->
-            JE.list encodePutStatus statuses
+        HistoryStatusListEntity statuses ->
+            JE.list encodeHistoryStatus statuses
 
         FilterEntity filter ->
             encodeFilter filter
@@ -334,7 +334,7 @@ entityDecoder urlString =
         , canFailStatusDecoder |> JD.map StatusEntity
         , pollDecoder |> JD.map PollEntity
         , JD.list canFailStatusDecoder |> JD.map StatusListEntity
-        , JD.list putStatusDecoder |> JD.map StatusHistoryEntity
+        , JD.list historyStatusDecoder |> JD.map HistoryStatusListEntity
         , filterDecoder |> JD.map FilterEntity
         , JD.list filterDecoder |> JD.map FilterListEntity
         , activityDecoder |> JD.map ActivityEntity
@@ -446,8 +446,8 @@ entityValue entity =
         StatusListEntity statuses ->
             JE.list entityValue (List.map StatusEntity statuses)
 
-        StatusHistoryEntity statuses ->
-            JE.list encodePutStatus statuses
+        HistoryStatusListEntity statuses ->
+            JE.list encodeHistoryStatus statuses
 
         FilterEntity filter ->
             if filter.v == JE.null then
@@ -1484,6 +1484,7 @@ encodeStatus status =
               , ( "plain_markdown", encodeMaybe JE.string status.plain_markdown )
               , ( "plain_text", encodeMaybe JE.string status.plain_text )
               , ( "created_at", JE.string status.created_at )
+              , ( "edited_at", encodeMaybe JE.string status.edited_at )
               , ( "emojis", JE.list encodeEmoji status.emojis )
               , ( "replies_count", JE.int status.replies_count )
               , ( "reblogs_count", JE.int status.reblogs_count )
@@ -1502,6 +1503,7 @@ encodeStatus status =
               , ( "application", encodeMaybe encodeApplication status.application )
               , ( "language", encodeMaybe JE.string status.language )
               , ( "pinned", JE.bool status.pinned )
+              , ( "quotes_count", encodeMaybe JE.int status.quotes_count )
               ]
             , case status.group of
                 Nothing ->
@@ -1566,79 +1568,39 @@ statusDecoder =
             )
 
 
-{-| Encode a `PutStatus`
+{-| Encode a `HistoryStatus`
 -}
-encodePutStatus : PutStatus -> Value
-encodePutStatus status =
+encodeHistoryStatus : HistoryStatus -> Value
+encodeHistoryStatus status =
     JE.object
         (List.concat
-            [ [ ( "status", encodeMaybe JE.string status.status ) ]
-            , encodePropertyAsList "in_reply_to_id"
-                status.in_reply_to_id
-                (encodeMaybe JE.string)
-                Nothing
-            , encodePropertyAsList "group_id"
-                status.group_id
-                (encodeMaybe JE.string)
-                Nothing
-            , case status.quote_of_id of
-                Nothing ->
-                    []
-
-                quote_of_id ->
-                    let
-                        json =
-                            encodeMaybe JE.string quote_of_id
-                    in
-                    -- Gab: quote_of_id, Rebased: quote_id
-                    [ ( "quote_of_id", json )
-                    , ( "quote_id", json )
-                    ]
-            , encodePropertyAsList "media_ids"
-                status.media_ids
-                (encodeMaybe <| JE.list JE.string)
-                Nothing
-            , encodePropertyAsList "poll"
-                status.poll
-                (encodeMaybe encodePollDefinition)
-                Nothing
-            , encodePropertyAsList "sensitive"
-                status.sensitive
-                (encodeMaybe JE.bool)
-                Nothing
-            , encodePropertyAsList "spoiler_text"
-                status.spoiler_text
-                (encodeMaybe JE.string)
-                Nothing
-            , encodePropertyAsList "language"
-                status.language
-                (encodeMaybe JE.string)
-                Nothing
+            [ [ ( "account", encodeAccount status.account )
+              , ( "content", JE.string status.content )
+              , ( "created_at", JE.string status.created_at )
+              , ( "emojis", JE.list encodeEmoji status.emojis )
+              , ( "media_attachments", JE.list encodeAttachment status.media_attachments )
+              , ( "poll", encodeMaybe encodePoll status.poll )
+              , ( "sensitive", JE.bool status.sensitive )
+              , ( "spoiler_text", JE.string status.spoiler_text )
+              ]
             ]
         )
 
 
-{-| Decode a `PutStatus`.
+{-| Decode a `HistoryStatus`.
 -}
-putStatusDecoder : Decoder PutStatus
-putStatusDecoder =
-    JD.succeed PutStatus
-        |> optional "status" (JD.nullable JD.string) Nothing
-        |> optional "in_reply_to_id" (JD.nullable JD.string) Nothing
-        |> optional "group_id" (JD.nullable JD.string) Nothing
-        |> custom
-            (JD.oneOf
-                -- Gab: quote_of_id, Rebased: quote_id
-                [ JD.field "quote_of_id" (JD.nullable JD.string)
-                , JD.field "quote_id" (JD.nullable JD.string)
-                , JD.succeed Nothing
-                ]
-            )
-        |> optional "media_ids" (JD.nullable <| JD.list JD.string) Nothing
-        |> optional "poll" (JD.nullable pollDefinitionDecoder) Nothing
-        |> optional "sensitive" (JD.nullable JD.bool) Nothing
-        |> optional "spoiler_text" (JD.nullable JD.string) Nothing
-        |> optional "language" (JD.nullable JD.string) Nothing
+historyStatusDecoder : Decoder HistoryStatus
+historyStatusDecoder =
+    JD.succeed HistoryStatus
+        |> required "account" possiblyBlankAccountDecoder
+        |> required "content" JD.string
+        |> required "created_at" JD.string
+        |> required "emojis" (JD.list emojiDecoder)
+        |> required "media_attachments" (JD.list attachmentDecoder)
+        |> optional "poll" (JD.nullable pollDecoder) Nothing
+        |> required "sensitive" JD.bool
+        |> required "spoiler_text" JD.string
+        |> custom JD.value
 
 
 {-| Decode a `PleromaStatusContent`.
@@ -1697,6 +1659,7 @@ canFailStatusDecoder =
             , plain_markdown = Nothing
             , plain_text = Nothing
             , created_at = ""
+            , edited_at = Nothing
             , emojis = []
             , replies_count = 0
             , reblogs_count = 0
@@ -1718,6 +1681,7 @@ canFailStatusDecoder =
             , group = Nothing
             , quote_of_id = Nothing
             , quote = Nothing
+            , quotes_count = Nothing
             , v = JE.null
             }
     in
@@ -1764,6 +1728,7 @@ simpleStatusDecoder =
         |> optional "plain_text" (JD.nullable JD.string) Nothing
         -- plain_text
         |> required "created_at" JD.string
+        |> optional "edited_at" (JD.nullable JD.string) Nothing
         |> required "emojis" (JD.list emojiDecoder)
         |> required "replies_count" jsIntDecoder
         |> required "reblogs_count" jsIntDecoder
@@ -1801,6 +1766,7 @@ simpleStatusDecoder =
                     )
             )
             Nothing
+        |> optional "quotes_count" (JD.nullable JD.int) Nothing
         |> custom JD.value
 
 

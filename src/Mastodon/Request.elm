@@ -13,7 +13,7 @@
 module Mastodon.Request exposing
     ( ServerInfo, Request(..), Response, Error(..)
     , serverRequest
-    , PostedStatus
+    , PostedStatus, EditedStatus
     , StatusesReq(..), TimelinesReq(..)
     , AccountsReq(..), AppsReq(..), BlocksReq(..), CustomEmojisReq(..), DomainBlocksReq(..)
     , EndorsementsReq(..), FavouritesReq(..), FiltersReq(..), FollowRequestsReq(..)
@@ -45,7 +45,7 @@ Documentation starts at <https://docs.joinmastodon.org/api/rest/accounts>
 
 # Request details
 
-@docs PostedStatus
+@docs PostedStatus, EditedStatus
 @docs StatusesReq, TimelinesReq
 @docs AccountsReq, AppsReq, BlocksReq, CustomEmojisReq, DomainBlocksReq
 @docs EndorsementsReq, FavouritesReq, FiltersReq, FollowRequestsReq
@@ -87,7 +87,6 @@ import Mastodon.Entity as Entity
         , HtmlString
         , PollDefinition
         , Privacy(..)
-        , PutStatus
         , UnixTimestamp
         )
 import Task exposing (Task)
@@ -663,7 +662,7 @@ type PartialContext
 
 `GetStatus`, `PostStatus`, `PutStatus`, `PostReblogStatus`, `PostUnreblogStatus`, `PostPinStatus`, and `PostUnpinStatus` result in a `StatusEntity`.
 
-`GetStatusHistory` results in a `StatusHistoryEntity`
+`GetStatusHistory` results in a `HistoryStatusListEntity`
 
 `GetStatusContext` results in a `ContextEntity`.
 
@@ -693,7 +692,7 @@ type StatusesReq
         }
     | GetStatusHistory { id : String }
     | PostStatus PostedStatus
-    | PutStatus { id : String, status : PutStatus }
+    | PutStatus { id : String, status : EditedStatus }
     | DeleteStatus { id : String }
     | PostReblogStatus { id : String }
     | PostUnreblogStatus { id : String }
@@ -716,6 +715,42 @@ type alias PostedStatus =
     , scheduled_at : Maybe Entity.Datetime
     , language : Maybe Entity.ISO6391
     , idempotencyKey : Maybe String
+    }
+
+
+{-| Fields for an edited `Status`.
+
+Parameter to `Request.PutStatus`.
+
+`content_type` is "text/plain" or "text/markdown"
+
+Sent over the wire to a Rebased server, from Soapbox:
+
+    {"status":"A status to edit with Mammudeck..."
+    ,"in_reply_to_id":null
+    ,"quote_id":null
+    ,"media_ids":[]
+    ,"sensitive":false
+    ,"spoiler_text":""
+    ,"visibility":"public"
+    ,"content_type":"text/markdown"
+    ,"poll":null
+    ,"scheduled_at":null
+    ,"to":[]
+    }
+
+-}
+type alias EditedStatus =
+    { status : Maybe String
+    , in_reply_to_id : Maybe String
+    , quote_of_id : Maybe String
+    , media_ids : Maybe (List String)
+    , sensitive : Bool
+    , spoiler_text : Maybe String
+    , visibility : Maybe Entity.Visibility
+    , content_type : Maybe String
+    , poll : Maybe PollDefinition
+    , scheduled_at : Maybe Entity.Datetime
     }
 
 
@@ -1278,7 +1313,7 @@ decoders =
     , conversationList =
         JD.list ED.conversationDecoder
             |> JD.map ConversationListEntity
-    , history = JD.list ED.putStatusDecoder |> JD.map StatusHistoryEntity
+    , history = JD.list ED.historyStatusDecoder |> JD.map HistoryStatusListEntity
     , group = ED.groupDecoder |> JD.map GroupEntity
     , groupList = JD.list ED.groupDecoder |> JD.map GroupListEntity
     , groupRelationship =
@@ -2632,7 +2667,7 @@ statusesReq req res =
         PutStatus { id, status } ->
             let
                 jsonBody =
-                    ED.encodePutStatus status
+                    encodeEditedStatus status
             in
             { res
                 | method = m.put
@@ -2770,6 +2805,25 @@ encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, p
                     [ ( "language", JE.string lang ) ]
             ]
         )
+
+
+{-| Encode an `EditedStatus`
+-}
+encodeEditedStatus : EditedStatus -> Value
+encodeEditedStatus status =
+    -- TODO: sync with updated EditedStatus definition (above).
+    JE.object
+        [ ( "status", encodeMaybe JE.string status.status )
+        , ( "in_reply_to_id", encodeMaybe JE.string status.in_reply_to_id )
+        , ( "quote_id", encodeMaybe JE.string status.quote_of_id )
+        , ( "media_ids", encodeMaybe (JE.list JE.string) status.media_ids )
+        , ( "sensitive", JE.bool status.sensitive )
+        , ( "spoiler_text", encodeMaybe JE.string status.spoiler_text )
+        , ( "visibility", encodeMaybe ED.encodeVisibility status.visibility )
+        , ( "content_type", encodeMaybe JE.string status.content_type )
+        , ( "poll", encodeMaybe ED.encodePollDefinition status.poll )
+        , ( "scheduled_at", encodeMaybe JE.string status.scheduled_at )
+        ]
 
 
 timelinesReq : TimelinesReq -> RawRequest -> RawRequest
