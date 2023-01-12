@@ -2811,16 +2811,40 @@ encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, p
 -}
 encodeEditedStatus : EditedStatus -> Value
 encodeEditedStatus status =
-    -- TODO: sync with updated EditedStatus definition (above).
+    let
+        media_ids =
+            case status.media_ids of
+                Nothing ->
+                    []
+
+                Just ids ->
+                    ids
+
+        spoiler_text =
+            case status.spoiler_text of
+                Nothing ->
+                    ""
+
+                Just text ->
+                    text
+
+        content_type =
+            case status.content_type of
+                Nothing ->
+                    "text/plain"
+
+                Just typ ->
+                    typ
+    in
     JE.object
         [ ( "status", encodeMaybe JE.string status.status )
         , ( "in_reply_to_id", encodeMaybe JE.string status.in_reply_to_id )
         , ( "quote_id", encodeMaybe JE.string status.quote_of_id )
-        , ( "media_ids", encodeMaybe (JE.list JE.string) status.media_ids )
+        , ( "media_ids", JE.list JE.string media_ids )
         , ( "sensitive", JE.bool status.sensitive )
-        , ( "spoiler_text", encodeMaybe JE.string status.spoiler_text )
+        , ( "spoiler_text", JE.string spoiler_text )
         , ( "visibility", encodeMaybe ED.encodeVisibility status.visibility )
-        , ( "content_type", encodeMaybe JE.string status.content_type )
+        , ( "content_type", JE.string content_type )
         , ( "poll", encodeMaybe ED.encodePollDefinition status.poll )
         , ( "scheduled_at", encodeMaybe JE.string status.scheduled_at )
         ]
