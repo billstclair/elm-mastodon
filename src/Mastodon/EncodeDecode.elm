@@ -24,6 +24,7 @@ module Mastodon.EncodeDecode exposing
     , visibilityDecoder, encodeVisibility
     , emojiDecoder, encodeEmoji
     , encodeStatus, statusDecoder
+    , encodeStatusSource, statusSourceDecoder
     , rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
     , encodeHistoryStatus, historyStatusDecoder
     , encodeError, errorDecoder
@@ -75,6 +76,7 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs visibilityDecoder, encodeVisibility
 @docs emojiDecoder, encodeEmoji
 @docs encodeStatus, statusDecoder
+@docs encodeStatusSource, statusSourceDecoder
 @docs rawStatusDecoder, simpleStatusDecoder, canFailStatusDecoder
 @docs encodeHistoryStatus, historyStatusDecoder
 @docs encodeError, errorDecoder
@@ -159,6 +161,7 @@ import Mastodon.Entity as Entity
         , Stats
         , Status
         , StatusParams
+        , StatusSource
         , Tag
         , Token
         , URLs
@@ -214,6 +217,9 @@ encodeEntity entity =
 
         StatusEntity status ->
             encodeStatus status
+
+        StatusSourceEntity source ->
+            encodeStatusSource source
 
         PollEntity poll ->
             encodePoll poll
@@ -332,6 +338,7 @@ entityDecoder urlString =
         , JD.list emojiDecoder |> JD.map EmojiListEntity
         , notificationDecoder |> JD.map NotificationEntity --must be before StatusEntity, don't know why
         , canFailStatusDecoder |> JD.map StatusEntity
+        , statusSourceDecoder |> JD.map StatusSourceEntity
         , pollDecoder |> JD.map PollEntity
         , JD.list canFailStatusDecoder |> JD.map StatusListEntity
         , JD.list historyStatusDecoder |> JD.map HistoryStatusListEntity
@@ -435,6 +442,13 @@ entityValue entity =
 
             else
                 status.v
+
+        StatusSourceEntity source ->
+            if source.v == JE.null then
+                encodeStatusSource source
+
+            else
+                source.v
 
         PollEntity poll ->
             if poll.v == JE.null then
@@ -1564,6 +1578,30 @@ statusDecoder =
                                 }
                         )
             )
+
+
+{-| Encode a `StatusSource`
+-}
+encodeStatusSource : StatusSource -> Value
+encodeStatusSource { id, location, spoiler_text, text } =
+    JE.object
+        [ ( "id", JE.string id )
+        , ( "location", encodeMaybe JE.string location )
+        , ( "spoiler_text", encodeMaybe JE.string spoiler_text )
+        , ( "text", JE.string text )
+        ]
+
+
+{-| Decode a `StatusSource`
+-}
+statusSourceDecoder : Decoder StatusSource
+statusSourceDecoder =
+    JD.succeed StatusSource
+        |> required "id" JD.string
+        |> optional "location" (JD.nullable JD.string) Nothing
+        |> optional "spoiler_text" (JD.nullable JD.string) Nothing
+        |> required "text" JD.string
+        |> custom JD.value
 
 
 {-| Encode a `HistoryStatus`

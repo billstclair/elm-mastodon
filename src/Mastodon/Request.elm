@@ -662,6 +662,8 @@ type PartialContext
 
 `GetStatus`, `PostStatus`, `PutStatus`, `PostReblogStatus`, `PostUnreblogStatus`, `PostPinStatus`, and `PostUnpinStatus` result in a `StatusEntity`.
 
+`GetStatusSource` results in a `StatusSourceEntity`
+
 `GetStatusHistory` results in a `HistoryStatusListEntity`
 
 `GetStatusContext` results in a `ContextEntity`.
@@ -679,6 +681,7 @@ The `GetXxx` requests require no authentication token.
 -}
 type StatusesReq
     = GetStatus { id : String }
+    | GetStatusSource { id : String }
     | GetStatusContext { id : String }
     | GetStatusPartialContext { which : PartialContext, id : String, offset : Maybe Int }
     | GetStatusCard { id : String }
@@ -1278,6 +1281,7 @@ decoders =
     , accountList = JD.list ED.accountDecoder |> JD.map AccountListEntity
     , status = ED.canFailStatusDecoder |> JD.map StatusEntity
     , statusList = JD.list ED.canFailStatusDecoder |> JD.map StatusListEntity
+    , statusSource = ED.statusSourceDecoder |> JD.map StatusSourceEntity
     , relationship = ED.relationshipDecoder |> JD.map RelationshipEntity
     , relationshipList =
         JD.list ED.relationshipDecoder
@@ -2582,6 +2586,13 @@ statusesReq req res =
                 | url =
                     relative [ r, id ] []
                 , decoder = decoders.status
+            }
+
+        GetStatusSource { id } ->
+            { res
+                | url =
+                    relative [ r, id, "source" ] []
+                , decoder = decoders.statusSource
             }
 
         GetStatusContext { id } ->

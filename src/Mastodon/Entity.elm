@@ -17,7 +17,7 @@ module Mastodon.Entity exposing
     , Card, Context, Error, Filter, Instance, Activity
     , ListEntity, Notification
     , PushSubscription, Relationship, Results
-    , Status, HistoryStatus, RawStatus, ScheduledStatus, Conversation
+    , Status, StatusSource, HistoryStatus, RawStatus, ScheduledStatus, Conversation
     , Group, GroupRelationship
     , Emoji, Field, Privacy(..), Attachment, AttachmentType(..)
     , Meta(..), ImageMetaFields, VideoMetaFields
@@ -58,7 +58,7 @@ got over the wire. Code that creates these can set it to
 @docs Card, Context, Error, Filter, Instance, Activity
 @docs ListEntity, Notification
 @docs PushSubscription, Relationship, Results
-@docs Status, HistoryStatus, RawStatus, ScheduledStatus, Conversation
+@docs Status, StatusSource, HistoryStatus, RawStatus, ScheduledStatus, Conversation
 @docs Group, GroupRelationship
 
 
@@ -624,6 +624,29 @@ type alias Status =
     }
 
 
+{-| The source for a status. Returned by `Request.GetStatusSource`.
+
+Only supported by Soapbox/Rebased, AFAIK.
+
+Json:
+
+    { content_type = "text/plain"
+    , id = "ARYkeb8NzDPJgvI7n6"
+    , location = null
+    , spoiler_text = ""
+    , text = "A status to edit.\n\nAn added line.\n\nA second edit."
+    }
+
+-}
+type alias StatusSource =
+    { id : String
+    , location : Maybe String
+    , spoiler_text : Maybe String
+    , text : String
+    , v : Value
+    }
+
+
 {-| A subset of `Status`, returned by `Request.GetHistoryStatus`.
 -}
 type alias HistoryStatus =
@@ -806,6 +829,7 @@ type Entity
     | StatusEntity Status
     | PollEntity Poll
     | StatusListEntity (List Status)
+    | StatusSourceEntity StatusSource
     | HistoryStatusListEntity (List HistoryStatus)
     | ScheduledStatusEntity ScheduledStatus
     | ScheduledStatusListEntity (List ScheduledStatus)

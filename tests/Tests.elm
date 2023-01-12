@@ -47,6 +47,7 @@ import Mastodon.Entity as Entity
         , Stats
         , Status
         , StatusParams
+        , StatusSource
         , Tag
         , URLs
         , VideoMetaFields
@@ -205,6 +206,11 @@ stripStatus status =
     }
 
 
+stripStatusSource : StatusSource -> StatusSource
+stripStatusSource source =
+    { source | v = JE.null }
+
+
 stripContext : Context -> Context
 stripContext { ancestors, descendants } =
     { ancestors = List.map stripStatus ancestors
@@ -254,6 +260,9 @@ stripEntity entity =
 
         StatusEntity status ->
             StatusEntity <| stripStatus status
+
+        StatusSourceEntity source ->
+            StatusSourceEntity <| stripStatusSource source
 
         HistoryStatusListEntity statuses ->
             HistoryStatusListEntity <| List.map stripHistoryStatus statuses
@@ -438,41 +447,43 @@ entityData =
     , StatusEntity status2 --16
     , StatusEntity status3 --17
     , StatusEntity status4 --18
+    , StatusSourceEntity statusSource1 --19
+    , StatusSourceEntity statusSource2 --20
     , HistoryStatusListEntity [ historyStatus1, historyStatus2 ]
     , ContextEntity
-        --19
+        --21
         { ancestors = [ status1 ]
         , descendants = [ status2, status3, status4 ]
         }
-    , FilterEntity filter1 --20
-    , FilterEntity filter2 --21
-    , InstanceEntity instance1 --22
-    , InstanceEntity instance2 --23
-    , ActivityEntity activity1 --24
-    , ActivityEntity activity2 --25
-    , ListEntityEntity { id = "id", title = "title" } --26
-    , NotificationEntity notification1 --27
-    , NotificationEntity notification2 --28
-    , NotificationEntity notification3 --29
-    , NotificationEntity notification4 --30
-    , NotificationEntity notification5 --31
-    , NotificationEntity notification6 --32
-    , NotificationEntity notification7 --33
-    , PushSubscriptionEntity pushSubscription1 --34
-    , RelationshipEntity relationship1 --35
-    , RelationshipEntity relationship2 --36
-    , ResultsEntity results1 --37
-    , ScheduledStatusEntity scheduledStatus1 --38
-    , ScheduledStatusEntity scheduledStatus2 --39
-    , ScheduledStatusEntity scheduledStatus3 --40
-    , ScheduledStatusEntity scheduledStatus4 --41
-    , ConversationEntity conversation1 --42
-    , ConversationEntity conversation2 --43
-    , GroupEntity group1 --44
-    , GroupEntity group2 --45
-    , GroupRelationshipEntity groupRelationship1 --46
-    , GroupRelationshipEntity groupRelationship2 --47
-    , NotificationEntity notification8 --48
+    , FilterEntity filter1 --22
+    , FilterEntity filter2 --23
+    , InstanceEntity instance1 --24
+    , InstanceEntity instance2 --25
+    , ActivityEntity activity1 --26
+    , ActivityEntity activity2 --27
+    , ListEntityEntity { id = "id", title = "title" } --29
+    , NotificationEntity notification1 --29
+    , NotificationEntity notification2 --30
+    , NotificationEntity notification3 --31
+    , NotificationEntity notification4 --32
+    , NotificationEntity notification5 --33
+    , NotificationEntity notification6 --34
+    , NotificationEntity notification7 --35
+    , PushSubscriptionEntity pushSubscription1 --36
+    , RelationshipEntity relationship1 --37
+    , RelationshipEntity relationship2 --38
+    , ResultsEntity results1 --39
+    , ScheduledStatusEntity scheduledStatus1 --40
+    , ScheduledStatusEntity scheduledStatus2 --41
+    , ScheduledStatusEntity scheduledStatus3 --42
+    , ScheduledStatusEntity scheduledStatus4 --43
+    , ConversationEntity conversation1 --44
+    , ConversationEntity conversation2 --45
+    , GroupEntity group1 --46
+    , GroupEntity group2 --47
+    , GroupRelationshipEntity groupRelationship1 --48
+    , GroupRelationshipEntity groupRelationship2 --49
+    , NotificationEntity notification8 --50
     ]
 
 
@@ -1012,6 +1023,26 @@ status4 =
     { status2
         | visibility = DirectVisibility
         , card = Nothing
+    }
+
+
+statusSource1 : StatusSource
+statusSource1 =
+    { id = "id"
+    , location = Nothing
+    , spoiler_text = Nothing
+    , text = "text"
+    , v = JE.null
+    }
+
+
+statusSource2 : StatusSource
+statusSource2 =
+    { id = "id"
+    , location = Just "Here"
+    , spoiler_text = Just "spoiler"
+    , text = "text"
+    , v = JE.null
     }
 
 
