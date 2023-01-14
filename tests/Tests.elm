@@ -49,6 +49,7 @@ import Mastodon.Entity as Entity
         , StatusParams
         , StatusSource
         , Tag
+        , Translation
         , URLs
         , VideoMetaFields
         , VideoMetaInfo
@@ -484,6 +485,7 @@ entityData =
     , GroupRelationshipEntity groupRelationship1 --48
     , GroupRelationshipEntity groupRelationship2 --49
     , NotificationEntity notification8 --50
+    , TranslationEntity translation --51
     ]
 
 
@@ -1447,4 +1449,12 @@ account2 =
     , is_donor = False
     , is_investor = False
     , v = JE.null
+    }
+
+
+translation : Translation
+translation =
+    { content = "Foo"
+    , detected_source_language = "en"
+    , provider = "God"
     }

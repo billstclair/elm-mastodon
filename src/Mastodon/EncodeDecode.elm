@@ -45,6 +45,7 @@ module Mastodon.EncodeDecode exposing
     , encodeGroup, groupDecoder
     , encodeGroupRelationship, groupRelationshipDecoder
     , encodeTag, tagDecoder
+    , translationDecoder, encodeTranslation
     , encodeAuthorization, authorizationDecoder
     , encodeMaybe, encodePropertyAsList
     , privacyToString, notificationTypeToString, filterContextToString
@@ -96,8 +97,8 @@ your code will call indirectly via `Mastodon.Requests.serverRequest`.
 @docs encodeConversation, conversationDecoder
 @docs encodeGroup, groupDecoder
 @docs encodeGroupRelationship, groupRelationshipDecoder
-
 @docs encodeTag, tagDecoder
+@docs translationDecoder, encodeTranslation
 
 
 # Encoder and decoder for the login parameters.
@@ -164,6 +165,7 @@ import Mastodon.Entity as Entity
         , StatusSource
         , Tag
         , Token
+        , Translation
         , URLs
         , VideoMetaFields
         , VideoMetaInfo
@@ -308,6 +310,9 @@ encodeEntity entity =
         StringListEntity stringList ->
             JE.list JE.string stringList
 
+        TranslationEntity translation ->
+            encodeTranslation translation
+
         ValueEntity value ->
             value
 
@@ -326,6 +331,7 @@ entityDecoder : String -> Decoder Entity
 entityDecoder urlString =
     JD.oneOf
         [ JD.null NoEntity
+        , translationDecoder |> JD.map TranslationEntity
         , accountDecoder |> JD.map AccountEntity
         , appDecoder |> JD.map AppEntity
         , JD.list accountDecoder |> JD.map AccountListEntity
@@ -588,6 +594,9 @@ entityValue entity =
 
         StringListEntity stringList ->
             JE.list JE.string stringList
+
+        TranslationEntity translation ->
+            encodeTranslation translation
 
         ValueEntity value ->
             value
@@ -2533,3 +2542,24 @@ authorizationDecoder =
         |> required "clientId" JD.string
         |> required "clientSecret" JD.string
         |> required "token" JD.string
+
+
+{-| Encoder for `Translation`
+-}
+encodeTranslation : Translation -> Value
+encodeTranslation { content, detected_source_language, provider } =
+    JE.object
+        [ ( "content", JE.string content )
+        , ( "detected_source_language", JE.string detected_source_language )
+        , ( "provider", JE.string provider )
+        ]
+
+
+{-| Decoder for `Translation`
+-}
+translationDecoder : Decoder Translation
+translationDecoder =
+    JD.succeed Translation
+        |> required "content" JD.string
+        |> required "detected_source_language" JD.string
+        |> required "provider" JD.string

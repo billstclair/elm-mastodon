@@ -701,6 +701,7 @@ type StatusesReq
     | PostUnreblogStatus { id : String }
     | PostPinStatus { id : String }
     | PostUnpinStatus { id : String }
+    | PostTranslate { id : String, target_language : String }
 
 
 {-| Fields for a new `Status`
@@ -1328,6 +1329,8 @@ decoders =
             |> JD.map GroupRelationshipListEntity
     , tagList =
         JD.list ED.tagDecoder |> JD.map TagListEntity
+    , translation =
+        ED.translationDecoder |> JD.map TranslationEntity
     , value =
         JD.value |> JD.map ValueEntity
     }
@@ -2736,6 +2739,22 @@ statusesReq req res =
                 , url =
                     relative [ r, id, "unpin" ] []
                 , decoder = decoders.status
+            }
+
+        PostTranslate { id, target_language } ->
+            let
+                jsonBody =
+                    JE.object [ ( "target_language", JE.string target_language ) ]
+            in
+            { res
+                | method = m.post
+                , url =
+                    relative [ r, id, "translate" ] []
+                , body =
+                    Http.jsonBody jsonBody
+                , jsonBody =
+                    Just jsonBody
+                , decoder = decoders.translation
             }
 
 

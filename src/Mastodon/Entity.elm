@@ -26,6 +26,7 @@ module Mastodon.Entity exposing
     , Visibility(..), Mention, Tag, History
     , Poll, PollOption, PollDefinition, StatusParams
     , PleromaStatusContent
+    , Translation
     , Authorization
     , WrappedAccount(..), WrappedStatus(..)
     )
@@ -71,6 +72,7 @@ got over the wire. Code that creates these can set it to
 @docs Visibility, Mention, Tag, History
 @docs Poll, PollOption, PollDefinition, StatusParams
 @docs PleromaStatusContent
+@docs Translation
 
 
 # Authorization parameters
@@ -841,6 +843,7 @@ type Entity
     | GroupListEntity (List Group)
     | StringListEntity (List String)
     | TagListEntity (List Tag)
+    | TranslationEntity Translation
     | ValueEntity Value
 
 
@@ -856,4 +859,20 @@ type alias Authorization =
     { clientId : String
     , clientSecret : String
     , token : String
+    }
+
+
+{-| Output of `(StatusesRequest <| Request.PostTranslate)`
+From Gleasonator:
+
+    {"content":"<html>"
+    ,"detected_source_language":"JA"
+    ,"provider":"DeepL"
+    }
+
+-}
+type alias Translation =
+    { content : String
+    , detected_source_language : String
+    , provider : String
     }
