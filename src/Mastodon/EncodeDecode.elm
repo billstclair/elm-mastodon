@@ -1592,13 +1592,21 @@ statusDecoder =
 {-| Encode a `StatusSource`
 -}
 encodeStatusSource : StatusSource -> Value
-encodeStatusSource { id, location, spoiler_text, text } =
-    JE.object
-        [ ( "id", JE.string id )
-        , ( "location", encodeMaybe JE.string location )
-        , ( "spoiler_text", encodeMaybe JE.string spoiler_text )
-        , ( "text", JE.string text )
-        ]
+encodeStatusSource { content_type, id, location, spoiler_text, text } =
+    JE.object <|
+        List.concat
+            [ case content_type of
+                Nothing ->
+                    []
+
+                Just ct ->
+                    [ ( "content_type", JE.string ct ) ]
+            , [ ( "id", JE.string id )
+              , ( "location", encodeMaybe JE.string location )
+              , ( "spoiler_text", encodeMaybe JE.string spoiler_text )
+              , ( "text", JE.string text )
+              ]
+            ]
 
 
 {-| Decode a `StatusSource`
@@ -1606,6 +1614,7 @@ encodeStatusSource { id, location, spoiler_text, text } =
 statusSourceDecoder : Decoder StatusSource
 statusSourceDecoder =
     JD.succeed StatusSource
+        |> optional "content_type" (JD.nullable JD.string) Nothing
         |> required "id" JD.string
         |> optional "location" (JD.nullable JD.string) Nothing
         |> optional "spoiler_text" (JD.nullable JD.string) Nothing

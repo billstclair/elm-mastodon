@@ -641,7 +641,8 @@ Json:
 
 -}
 type alias StatusSource =
-    { id : String
+    { content_type : Maybe String
+    , id : String
     , location : Maybe String
     , spoiler_text : Maybe String
     , text : String

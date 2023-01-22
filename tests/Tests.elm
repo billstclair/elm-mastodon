@@ -1030,7 +1030,8 @@ status4 =
 
 statusSource1 : StatusSource
 statusSource1 =
-    { id = "id"
+    { content_type = Nothing
+    , id = "id"
     , location = Nothing
     , spoiler_text = Nothing
     , text = "text"
@@ -1040,7 +1041,8 @@ statusSource1 =
 
 statusSource2 : StatusSource
 statusSource2 =
-    { id = "id"
+    { content_type = Just "text/markdown"
+    , id = "id"
     , location = Just "Here"
     , spoiler_text = Just "spoiler"
     , text = "text"

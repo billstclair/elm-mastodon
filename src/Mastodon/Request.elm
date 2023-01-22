@@ -716,6 +716,7 @@ type alias PostedStatus =
     , sensitive : Bool
     , spoiler_text : Maybe String
     , visibility : Maybe Entity.Visibility
+    , content_type : Maybe String
     , scheduled_at : Maybe Entity.Datetime
     , language : Maybe Entity.ISO6391
     , idempotencyKey : Maybe String
@@ -793,6 +794,7 @@ simplePostStatus status in_reply_to_id spoiler_text =
                         True
             , spoiler_text = spoiler_text
             , visibility = Nothing
+            , content_type = Nothing
             , scheduled_at = Nothing
             , language = Nothing
             , idempotencyKey = Nothing
@@ -2759,7 +2761,7 @@ statusesReq req res =
 
 
 encodePostedStatus : PostedStatus -> Value
-encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, sensitive, spoiler_text, visibility, scheduled_at, language, idempotencyKey } =
+encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, poll, sensitive, spoiler_text, visibility, content_type, scheduled_at, language, idempotencyKey } =
     JE.object
         (List.concat
             [ case status of
@@ -2821,6 +2823,12 @@ encodePostedStatus { status, in_reply_to_id, group_id, quote_of_id, media_ids, p
 
                 Just vis ->
                     [ ( "visibility", ED.encodeVisibility vis ) ]
+            , case content_type of
+                Nothing ->
+                    []
+
+                Just ct ->
+                    [ ( "content_type", JE.string ct ) ]
             , case scheduled_at of
                 Nothing ->
                     []
